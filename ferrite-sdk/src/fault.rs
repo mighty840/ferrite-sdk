@@ -218,10 +218,12 @@ static mut RAM_REGIONS: [RamRegion; 4] = [RamRegion { start: 0, end: 0 }; 4];
 pub fn is_valid_ram_address(addr: u32) -> bool {
     let count = RAM_REGION_COUNT.load(Ordering::Relaxed);
     // SAFETY: We only read up to `count` entries which were fully written before
-    // the count was incremented.
+    // the count was incremented. We use raw pointer access to avoid creating
+    // a shared reference to mutable static (Rust 2024 lint).
     unsafe {
+        let regions = core::ptr::addr_of!(RAM_REGIONS);
         for i in 0..count {
-            let r = &RAM_REGIONS[i];
+            let r = &(*regions)[i];
             if addr >= r.start && addr < r.end {
                 return true;
             }
@@ -240,7 +242,8 @@ pub fn register_ram_region(start: u32, end: u32) -> Result<(), SdkError> {
     // SAFETY: We write to `count` index then increment the count atomically.
     // No other writer runs concurrently (init is single-threaded).
     unsafe {
-        RAM_REGIONS[count] = RamRegion { start, end };
+        let regions = core::ptr::addr_of_mut!(RAM_REGIONS);
+        (*regions)[count] = RamRegion { start, end };
     }
     RAM_REGION_COUNT.store(count + 1, Ordering::Release);
     Ok(())

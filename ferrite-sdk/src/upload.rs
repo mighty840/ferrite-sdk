@@ -74,10 +74,8 @@ impl UploadManager {
                 state.firmware_version,
                 state.build_id,
                 |chunk| {
-                    if upload_ok {
-                        if let Err(_) = send(transport, chunk, &mut stats) {
-                            upload_ok = false;
-                        }
+                    if upload_ok && send(transport, chunk, &mut stats).is_err() {
+                        upload_ok = false;
                     }
                 },
             );
@@ -92,10 +90,8 @@ impl UploadManager {
                 state
                     .encoder
                     .encode_reboot_reason(reason as u8, 0, boot_seq, 0, |chunk| {
-                        if upload_ok {
-                            if let Err(_) = send(transport, chunk, &mut stats) {
-                                upload_ok = false;
-                            }
+                        if upload_ok && send(transport, chunk, &mut stats).is_err() {
+                            upload_ok = false;
                         }
                     });
                 if !upload_ok {
@@ -106,8 +102,9 @@ impl UploadManager {
             // 3. FaultRecord (if pending)
             if let Some(fault) = crate::fault::last_fault() {
                 state.encoder.encode_fault(&fault, |chunk| {
+                    #[allow(clippy::collapsible_if)]
                     if upload_ok {
-                        if let Err(_) = send(transport, chunk, &mut stats) {
+                        if send(transport, chunk, &mut stats).is_err() {
                             upload_ok = false;
                         } else {
                             stats.fault_uploaded = true;
@@ -123,10 +120,8 @@ impl UploadManager {
             let metrics_count = state.metrics.len() as u32;
             if metrics_count > 0 {
                 state.encoder.encode_metrics(state.metrics.iter(), |chunk| {
-                    if upload_ok {
-                        if let Err(_) = send(transport, chunk, &mut stats) {
-                            upload_ok = false;
-                        }
+                    if upload_ok && send(transport, chunk, &mut stats).is_err() {
+                        upload_ok = false;
                     }
                 });
                 if !upload_ok {
@@ -139,10 +134,8 @@ impl UploadManager {
             let trace_bytes = state.trace.bytes_used() as u32;
             if trace_bytes > 0 {
                 state.encoder.encode_trace(&state.trace, |chunk| {
-                    if upload_ok {
-                        if let Err(_) = send(transport, chunk, &mut stats) {
-                            upload_ok = false;
-                        }
+                    if upload_ok && send(transport, chunk, &mut stats).is_err() {
+                        upload_ok = false;
                     }
                 });
                 if !upload_ok {
@@ -159,10 +152,8 @@ impl UploadManager {
                 state.metrics.len() as u32,
                 state.trace.frames_lost(),
                 |chunk| {
-                    if upload_ok {
-                        if let Err(_) = send(transport, chunk, &mut stats) {
-                            upload_ok = false;
-                        }
+                    if upload_ok && send(transport, chunk, &mut stats).is_err() {
+                        upload_ok = false;
                     }
                 },
             );

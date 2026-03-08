@@ -106,6 +106,12 @@ pub struct MetricsBuffer<const N: usize> {
     entries: heapless::Vec<MetricEntry, N>,
 }
 
+impl<const N: usize> Default for MetricsBuffer<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const N: usize> MetricsBuffer<N> {
     pub const fn new() -> Self {
         Self {

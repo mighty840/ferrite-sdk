@@ -66,7 +66,7 @@ pub fn print_faults(store: &Store) -> anyhow::Result<()> {
             fault_type_name,
             f.pc,
             f.lr,
-            truncate(&f.symbol.as_deref().unwrap_or("-"), 29),
+            truncate(f.symbol.as_deref().unwrap_or("-"), 29),
             &f.created_at,
         );
     }

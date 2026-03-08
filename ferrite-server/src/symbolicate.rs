@@ -150,8 +150,8 @@ fn which_addr2line() -> Option<PathBuf> {
 
 /// Shell out to addr2line and parse the result.
 fn run_addr2line(
-    addr2line: &PathBuf,
-    elf_path: &PathBuf,
+    addr2line: &std::path::Path,
+    elf_path: &std::path::Path,
     addr: &str,
 ) -> Result<Option<String>, SymbolicateError> {
     let output = Command::new(addr2line)

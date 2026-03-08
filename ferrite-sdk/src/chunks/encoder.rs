@@ -9,6 +9,12 @@ pub struct ChunkEncoder {
     sequence: u16,
 }
 
+impl Default for ChunkEncoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChunkEncoder {
     pub const fn new() -> Self {
         Self { sequence: 0 }

@@ -222,6 +222,7 @@ impl Store {
 
     // ---- Fault events ----
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_fault(
         &self,
         device_rowid: i64,

@@ -12,6 +12,12 @@ pub struct TraceBuffer<const N: usize> {
     used: usize,
 }
 
+impl<const N: usize> Default for TraceBuffer<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const N: usize> TraceBuffer<N> {
     pub const fn new() -> Self {
         Self {
