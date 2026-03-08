@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+  "iotai-sdk",
+  "iotai-server",
+  "iotai-sdk-embassy",
+  "iotai-sdk-rtic",
+  "iotai-sdk-ffi",
+  "iotai-dashboard",
+]
+
+[workspace.dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+heapless = "0.8"
+defmt = "0.3"
+embassy-time = "0.3"
+embassy-sync = "0.5"
+serde = { version = "1", default-features = false, features = ["derive"] }
+postcard = { version = "1", default-features = false, features = ["heapless"] }
+crc = { version = "3", default-features = false }
+critical-section = "1.1"

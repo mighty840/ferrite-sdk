@@ -1,0 +1,28 @@
+[package]
+name = "rtic-stm32f4-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iotai-sdk = { path = "../../iotai-sdk", features = ["cortex-m"] }
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+stm32f4xx-hal = { version = "0.21", features = ["stm32f411", "rt"] }
+rtic = { version = "2", features = ["thumbv7-backend"] }
+rtic-monotonics = { version = "2", features = ["cortex-m-systick"] }
+defmt = "0.3"
+defmt-rtt = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+
+[[bin]]
+name = "rtic-stm32f4-example"
+path = "src/main.rs"
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = "s"
+
+[profile.dev]
+debug = 2
+opt-level = 1

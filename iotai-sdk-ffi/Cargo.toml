@@ -1,0 +1,11 @@
+[package]
+name = "iotai-sdk-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "iotai_sdk_ffi"
+crate-type = ["staticlib"]
+
+[dependencies]
+iotai-sdk = { path = "../iotai-sdk", features = ["cortex-m"] }

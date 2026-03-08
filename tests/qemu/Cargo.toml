@@ -1,0 +1,21 @@
+[package]
+name = "iotai-qemu-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iotai-sdk = { path = "../../iotai-sdk", features = ["cortex-m"] }
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
+panic-semihosting = "0.6"
+
+[profile.dev]
+debug = 2
+opt-level = 1
+lto = false
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = "s"

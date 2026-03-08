@@ -1,0 +1,14 @@
+[package]
+name = "iotai-sdk-embassy"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+defmt = ["dep:defmt"]
+
+[dependencies]
+iotai-sdk = { path = "../iotai-sdk", features = ["embassy"] }
+embassy-time = "0.3"
+embassy-sync = "0.5"
+embassy-futures = "0.1"
+defmt = { version = "0.3", optional = true }
