@@ -2,19 +2,19 @@
 layout: home
 
 hero:
-  name: iotai-sdk
+  name: ferrite-sdk
   text: Firmware Observability for Cortex-M
   tagline: Capture crashes, metrics, and logs on embedded devices. Upload over any transport. Zero alloc. Zero panic.
   image:
     src: /logo.svg
-    alt: iotai-sdk
+    alt: ferrite-sdk
   actions:
     - theme: brand
       text: Get Started
       link: /guide/quickstart
     - theme: alt
       text: View on GitHub
-      link: https://github.com/your-org/iotai-sdk
+      link: https://github.com/your-org/ferrite-sdk
 
 features:
   - icon: 💥

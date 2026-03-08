@@ -1,6 +1,6 @@
 # Quickstart
 
-This guide walks through adding iotai-sdk to an Embassy project targeting the nRF52840. By the end you will have crash capture, metrics, and periodic upload working.
+This guide walks through adding ferrite-sdk to an Embassy project targeting the nRF52840. By the end you will have crash capture, metrics, and periodic upload working.
 
 ## Prerequisites
 
@@ -24,8 +24,8 @@ In your firmware project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-iotai-sdk = { git = "https://github.com/your-org/iotai-sdk", features = ["cortex-m", "defmt", "embassy"] }
-iotai-sdk-embassy = { git = "https://github.com/your-org/iotai-sdk" }
+ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
+ferrite-embassy = { git = "https://github.com/your-org/ferrite-sdk" }
 
 embassy-executor = { version = "0.6", features = ["task-arena-size-65536", "arch-cortex-m", "executor-thread"] }
 embassy-time = { version = "0.3", features = ["tick-hz-32_768"] }
@@ -40,7 +40,7 @@ panic-probe = { version = "0.3", features = ["print-defmt"] }
 
 ## Step 2 -- Add the linker script fragment
 
-iotai-sdk stores fault records and reboot reasons in a dedicated section of RAM that is **not zeroed on soft reset**. You need to reserve 256 bytes at the end of your RAM.
+ferrite-sdk stores fault records and reboot reasons in a dedicated section of RAM that is **not zeroed on soft reset**. You need to reserve 256 bytes at the end of your RAM.
 
 Create or edit `memory.x` in your project root:
 
@@ -54,11 +54,11 @@ MEMORY
 
 SECTIONS
 {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }
@@ -70,7 +70,7 @@ Pre-built linker fragments are available in the `linker/` directory of the repos
 
 ## Step 3 -- Initialize the SDK
 
-In your `main` function, call `iotai_sdk::init()` before spawning any tasks:
+In your `main` function, call `ferrite_sdk::init()` before spawning any tasks:
 
 ```rust
 #![no_std]
@@ -78,7 +78,7 @@ In your `main` function, call `iotai_sdk::init()` before spawning any tasks:
 
 use embassy_executor::Spawner;
 use embassy_time::Duration;
-use iotai_sdk::{SdkConfig, RamRegion};
+use ferrite_sdk::{SdkConfig, RamRegion};
 use defmt_rtt as _;
 use panic_probe as _;
 
@@ -87,7 +87,7 @@ async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
 
     // Initialize the observability SDK
-    iotai_sdk::init(SdkConfig {
+    ferrite_sdk::init(SdkConfig {
         device_id: "sensor-42",
         firmware_version: env!("CARGO_PKG_VERSION"),
         build_id: 0,
@@ -98,19 +98,19 @@ async fn main(spawner: Spawner) {
         }],
     });
 
-    defmt::info!("iotai-sdk initialized, boot sequence started");
+    defmt::info!("ferrite-sdk initialized, boot sequence started");
 
     // Record why we rebooted (read the nRF RESETREAS register)
     let resetreas = unsafe {
         core::ptr::read_volatile(0x4000_0400 as *const u32)
     };
     let reason = match resetreas {
-        r if r & 0x01 != 0 => iotai_sdk::RebootReason::PinReset,
-        r if r & 0x02 != 0 => iotai_sdk::RebootReason::WatchdogTimeout,
-        r if r & 0x04 != 0 => iotai_sdk::RebootReason::SoftwareReset,
-        _ => iotai_sdk::RebootReason::PowerOnReset,
+        r if r & 0x01 != 0 => ferrite_sdk::RebootReason::PinReset,
+        r if r & 0x02 != 0 => ferrite_sdk::RebootReason::WatchdogTimeout,
+        r if r & 0x04 != 0 => ferrite_sdk::RebootReason::SoftwareReset,
+        _ => ferrite_sdk::RebootReason::PowerOnReset,
     };
-    iotai_sdk::reboot_reason::record_reboot_reason(reason);
+    ferrite_sdk::reboot_reason::record_reboot_reason(reason);
 
     // Clear the RESETREAS register
     unsafe {
@@ -123,10 +123,10 @@ async fn main(spawner: Spawner) {
     // Your application logic here...
     loop {
         // Record a gauge metric
-        iotai_sdk::metric_gauge!("temperature", read_temperature());
+        ferrite_sdk::metric_gauge!("temperature", read_temperature());
 
         // Increment a counter
-        iotai_sdk::metric_increment!("loop_iterations");
+        ferrite_sdk::metric_increment!("loop_iterations");
 
         embassy_time::Timer::after(Duration::from_secs(10)).await;
     }
@@ -152,16 +152,16 @@ The SDK provides three metric macros that operate on the global SDK state inside
 
 ```rust
 // Counters: monotonically increasing, wraps at u32::MAX
-iotai_sdk::metric_increment!("packets_sent");         // increment by 1
-iotai_sdk::metric_increment!("bytes_sent", 128);      // increment by 128
+ferrite_sdk::metric_increment!("packets_sent");         // increment by 1
+ferrite_sdk::metric_increment!("bytes_sent", 128);      // increment by 128
 
 // Gauges: last-write-wins, stores an f32
-iotai_sdk::metric_gauge!("battery_mv", 3720.0);
-iotai_sdk::metric_gauge!("rssi_dbm", -67);            // auto-cast to f32
+ferrite_sdk::metric_gauge!("battery_mv", 3720.0);
+ferrite_sdk::metric_gauge!("rssi_dbm", -67);            // auto-cast to f32
 
 // Histograms: tracks min, max, sum, count
-iotai_sdk::metric_observe!("request_latency_ms", 12.5);
-iotai_sdk::metric_observe!("request_latency_ms", 8.3);
+ferrite_sdk::metric_observe!("request_latency_ms", 12.5);
+ferrite_sdk::metric_observe!("request_latency_ms", 8.3);
 ```
 
 Each metric entry occupies `1 + key_len + 1 + 8 + 8` bytes in the serialized chunk payload. With the default `MetricsBuffer<32>`, you can track up to 32 distinct metric keys simultaneously. When a 33rd key is recorded, the oldest entry is evicted.
@@ -173,7 +173,7 @@ Counters with the same key accumulate: calling `metric_increment!("x", 1)` twice
 The upload task needs something that implements `AsyncChunkTransport`. Here is a minimal example using a UART peripheral:
 
 ```rust
-use iotai_sdk::transport::AsyncChunkTransport;
+use ferrite_sdk::transport::AsyncChunkTransport;
 use embassy_nrf::uarte::{self, UarteTx};
 
 struct UartUplink {
@@ -192,7 +192,7 @@ impl AsyncChunkTransport for UartUplink {
 Then spawn the Embassy upload task:
 
 ```rust
-use iotai_sdk_embassy::upload_task::iotai_upload_task;
+use ferrite_embassy::upload_task::ferrite_upload_task;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -201,7 +201,7 @@ async fn main(spawner: Spawner) {
     let uart_tx = /* configure UARTE0 TX pin */;
     let transport = UartUplink { tx: uart_tx };
 
-    spawner.spawn(iotai_upload_task(transport, Duration::from_secs(60))).unwrap();
+    spawner.spawn(ferrite_upload_task(transport, Duration::from_secs(60))).unwrap();
 
     // ... rest of main ...
 }
@@ -223,10 +223,10 @@ After a successful upload, all buffers are cleared. If the transport fails mid-s
 If you want to upload immediately after a crash recovery (rather than waiting for the next interval), use the triggered variant:
 
 ```rust
-use iotai_sdk_embassy::upload_task::{iotai_upload_task_with_trigger, trigger_upload_now};
+use ferrite_embassy::upload_task::{ferrite_upload_task_with_trigger, trigger_upload_now};
 
 // In main:
-spawner.spawn(iotai_upload_task_with_trigger(transport, Duration::from_secs(60))).unwrap();
+spawner.spawn(ferrite_upload_task_with_trigger(transport, Duration::from_secs(60))).unwrap();
 
 // Anywhere else (even from an interrupt):
 trigger_upload_now();
@@ -237,8 +237,8 @@ trigger_upload_now();
 On your host machine, build and start the companion server:
 
 ```bash
-cd iotai-server
-cargo run -- --http 0.0.0.0:4000 --db ./iotai.db --elf-dir ./elfs
+cd ferrite-server
+cargo run -- --http 0.0.0.0:4000 --db ./ferrite.db --elf-dir ./elfs
 ```
 
 The server listens for binary chunk data on `POST /ingest/chunks`. Point your device's transport at this endpoint (or pipe UART output through a bridge script).
@@ -264,8 +264,8 @@ cargo run --release
 You should see:
 
 ```
-INFO  iotai-sdk initialized, boot sequence started
-INFO  iotai upload ok: 3 chunks, 142 bytes
+INFO  ferrite-sdk initialized, boot sequence started
+INFO  ferrite upload ok: 3 chunks, 142 bytes
 ```
 
 Query the server:

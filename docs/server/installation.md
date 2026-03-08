@@ -4,14 +4,14 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/iotai-sdk.git
-cd iotai-sdk
+git clone https://github.com/your-org/ferrite-sdk.git
+cd ferrite-sdk
 
 # Build the server
-cargo build -p iotai-server --release
+cargo build -p ferrite-server --release
 
 # The binary is at:
-# target/release/iotai-server
+# target/release/ferrite-server
 ```
 
 ### Dependencies
@@ -45,25 +45,25 @@ The server auto-detects `arm-none-eabi-addr2line` on your PATH. You can also spe
 FROM rust:1.80 AS builder
 WORKDIR /src
 COPY . .
-RUN cargo build -p iotai-server --release
+RUN cargo build -p ferrite-server --release
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y libsqlite3-0 && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /src/target/release/iotai-server /usr/local/bin/
+COPY --from=builder /src/target/release/ferrite-server /usr/local/bin/
 EXPOSE 4000
-ENTRYPOINT ["iotai-server", "--http", "0.0.0.0:4000"]
+ENTRYPOINT ["ferrite-server", "--http", "0.0.0.0:4000"]
 ```
 
 ```bash
-docker build -t iotai-server .
-docker run -p 4000:4000 -v $(pwd)/data:/data iotai-server --db /data/iotai.db --elf-dir /data/elfs
+docker build -t ferrite-server .
+docker run -p 4000:4000 -v $(pwd)/data:/data ferrite-server --db /data/ferrite.db --elf-dir /data/elfs
 ```
 
 ## Verify
 
 ```bash
 # Start the server
-iotai-server --http 0.0.0.0:4000
+ferrite-server --http 0.0.0.0:4000
 
 # In another terminal, check health
 curl http://localhost:4000/devices

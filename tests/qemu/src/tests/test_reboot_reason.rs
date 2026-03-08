@@ -1,4 +1,4 @@
-use iotai_sdk::reboot_reason::{RebootReason, record_reboot_reason, last_reboot_reason, clear_reboot_reason};
+use ferrite_sdk::reboot_reason::{RebootReason, record_reboot_reason, last_reboot_reason, clear_reboot_reason};
 
 pub fn roundtrip() -> Result<(), &'static str> {
     record_reboot_reason(RebootReason::WatchdogTimeout);

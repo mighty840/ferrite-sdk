@@ -1,0 +1,28 @@
+[package]
+name = "ferrite-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Embedded Rust firmware observability SDK"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = []
+cortex-m = ["dep:cortex-m", "dep:cortex-m-rt"]
+defmt = ["dep:defmt"]
+embassy = ["dep:embassy-time", "dep:embassy-sync"]
+postcard-encoding = ["dep:postcard", "dep:serde"]
+
+[dependencies]
+heapless = { workspace = true }
+crc = { workspace = true }
+critical-section = { workspace = true }
+cortex-m = { workspace = true, optional = true }
+cortex-m-rt = { workspace = true, optional = true, features = ["device"] }
+defmt = { workspace = true, optional = true }
+embassy-time = { workspace = true, optional = true }
+embassy-sync = { workspace = true, optional = true }
+postcard = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+critical-section = { workspace = true, features = ["std"] }

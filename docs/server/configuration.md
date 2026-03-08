@@ -5,7 +5,7 @@ The server is configured entirely through command-line arguments. There is no co
 ## Command-line arguments
 
 ```
-iotai-server [OPTIONS] [COMMAND]
+ferrite-server [OPTIONS] [COMMAND]
 ```
 
 ### Global options
@@ -13,7 +13,7 @@ iotai-server [OPTIONS] [COMMAND]
 | Flag | Default | Description |
 |---|---|---|
 | `--http <ADDR>` | `0.0.0.0:4000` | HTTP listen address (ip:port) |
-| `--db <PATH>` | `./iotai.db` | SQLite database file path |
+| `--db <PATH>` | `./ferrite.db` | SQLite database file path |
 | `--elf-dir <PATH>` | `./elfs` | Directory for uploaded ELF files |
 | `--addr2line <PATH>` | Auto-detect | Path to `arm-none-eabi-addr2line` binary |
 
@@ -30,16 +30,16 @@ iotai-server [OPTIONS] [COMMAND]
 
 ```bash
 # Start with all defaults
-iotai-server
+ferrite-server
 
 # Custom port and database location
-iotai-server --http 127.0.0.1:8080 --db /var/lib/iotai/data.db
+ferrite-server --http 127.0.0.1:8080 --db /var/lib/ferrite/data.db
 
 # Print a device report without starting the server
-iotai-server --db /var/lib/iotai/data.db report
+ferrite-server --db /var/lib/ferrite/data.db report
 
 # List recent faults
-iotai-server --db /var/lib/iotai/data.db faults
+ferrite-server --db /var/lib/ferrite/data.db faults
 ```
 
 ## HTTP API endpoints

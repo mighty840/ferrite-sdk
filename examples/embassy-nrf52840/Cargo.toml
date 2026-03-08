@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iotai-sdk = { path = "../../iotai-sdk", features = ["cortex-m", "embassy"] }
+ferrite-sdk = { path = "../../ferrite-sdk", features = ["cortex-m", "embassy"] }
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7"
 embassy-executor = { version = "0.5", features = ["arch-cortex-m", "executor-thread", "integrated-timers"] }

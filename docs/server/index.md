@@ -1,6 +1,6 @@
 # Server Overview
 
-`iotai-server` is the companion ingestion server for iotai-sdk. It receives binary chunk data over HTTP, decodes it, stores it in a SQLite database, and optionally symbolicates fault addresses using ELF debug info.
+`ferrite-server` is the companion ingestion server for ferrite-sdk. It receives binary chunk data over HTTP, decodes it, stores it in a SQLite database, and optionally symbolicates fault addresses using ELF debug info.
 
 ## Features
 
@@ -16,7 +16,7 @@
 ## Architecture
 
 ```
-Devices ──[binary chunks over HTTP]──> iotai-server
+Devices ──[binary chunks over HTTP]──> ferrite-server
                                           |
                                           v
                                     Chunk decoder
@@ -39,8 +39,8 @@ Devices ──[binary chunks over HTTP]──> iotai-server
 ## Quick start
 
 ```bash
-cd iotai-server
-cargo run -- --http 0.0.0.0:4000 --db ./iotai.db --elf-dir ./elfs
+cd ferrite-server
+cargo run -- --http 0.0.0.0:4000 --db ./ferrite.db --elf-dir ./elfs
 ```
 
 See [Installation](./installation) and [Configuration](./configuration) for details.

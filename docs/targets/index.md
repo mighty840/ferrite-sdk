@@ -1,6 +1,6 @@
 # Target Platforms
 
-iotai-sdk supports ARM Cortex-M3, M4, and M4F processors. Each target needs a linker script fragment to reserve retained RAM at a target-specific address.
+ferrite-sdk supports ARM Cortex-M3, M4, and M4F processors. Each target needs a linker script fragment to reserve retained RAM at a target-specific address.
 
 ## Supported targets
 
@@ -12,11 +12,11 @@ iotai-sdk supports ARM Cortex-M3, M4, and M4F processors. Each target needs a li
 
 ## Porting to a new target
 
-To use iotai-sdk on an unsupported Cortex-M microcontroller:
+To use ferrite-sdk on an unsupported Cortex-M microcontroller:
 
 1. **Identify the SRAM layout.** Find the start and end addresses of the main SRAM region in the datasheet.
 2. **Reserve 256 bytes** at the end of SRAM for the retained block. Adjust your `MEMORY` block so the main RAM region ends 256 bytes earlier.
-3. **Create a linker fragment** with a `RETAINED` region and the `.uninit.iotai` section (see the existing fragments for the pattern).
+3. **Create a linker fragment** with a `RETAINED` region and the `.uninit.ferrite` section (see the existing fragments for the pattern).
 4. **Read the reset-cause register** for your MCU and map it to a `RebootReason` variant.
 5. **Verify retained RAM survives soft resets.** Flash a test firmware that writes a magic value to retained RAM, triggers a software reset, and checks whether the value persists.
 

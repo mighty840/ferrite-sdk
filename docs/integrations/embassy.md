@@ -1,13 +1,13 @@
 # Embassy Integration
 
-The `iotai-sdk-embassy` crate provides Embassy executor tasks for periodic and triggered data uploads. This guide covers setup, transport implementation, task spawning, and advanced patterns.
+The `ferrite-embassy` crate provides Embassy executor tasks for periodic and triggered data uploads. This guide covers setup, transport implementation, task spawning, and advanced patterns.
 
 ## Overview
 
-Embassy is an async runtime for embedded Rust. The iotai-sdk Embassy integration provides two `#[embassy_executor::task]` functions:
+Embassy is an async runtime for embedded Rust. The ferrite-sdk Embassy integration provides two `#[embassy_executor::task]` functions:
 
-- **`iotai_upload_task`** -- uploads on a fixed interval using `embassy_time::Timer`.
-- **`iotai_upload_task_with_trigger`** -- uploads on a fixed interval OR immediately when `trigger_upload_now()` is called, whichever comes first.
+- **`ferrite_upload_task`** -- uploads on a fixed interval using `embassy_time::Timer`.
+- **`ferrite_upload_task_with_trigger`** -- uploads on a fixed interval OR immediately when `trigger_upload_now()` is called, whichever comes first.
 
 Both tasks run forever (return type `-> !`) and should be spawned once at startup.
 
@@ -15,8 +15,8 @@ Both tasks run forever (return type `-> !`) and should be spawned once at startu
 
 ```toml
 [dependencies]
-iotai-sdk = { git = "https://github.com/your-org/iotai-sdk", features = ["cortex-m", "defmt", "embassy"] }
-iotai-sdk-embassy = { git = "https://github.com/your-org/iotai-sdk" }
+ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
+ferrite-embassy = { git = "https://github.com/your-org/ferrite-sdk" }
 
 embassy-executor = { version = "0.6", features = ["task-arena-size-65536", "arch-cortex-m", "executor-thread"] }
 embassy-time = "0.3"
@@ -24,7 +24,7 @@ embassy-sync = "0.5"
 embassy-futures = "0.1"
 ```
 
-The `embassy` feature on `iotai-sdk` enables the `AsyncChunkTransport` trait and the async `upload_async` method on `UploadManager`.
+The `embassy` feature on `ferrite-sdk` enables the `AsyncChunkTransport` trait and the async `upload_async` method on `UploadManager`.
 
 ## Implementing AsyncChunkTransport
 
@@ -52,7 +52,7 @@ pub trait AsyncChunkTransport {
 
 ```rust
 use embassy_nrf::uarte::{self, UarteTx};
-use iotai_sdk::transport::AsyncChunkTransport;
+use ferrite_sdk::transport::AsyncChunkTransport;
 
 pub struct UartTransport {
     tx: UarteTx<'static, embassy_nrf::peripherals::UARTE0>,
@@ -134,7 +134,7 @@ impl AsyncChunkTransport for HttpTransport {
 The simplest pattern -- upload every N seconds:
 
 ```rust
-use iotai_sdk_embassy::upload_task::iotai_upload_task;
+use ferrite_embassy::upload_task::ferrite_upload_task;
 use embassy_time::Duration;
 
 #[embassy_executor::main]
@@ -142,28 +142,28 @@ async fn main(spawner: Spawner) {
     // ... init SDK, configure peripherals ...
 
     let transport = UartTransport::new(uart_tx);
-    spawner.spawn(iotai_upload_task(transport, Duration::from_secs(60))).unwrap();
+    spawner.spawn(ferrite_upload_task(transport, Duration::from_secs(60))).unwrap();
 }
 ```
 
 The task logs upload results via defmt:
 
 ```
-INFO  iotai upload ok: 4 chunks, 218 bytes
+INFO  ferrite upload ok: 4 chunks, 218 bytes
 ```
 
 If the transport fails:
 
 ```
-WARN  iotai upload failed: TransportError(Overrun)
+WARN  ferrite upload failed: TransportError(Overrun)
 ```
 
 ### Triggered upload
 
-Use `iotai_upload_task_with_trigger` when you want to upload immediately after a specific event (e.g., detecting a previous crash on boot):
+Use `ferrite_upload_task_with_trigger` when you want to upload immediately after a specific event (e.g., detecting a previous crash on boot):
 
 ```rust
-use iotai_sdk_embassy::upload_task::{iotai_upload_task_with_trigger, trigger_upload_now};
+use ferrite_embassy::upload_task::{ferrite_upload_task_with_trigger, trigger_upload_now};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -171,11 +171,11 @@ async fn main(spawner: Spawner) {
 
     let transport = UartTransport::new(uart_tx);
     spawner.spawn(
-        iotai_upload_task_with_trigger(transport, Duration::from_secs(60))
+        ferrite_upload_task_with_trigger(transport, Duration::from_secs(60))
     ).unwrap();
 
     // If we recovered from a fault, upload immediately
-    if iotai_sdk::fault::last_fault().is_some() {
+    if ferrite_sdk::fault::last_fault().is_some() {
         defmt::info!("fault record found from previous boot, triggering upload");
         trigger_upload_now();
     }

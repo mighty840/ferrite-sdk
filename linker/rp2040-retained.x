@@ -1,4 +1,4 @@
-/* iotai-sdk retained RAM section for RP2040 */
+/* ferrite-sdk retained RAM section for RP2040 */
 /* RP2040: 264KB SRAM, use end of main SRAM region */
 
 MEMORY {
@@ -7,11 +7,11 @@ MEMORY {
 }
 
 SECTIONS {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }

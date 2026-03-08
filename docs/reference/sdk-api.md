@@ -1,8 +1,8 @@
 # Rust SDK API Reference
 
-This page documents all public types, functions, traits, and macros exported by the `iotai-sdk` crate.
+This page documents all public types, functions, traits, and macros exported by the `ferrite-sdk` crate.
 
-## Crate root (`iotai_sdk`)
+## Crate root (`ferrite_sdk`)
 
 ### `init(config: SdkConfig<'static>)`
 
@@ -26,7 +26,7 @@ Returns `true` if `init()` has been called.
 Access the global SDK state inside a critical section. Panics if the SDK is not initialized.
 
 ```rust
-iotai_sdk::with_sdk(|state| {
+ferrite_sdk::with_sdk(|state| {
     // state: &mut SdkState
     state.metrics.len()
 });
@@ -80,8 +80,8 @@ pub struct RamRegion {
 Increment a counter metric. The one-argument form increments by 1.
 
 ```rust
-iotai_sdk::metric_increment!("packets_sent");
-iotai_sdk::metric_increment!("bytes_sent", 1024);
+ferrite_sdk::metric_increment!("packets_sent");
+ferrite_sdk::metric_increment!("bytes_sent", 1024);
 ```
 
 Returns `Result<(), SdkError>`.
@@ -91,7 +91,7 @@ Returns `Result<(), SdkError>`.
 Set a gauge metric. `value` is cast to `f32`.
 
 ```rust
-iotai_sdk::metric_gauge!("temperature", 23.5);
+ferrite_sdk::metric_gauge!("temperature", 23.5);
 ```
 
 ### `metric_observe!(key, value)`
@@ -99,15 +99,15 @@ iotai_sdk::metric_gauge!("temperature", 23.5);
 Record a histogram observation. `value` is cast to `f32`. Tracks min, max, sum, and count.
 
 ```rust
-iotai_sdk::metric_observe!("latency_ms", 12.5);
+ferrite_sdk::metric_observe!("latency_ms", 12.5);
 ```
 
 ### `retained!(vis static NAME: Type = default)`
 
-Place a static variable in the `.uninit.iotai` linker section (retained RAM).
+Place a static variable in the `.uninit.ferrite` linker section (retained RAM).
 
 ```rust
-iotai_sdk::retained!(pub static MY_DATA: u32 = 0);
+ferrite_sdk::retained!(pub static MY_DATA: u32 = 0);
 ```
 
 ---

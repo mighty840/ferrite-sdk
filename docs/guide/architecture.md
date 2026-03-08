@@ -1,13 +1,13 @@
 # Architecture
 
-This page describes the module structure of iotai-sdk, the data flow from firmware event to server storage, and how the crates in the workspace relate to each other.
+This page describes the module structure of ferrite-sdk, the data flow from firmware event to server storage, and how the crates in the workspace relate to each other.
 
 ## Module map
 
-The core `iotai-sdk` crate is organized into the following modules:
+The core `ferrite-sdk` crate is organized into the following modules:
 
 ```
-iotai-sdk/src/
+ferrite-sdk/src/
   lib.rs           SdkError enum, re-exports
   sdk.rs           Global SdkState, init(), with_sdk()
   config.rs        Compile-time constants (buffer sizes, max chunk size)
@@ -54,7 +54,7 @@ Firmware runtime                    Retained RAM               Upload path
                                                           [UART / BLE / HTTP / ...]
                                                                   |
                                                                   v
-                                                          iotai-server
+                                                          ferrite-server
                                                           POST /ingest/chunks
                                                                   |
                                                                   v
@@ -65,18 +65,18 @@ Firmware runtime                    Retained RAM               Upload path
 ## Crate dependency graph
 
 ```
-iotai-sdk  (core, no_std)
+ferrite-sdk  (core, no_std)
     |
-    +--- iotai-sdk-embassy  (depends on iotai-sdk + embassy-*)
-    |       Provides: iotai_upload_task, iotai_upload_task_with_trigger
+    +--- ferrite-embassy  (depends on ferrite-sdk + embassy-*)
+    |       Provides: ferrite_upload_task, ferrite_upload_task_with_trigger
     |
-    +--- iotai-sdk-rtic  (depends on iotai-sdk)
+    +--- ferrite-rtic  (depends on ferrite-sdk)
     |       Provides: upload_blocking(), RticTransportResource
     |
-    +--- iotai-sdk-ffi  (depends on iotai-sdk)
-            Provides: C-callable functions, builds libiotai_sdk_ffi.a
+    +--- ferrite-ffi  (depends on ferrite-sdk)
+            Provides: C-callable functions, builds libferrite_ffi.a
 
-iotai-server  (std, runs on host)
+ferrite-server  (std, runs on host)
     Independent; re-implements chunk decoding for std
     Uses: axum, rusqlite, tokio, clap
 ```
@@ -99,19 +99,19 @@ The HardFault handler does **not** use the critical section -- it writes directl
 For host testing, disable all features:
 
 ```bash
-cargo test -p iotai-sdk --no-default-features
+cargo test -p ferrite-sdk --no-default-features
 ```
 
 ## Server architecture
 
-The `iotai-server` binary is a standard Rust CLI application built with:
+The `ferrite-server` binary is a standard Rust CLI application built with:
 
 - **clap** for argument parsing (subcommands: `serve`, `report`, `faults`, `metrics`)
 - **axum** for the HTTP server
 - **rusqlite** for SQLite storage (WAL mode, foreign keys enabled)
 - **tokio** for the async runtime
 
-The server re-implements chunk decoding in `ingest.rs` (it does not depend on the `iotai-sdk` crate, since it needs `std`). It parses each chunk type's payload and stores the data in normalized SQLite tables.
+The server re-implements chunk decoding in `ingest.rs` (it does not depend on the `ferrite-sdk` crate, since it needs `std`). It parses each chunk type's payload and stores the data in normalized SQLite tables.
 
 ### HTTP API endpoints
 

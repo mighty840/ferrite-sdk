@@ -46,7 +46,7 @@ arm-none-eabi-addr2line -e firmware.elf -f -C -p 0x08002000
 If the tool is not on your PATH, specify the full path:
 
 ```bash
-iotai-server --addr2line /opt/arm-toolchain/bin/arm-none-eabi-addr2line
+ferrite-server --addr2line /opt/arm-toolchain/bin/arm-none-eabi-addr2line
 ```
 
 ## Limitations
@@ -64,7 +64,7 @@ Add an ELF upload step to your CI pipeline:
 # GitHub Actions example
 - name: Upload ELF for symbolication
   run: |
-    curl -X POST https://iotai.example.com/ingest/elf \
+    curl -X POST https://ferrite.example.com/ingest/elf \
       -H "X-Firmware-Version: ${{ env.FIRMWARE_VERSION }}" \
       --data-binary @target/thumbv7em-none-eabihf/release/my-firmware
 ```

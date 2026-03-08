@@ -8,10 +8,10 @@ Most SDK logic can be tested on the host without any embedded hardware. The key 
 
 ```bash
 # Core SDK tests
-cargo test -p iotai-sdk --no-default-features
+cargo test -p ferrite-sdk --no-default-features
 
 # Server tests
-cargo test -p iotai-server
+cargo test -p ferrite-server
 ```
 
 The `--no-default-features` flag disables `cortex-m`, `defmt`, and `embassy`, allowing the SDK to compile and run on the host. The `critical-section` crate provides a `std`-based implementation for host testing.
@@ -29,13 +29,13 @@ The `--no-default-features` flag disables `cortex-m`, `defmt`, and `embassy`, al
 ### Running a single test
 
 ```bash
-cargo test -p iotai-sdk --no-default-features -- counter_accumulation
+cargo test -p ferrite-sdk --no-default-features -- counter_accumulation
 ```
 
 ### Viewing test output
 
 ```bash
-cargo test -p iotai-sdk --no-default-features -- --nocapture
+cargo test -p ferrite-sdk --no-default-features -- --nocapture
 ```
 
 ## Embedded tests (QEMU)
@@ -61,7 +61,7 @@ The server has unit tests for:
 - Multi-chunk stream decoding
 
 ```bash
-cargo test -p iotai-server
+cargo test -p ferrite-server
 ```
 
 ## Test coverage

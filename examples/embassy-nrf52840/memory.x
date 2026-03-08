@@ -5,11 +5,11 @@ MEMORY {
 }
 
 SECTIONS {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }

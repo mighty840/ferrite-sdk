@@ -1,10 +1,10 @@
 [package]
-name = "iotai-qemu-tests"
+name = "ferrite-qemu-tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iotai-sdk = { path = "../../iotai-sdk", features = ["cortex-m"] }
+ferrite-sdk = { path = "../../ferrite-sdk", features = ["cortex-m"] }
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"

@@ -1,4 +1,4 @@
-/* iotai-sdk retained RAM section for STM32F4 */
+/* ferrite-sdk retained RAM section for STM32F4 */
 /* STM32F4xx: 128KB SRAM, use end of SRAM1 */
 
 MEMORY {
@@ -7,11 +7,11 @@ MEMORY {
 }
 
 SECTIONS {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }

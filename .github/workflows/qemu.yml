@@ -1,0 +1,54 @@
+name: QEMU Integration Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  qemu-tests:
+    name: QEMU integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7m-none-eabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: qemu
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm
+
+      - name: Build QEMU test binary
+        run: >
+          cargo build
+          --manifest-path tests/qemu/Cargo.toml
+          --target thumbv7m-none-eabi
+
+      - name: "Run Phase 1 – fault trigger"
+        run: >
+          qemu-system-arm
+          -machine lm3s6965evb
+          -nographic
+          -semihosting-config enable=on,target=native
+          -kernel target/thumbv7m-none-eabi/debug/ferrite-qemu-tests
+          -S -gdb tcp::1234 &
+          sleep 2 && kill %1 || true
+
+      - name: "Run Phase 2 – read back"
+        run: >
+          qemu-system-arm
+          -machine lm3s6965evb
+          -nographic
+          -semihosting-config enable=on,target=native
+          -kernel target/thumbv7m-none-eabi/debug/ferrite-qemu-tests

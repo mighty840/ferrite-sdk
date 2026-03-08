@@ -1,6 +1,6 @@
 # Dashboard Overview
 
-The iotai dashboard is a web frontend for visualizing device telemetry collected by the iotai-server. It is built with Dioxus (Rust WASM framework) and communicates with the server's REST API.
+The ferrite dashboard is a web frontend for visualizing device telemetry collected by the ferrite-server. It is built with Dioxus (Rust WASM framework) and communicates with the server's REST API.
 
 ## Features
 
@@ -15,7 +15,7 @@ The iotai dashboard is a web frontend for visualizing device telemetry collected
 The dashboard is a static WASM application. Build it with:
 
 ```bash
-cd iotai-dashboard
+cd ferrite-dashboard
 dx build --release
 ```
 
@@ -25,12 +25,12 @@ Serve the output directory with any static file server, or use the built-in Diox
 dx serve
 ```
 
-The dashboard expects the iotai-server API at the same origin or at a URL configured in the application settings. Since the server enables CORS, the dashboard can also be served from a different origin.
+The dashboard expects the ferrite-server API at the same origin or at a URL configured in the application settings. Since the server enables CORS, the dashboard can also be served from a different origin.
 
 ## Connecting to the server
 
 By default, the dashboard connects to `http://localhost:4000`. To configure a different server URL, set it in the dashboard settings page or pass it as a query parameter:
 
 ```
-http://localhost:8080/?server=https://iotai.example.com
+http://localhost:8080/?server=https://ferrite.example.com
 ```

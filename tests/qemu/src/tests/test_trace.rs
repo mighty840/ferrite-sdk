@@ -1,4 +1,4 @@
-use iotai_sdk::trace::TraceBuffer;
+use ferrite_sdk::trace::TraceBuffer;
 
 pub fn write_and_iterate() -> Result<(), &'static str> {
     let mut buf: TraceBuffer<256> = TraceBuffer::new();

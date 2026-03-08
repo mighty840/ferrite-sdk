@@ -1,7 +1,0 @@
-[package]
-name = "iotai-sdk-rtic"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-iotai-sdk = { path = "../iotai-sdk" }

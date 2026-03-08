@@ -1,6 +1,6 @@
 # Chunk Wire Format
 
-This page specifies the binary wire format used by iotai-sdk to encode all telemetry data. Every piece of data leaving the SDK -- device info, metrics, faults, traces, and heartbeats -- is encoded as one or more chunks.
+This page specifies the binary wire format used by ferrite-sdk to encode all telemetry data. Every piece of data leaving the SDK -- device info, metrics, faults, traces, and heartbeats -- is encoded as one or more chunks.
 
 ## Design goals
 

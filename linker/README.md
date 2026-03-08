@@ -1,12 +1,12 @@
-# iotai-sdk Linker Fragments
+# ferrite-sdk Linker Fragments
 
-These linker script fragments define the retained RAM section used by iotai-sdk to persist fault records and reboot reasons across resets.
+These linker script fragments define the retained RAM section used by ferrite-sdk to persist fault records and reboot reasons across resets.
 
 ## Integration with `memory.x`
 
 1. Choose the fragment for your target MCU
 2. Add the `RETAINED` memory region to your `memory.x` MEMORY block
-3. Add the `.uninit.iotai` SECTIONS block
+3. Add the `.uninit.ferrite` SECTIONS block
 
 ### Example for nRF52840
 
@@ -18,11 +18,11 @@ MEMORY {
 }
 
 SECTIONS {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }

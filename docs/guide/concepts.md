@@ -1,10 +1,10 @@
 # Core Concepts
 
-This page explains the fundamental concepts behind iotai-sdk: how data survives reboots, how the fault capture lifecycle works, how telemetry is encoded into chunks, and how the transport abstraction decouples the SDK from your connectivity hardware.
+This page explains the fundamental concepts behind ferrite-sdk: how data survives reboots, how the fault capture lifecycle works, how telemetry is encoded into chunks, and how the transport abstraction decouples the SDK from your connectivity hardware.
 
 ## Retained RAM
 
-Most Cortex-M microcontrollers do not clear SRAM on a soft reset (watchdog, software reset, or fault-triggered reset). Only a power-on reset or brownout zeroes memory. iotai-sdk exploits this by placing a `RetainedBlock` structure in a dedicated linker section (`.uninit.iotai`) that the C runtime startup code does **not** zero-initialize.
+Most Cortex-M microcontrollers do not clear SRAM on a soft reset (watchdog, software reset, or fault-triggered reset). Only a power-on reset or brownout zeroes memory. ferrite-sdk exploits this by placing a `RetainedBlock` structure in a dedicated linker section (`.uninit.ferrite`) that the C runtime startup code does **not** zero-initialize.
 
 The retained block layout is:
 
@@ -44,7 +44,7 @@ If the magic is invalid (first power-on, or RAM was corrupted), the SDK initiali
 
 ### Linker script requirement
 
-For retained RAM to work, you **must** reserve a region in your linker script and place the `.uninit.iotai` section into it. The section is marked `NOLOAD` so the startup code does not touch it. See the [Quickstart](./quickstart#step-2----add-the-linker-script-fragment) for the exact linker syntax.
+For retained RAM to work, you **must** reserve a region in your linker script and place the `.uninit.ferrite` section into it. The section is marked `NOLOAD` so the startup code does not touch it. See the [Quickstart](./quickstart#step-2----add-the-linker-script-fragment) for the exact linker syntax.
 
 The SDK provides pre-built linker fragments for common targets:
 

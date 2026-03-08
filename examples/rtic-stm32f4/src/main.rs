@@ -1,14 +1,14 @@
 #![no_std]
 #![no_main]
 
-use iotai_sdk::{SdkConfig, RamRegion, RebootReason};
+use ferrite_sdk::{SdkConfig, RamRegion, RebootReason};
 use defmt_rtt as _;
 use panic_probe as _;
 use stm32f4xx_hal as _;
 
 mod build_id {
     pub fn get() -> u64 {
-        env!("IOTAI_BUILD_ID").parse().unwrap_or(0)
+        env!("FERRITE_BUILD_ID").parse().unwrap_or(0)
     }
 }
 
@@ -27,7 +27,7 @@ mod app {
     #[init]
     fn init(cx: init::Context) -> (Shared, Local) {
         // Initialize SDK
-        iotai_sdk::init(SdkConfig {
+        ferrite_sdk::init(SdkConfig {
             device_id: "stm32f4-example-01",
             firmware_version: env!("CARGO_PKG_VERSION"),
             build_id: build_id::get(),
@@ -39,7 +39,7 @@ mod app {
         });
 
         // Check for previous fault
-        if let Some(fault) = iotai_sdk::fault::last_fault() {
+        if let Some(fault) = ferrite_sdk::fault::last_fault() {
             defmt::error!(
                 "Recovered from fault: PC={:#010x} LR={:#010x}",
                 fault.frame.pc,
@@ -47,7 +47,7 @@ mod app {
             );
         }
 
-        iotai_sdk::reboot_reason::record_reboot_reason(RebootReason::PowerOnReset);
+        ferrite_sdk::reboot_reason::record_reboot_reason(RebootReason::PowerOnReset);
 
         defmt::info!("RTIC STM32F4 example initialized");
 
@@ -58,7 +58,7 @@ mod app {
     fn idle(cx: idle::Context) -> ! {
         loop {
             *cx.local.counter += 1;
-            iotai_sdk::metric_increment!("idle_count");
+            ferrite_sdk::metric_increment!("idle_count");
 
             // In a real application, trigger upload periodically here
             cortex_m::asm::wfi();

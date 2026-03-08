@@ -94,7 +94,7 @@ ram_regions: &[
 
 ## Compile-time constants
 
-These constants are defined in `iotai-sdk/src/config.rs` and control buffer sizes and chunk limits:
+These constants are defined in `ferrite-sdk/src/config.rs` and control buffer sizes and chunk limits:
 
 ### `DEFAULT_METRICS_CAPACITY`
 

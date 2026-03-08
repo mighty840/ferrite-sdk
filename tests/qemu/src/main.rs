@@ -10,7 +10,7 @@ mod transport;
 
 #[entry]
 fn main() -> ! {
-    hprintln!("=== iotai-sdk QEMU integration tests ===");
+    hprintln!("=== ferrite-sdk QEMU integration tests ===");
 
     let mut passed = 0u32;
     let mut failed = 0u32;

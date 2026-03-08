@@ -1,5 +1,5 @@
 use cortex_m_semihosting::hio;
-use iotai_sdk::transport::ChunkTransport;
+use ferrite_sdk::transport::ChunkTransport;
 
 pub struct SemihostingTransport {
     pub chunks_sent: u32,

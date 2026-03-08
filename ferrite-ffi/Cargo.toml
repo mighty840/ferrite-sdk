@@ -1,0 +1,11 @@
+[package]
+name = "ferrite-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ferrite_ffi"
+crate-type = ["staticlib"]
+
+[dependencies]
+ferrite-sdk = { path = "../ferrite-sdk", features = ["cortex-m"] }

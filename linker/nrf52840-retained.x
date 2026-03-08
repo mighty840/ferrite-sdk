@@ -1,4 +1,4 @@
-/* iotai-sdk retained RAM section for nRF52840 */
+/* ferrite-sdk retained RAM section for nRF52840 */
 /* Add this BEFORE your SECTIONS in memory.x */
 /* Retained RAM: not cleared on soft reset */
 /* nRF52840: use end of RAM block 1 */
@@ -9,11 +9,11 @@ MEMORY {
 }
 
 SECTIONS {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }

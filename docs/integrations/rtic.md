@@ -1,10 +1,10 @@
 # RTIC Integration
 
-The `iotai-sdk-rtic` crate provides a blocking upload helper and a shared-resource wrapper for RTIC v2 applications.
+The `ferrite-rtic` crate provides a blocking upload helper and a shared-resource wrapper for RTIC v2 applications.
 
 ## Overview
 
-RTIC uses priority-based preemptive scheduling. The iotai-sdk RTIC integration provides two tools:
+RTIC uses priority-based preemptive scheduling. The ferrite-sdk RTIC integration provides two tools:
 
 - **`upload_blocking()`** -- a thin wrapper around `UploadManager::upload()` for use in software tasks.
 - **`RticTransportResource<T>`** -- a shared resource that holds your transport and a pending flag, enabling the request/poll pattern common in RTIC applications.
@@ -13,8 +13,8 @@ RTIC uses priority-based preemptive scheduling. The iotai-sdk RTIC integration p
 
 ```toml
 [dependencies]
-iotai-sdk = { git = "https://github.com/your-org/iotai-sdk", features = ["cortex-m", "defmt"] }
-iotai-sdk-rtic = { git = "https://github.com/your-org/iotai-sdk" }
+ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt"] }
+ferrite-rtic = { git = "https://github.com/your-org/ferrite-sdk" }
 rtic = { version = "2", features = ["thumbv7-backend"] }
 ```
 
@@ -27,7 +27,7 @@ If you have a dedicated software task for uploads and can pass the transport dir
 ```rust
 #[rtic::app(device = nrf52840_hal::pac, dispatchers = [SWI0_EGU0])]
 mod app {
-    use iotai_sdk_rtic::upload_blocking;
+    use ferrite_rtic::upload_blocking;
 
     #[shared]
     struct Shared {}
@@ -68,7 +68,7 @@ When the transport is a shared resource (e.g., a UART that is also used for othe
 ```rust
 #[rtic::app(device = nrf52840_hal::pac, dispatchers = [SWI0_EGU0, SWI1_EGU1])]
 mod app {
-    use iotai_sdk_rtic::RticTransportResource;
+    use ferrite_rtic::RticTransportResource;
 
     #[shared]
     struct Shared {
@@ -148,7 +148,7 @@ let transport = uploader.into_inner();
 The blocking `ChunkTransport` trait is simpler than the async variant:
 
 ```rust
-use iotai_sdk::transport::ChunkTransport;
+use ferrite_sdk::transport::ChunkTransport;
 use nrf52840_hal::uarte::{self, Uarte};
 
 pub struct MyUartTransport {

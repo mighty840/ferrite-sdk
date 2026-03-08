@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-  "iotai-sdk",
-  "iotai-server",
-  "iotai-sdk-embassy",
-  "iotai-sdk-rtic",
-  "iotai-sdk-ffi",
-  "iotai-dashboard",
+  "ferrite-sdk",
+  "ferrite-server",
+  "ferrite-embassy",
+  "ferrite-rtic",
+  "ferrite-ffi",
+  "ferrite-dashboard",
 ]
 
 [workspace.dependencies]

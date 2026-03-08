@@ -1,12 +1,12 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'iotai-sdk',
+  title: 'ferrite-sdk',
   description: 'Embedded Rust firmware observability SDK for Cortex-M devices',
-  base: '/iotai-sdk/',
+  base: '/ferrite-sdk/',
 
   head: [
-    ['link', { rel: 'icon', href: '/iotai-sdk/logo.svg' }],
+    ['link', { rel: 'icon', href: '/ferrite-sdk/logo.svg' }],
   ],
 
   themeConfig: {
@@ -16,7 +16,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Integrations', link: '/integrations/' },
       { text: 'Reference', link: '/reference/' },
-      { text: 'Changelog', link: 'https://github.com/your-org/iotai-sdk/releases' },
+      { text: 'Changelog', link: 'https://github.com/your-org/ferrite-sdk/releases' },
     ],
 
     sidebar: {
@@ -99,7 +99,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/your-org/iotai-sdk/edit/main/docs/:path',
+      pattern: 'https://github.com/your-org/ferrite-sdk/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 
@@ -108,12 +108,12 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-org/iotai-sdk' },
+      { icon: 'github', link: 'https://github.com/your-org/ferrite-sdk' },
     ],
 
     footer: {
-      message: 'Released under the MIT / Apache-2.0 License.',
-      copyright: 'Copyright 2024-present iotai contributors',
+      message: 'Released under the MIT License.',
+      copyright: 'Copyright 2024-present ferrite contributors',
     },
   },
 })

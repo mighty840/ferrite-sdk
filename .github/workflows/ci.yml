@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-host:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy – ferrite-sdk (no features)
+        run: cargo clippy -p ferrite-sdk --no-default-features -- -D warnings
+
+      - name: Clippy – ferrite-server
+        run: cargo clippy -p ferrite-server -- -D warnings
+
+      - name: Test – ferrite-sdk (no default features)
+        run: cargo test -p ferrite-sdk --no-default-features
+
+      - name: Test – ferrite-server
+        run: cargo test -p ferrite-server
+
+  build-embedded:
+    name: "Build ${{ matrix.example }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: thumbv7em-none-eabihf
+            example: embassy-nrf52840
+            features: cortex-m,embassy
+          - target: thumbv6m-none-eabi
+            example: embassy-rp2040
+            features: cortex-m,embassy
+          - target: thumbv7em-none-eabi
+            example: rtic-stm32f4
+            features: cortex-m
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build ferrite-sdk
+        run: >
+          cargo build -p ferrite-sdk
+          --target ${{ matrix.target }}
+          --features ${{ matrix.features }}
+          --no-default-features
+
+      - name: Build example
+        run: >
+          cargo build
+          --manifest-path examples/${{ matrix.example }}/Cargo.toml
+          --target ${{ matrix.target }}

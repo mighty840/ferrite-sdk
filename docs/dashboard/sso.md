@@ -1,13 +1,13 @@
 # SSO / Keycloak Setup
 
-For production deployments, you can protect the iotai dashboard and server API with single sign-on (SSO) using Keycloak.
+For production deployments, you can protect the ferrite dashboard and server API with single sign-on (SSO) using Keycloak.
 
 ## Overview
 
 The setup involves:
 
 1. Running a Keycloak instance
-2. Creating a realm and client for the iotai dashboard
+2. Creating a realm and client for the ferrite dashboard
 3. Configuring a reverse proxy (e.g., nginx or Caddy) to validate tokens
 4. Updating the dashboard to redirect to Keycloak for login
 
@@ -16,15 +16,15 @@ The setup involves:
 ### Create a realm
 
 1. Log in to the Keycloak admin console (e.g., `http://keycloak:8080/admin`)
-2. Create a new realm called `iotai`
+2. Create a new realm called `ferrite`
 3. Under the realm settings, configure:
-   - Display name: "iotai Device Platform"
+   - Display name: "ferrite Device Platform"
    - Login theme: your preference
 
 ### Create a client
 
-1. In the `iotai` realm, go to Clients and create a new client:
-   - Client ID: `iotai-dashboard`
+1. In the `ferrite` realm, go to Clients and create a new client:
+   - Client ID: `ferrite-dashboard`
    - Client type: OpenID Connect
    - Root URL: `https://dashboard.example.com`
 2. Configure the client:
@@ -35,7 +35,7 @@ The setup involves:
 
 ### Create users
 
-Create users in the `iotai` realm and assign them roles as needed. For a simple setup, a single `viewer` role is sufficient.
+Create users in the `ferrite` realm and assign them roles as needed. For a simple setup, a single `viewer` role is sufficient.
 
 ## Reverse proxy configuration
 
@@ -77,7 +77,7 @@ server {
 }
 ```
 
-For a more robust setup, consider using [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) as an authentication middleware between the reverse proxy and the iotai-server.
+For a more robust setup, consider using [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) as an authentication middleware between the reverse proxy and the ferrite-server.
 
 ## Dashboard OIDC configuration
 
@@ -85,8 +85,8 @@ The dashboard uses the standard OpenID Connect authorization code flow with PKCE
 
 | Setting | Value |
 |---|---|
-| OIDC Authority | `https://keycloak.example.com/realms/iotai` |
-| Client ID | `iotai-dashboard` |
+| OIDC Authority | `https://keycloak.example.com/realms/ferrite` |
+| Client ID | `ferrite-dashboard` |
 | Redirect URI | `https://dashboard.example.com/callback` |
 | Scope | `openid profile` |
 
@@ -97,4 +97,4 @@ For device-to-server authentication (the chunk upload path), API keys or mTLS ar
 - **API keys**: Add an `X-API-Key` header to chunk uploads and validate it in the reverse proxy or a server middleware.
 - **mTLS**: Use client certificates for device authentication. Each device gets a unique certificate signed by your CA.
 
-The iotai-server itself does not currently implement authentication. Use a reverse proxy or API gateway for access control.
+The ferrite-server itself does not currently implement authentication. Use a reverse proxy or API gateway for access control.

@@ -1,0 +1,7 @@
+[package]
+name = "ferrite-rtic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ferrite-sdk = { path = "../ferrite-sdk" }

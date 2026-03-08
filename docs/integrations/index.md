@@ -1,14 +1,14 @@
 # Integrations Overview
 
-iotai-sdk provides first-class integration crates for the two most popular embedded Rust frameworks, plus a C FFI library for use with C/C++ firmware.
+ferrite-sdk provides first-class integration crates for the two most popular embedded Rust frameworks, plus a C FFI library for use with C/C++ firmware.
 
 ## Rust integrations
 
 | Integration | Crate | Upload model |
 |---|---|---|
-| [Embassy](./embassy) | `iotai-sdk-embassy` | Async task with periodic timer and/or external trigger |
-| [RTIC](./rtic) | `iotai-sdk-rtic` | Blocking upload from a software task, with a shared resource wrapper |
-| [Bare-metal](./baremetal) | `iotai-sdk` (core) | Call `UploadManager::upload()` directly from your main loop |
+| [Embassy](./embassy) | `ferrite-embassy` | Async task with periodic timer and/or external trigger |
+| [RTIC](./rtic) | `ferrite-rtic` | Blocking upload from a software task, with a shared resource wrapper |
+| [Bare-metal](./baremetal) | `ferrite-sdk` (core) | Call `UploadManager::upload()` directly from your main loop |
 
 All three use the same core SDK. The integration crates are thin wrappers that adapt the upload mechanism to each framework's concurrency model.
 
@@ -16,8 +16,8 @@ All three use the same core SDK. The integration crates are thin wrappers that a
 
 | Integration | Artifact | Description |
 |---|---|---|
-| [Zephyr](./zephyr-c) | `libiotai_sdk_ffi.a` + `iotai_sdk.h` | Static library linked into a Zephyr CMake project |
-| [FreeRTOS](./freertos-c) | `libiotai_sdk_ffi.a` + `iotai_sdk.h` | Static library called from a FreeRTOS task |
+| [Zephyr](./zephyr-c) | `libferrite_ffi.a` + `ferrite_sdk.h` | Static library linked into a Zephyr CMake project |
+| [FreeRTOS](./freertos-c) | `libferrite_ffi.a` + `ferrite_sdk.h` | Static library called from a FreeRTOS task |
 
 The C FFI exposes the full SDK API through `extern "C"` functions: init, record reboot reason, record metrics, retrieve fault records, and run a blocking upload session via function-pointer callbacks.
 

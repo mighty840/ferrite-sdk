@@ -1,10 +1,10 @@
 # Introduction
 
-iotai-sdk is an embedded Rust firmware observability SDK designed for ARM Cortex-M microcontrollers. It provides crash capture, metrics collection, structured logging, and reboot reason tracking -- all in a `no_std`, zero-allocation library that uploads telemetry over any transport you choose.
+ferrite-sdk is an embedded Rust firmware observability SDK designed for ARM Cortex-M microcontrollers. It provides crash capture, metrics collection, structured logging, and reboot reason tracking -- all in a `no_std`, zero-allocation library that uploads telemetry over any transport you choose.
 
 ## What problem does it solve?
 
-Embedded devices deployed in the field are difficult to debug. When a sensor node crashes at 2 AM, you typically have no stack trace, no logs, and no idea what happened. iotai-sdk solves this by:
+Embedded devices deployed in the field are difficult to debug. When a sensor node crashes at 2 AM, you typically have no stack trace, no logs, and no idea what happened. ferrite-sdk solves this by:
 
 1. **Capturing HardFaults automatically.** The SDK installs a Cortex-M exception handler that saves all registers (R0-R12, SP, LR, PC, xPSR), the CFSR/HFSR/MMFAR/BFAR fault status registers, and a 64-byte stack snapshot into retained RAM before resetting.
 
@@ -19,18 +19,18 @@ Embedded devices deployed in the field are difficult to debug. When a sensor nod
 ## Who is it for?
 
 - **Embedded Rust developers** shipping firmware on Cortex-M3, M4, or M4F targets (thumbv7m, thumbv7em-none-eabi, thumbv7em-none-eabihf).
-- **C/C++ firmware teams** who want the same observability without rewriting their RTOS. The `iotai-sdk-ffi` crate produces a static library (`.a`) and a C header that work with Zephyr, FreeRTOS, or any bare-metal C project.
-- **Platform engineers** building fleet-wide device monitoring. The companion `iotai-server` ingests chunks over HTTP, stores them in SQLite, and symbolicates fault addresses using `arm-none-eabi-addr2line`.
+- **C/C++ firmware teams** who want the same observability without rewriting their RTOS. The `ferrite-ffi` crate produces a static library (`.a`) and a C header that work with Zephyr, FreeRTOS, or any bare-metal C project.
+- **Platform engineers** building fleet-wide device monitoring. The companion `ferrite-server` ingests chunks over HTTP, stores them in SQLite, and symbolicates fault addresses using `arm-none-eabi-addr2line`.
 
 ## Repository structure
 
 | Crate | Description |
 |---|---|
-| `iotai-sdk` | Core `no_std` SDK -- metrics, faults, trace, chunks, transport |
-| `iotai-sdk-embassy` | Embassy async task for periodic/triggered uploads |
-| `iotai-sdk-rtic` | RTIC resource wrapper and blocking upload helper |
-| `iotai-sdk-ffi` | C FFI static library (`libiotai_sdk_ffi.a`) |
-| `iotai-server` | Companion CLI and HTTP ingestion server |
+| `ferrite-sdk` | Core `no_std` SDK -- metrics, faults, trace, chunks, transport |
+| `ferrite-embassy` | Embassy async task for periodic/triggered uploads |
+| `ferrite-rtic` | RTIC resource wrapper and blocking upload helper |
+| `ferrite-ffi` | C FFI static library (`libferrite_ffi.a`) |
+| `ferrite-server` | Companion CLI and HTTP ingestion server |
 
 ## Design principles
 
@@ -46,7 +46,7 @@ With default buffer sizes (32 metric entries, 512-byte trace buffer):
 
 | Resource | Usage |
 |---|---|
-| RAM (retained) | 256 bytes (`.uninit.iotai` section) |
+| RAM (retained) | 256 bytes (`.uninit.ferrite` section) |
 | RAM (runtime) | ~1.4 KB (MetricsBuffer + TraceBuffer + SdkState) |
 | Flash | ~6 KB (depends on enabled features) |
 

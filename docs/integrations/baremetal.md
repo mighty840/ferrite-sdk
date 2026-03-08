@@ -1,22 +1,22 @@
 # Bare-metal Usage
 
-If you are not using Embassy, RTIC, or any other framework, you can use the core `iotai-sdk` crate directly with blocking calls from your main loop.
+If you are not using Embassy, RTIC, or any other framework, you can use the core `ferrite-sdk` crate directly with blocking calls from your main loop.
 
 ## Overview
 
 The bare-metal approach is the simplest integration path:
 
-1. Call `iotai_sdk::init()` at startup.
+1. Call `ferrite_sdk::init()` at startup.
 2. Record metrics and reboot reasons from your application code.
 3. Periodically call `UploadManager::upload()` with a blocking transport.
 
-There is no dedicated integration crate -- you use `iotai-sdk` directly.
+There is no dedicated integration crate -- you use `ferrite-sdk` directly.
 
 ## Dependencies
 
 ```toml
 [dependencies]
-iotai-sdk = { git = "https://github.com/your-org/iotai-sdk", features = ["cortex-m"] }
+ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m"] }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 ```
@@ -30,8 +30,8 @@ Omit the `embassy` feature since you are not using async.
 #![no_main]
 
 use cortex_m_rt::entry;
-use iotai_sdk::{SdkConfig, RamRegion};
-use iotai_sdk::upload::UploadManager;
+use ferrite_sdk::{SdkConfig, RamRegion};
+use ferrite_sdk::upload::UploadManager;
 
 #[entry]
 fn main() -> ! {
@@ -39,7 +39,7 @@ fn main() -> ! {
     let uart = configure_uart();
 
     // Initialize the SDK
-    iotai_sdk::init(SdkConfig {
+    ferrite_sdk::init(SdkConfig {
         device_id: "bare-metal-device",
         firmware_version: env!("CARGO_PKG_VERSION"),
         build_id: 0,
@@ -51,8 +51,8 @@ fn main() -> ! {
     });
 
     // Record reboot reason
-    iotai_sdk::reboot_reason::record_reboot_reason(
-        iotai_sdk::RebootReason::PowerOnReset,
+    ferrite_sdk::reboot_reason::record_reboot_reason(
+        ferrite_sdk::RebootReason::PowerOnReset,
     );
 
     let mut transport = MyUartTransport::new(uart);
@@ -61,8 +61,8 @@ fn main() -> ! {
     loop {
         // Application logic
         let temp = read_temperature();
-        let _ = iotai_sdk::metric_gauge!("temperature", temp);
-        let _ = iotai_sdk::metric_increment!("loop_count");
+        let _ = ferrite_sdk::metric_gauge!("temperature", temp);
+        let _ = ferrite_sdk::metric_increment!("loop_count");
 
         loop_count += 1;
 
@@ -89,7 +89,7 @@ fn main() -> ! {
 For bare-metal, implement the blocking `ChunkTransport` trait:
 
 ```rust
-use iotai_sdk::transport::ChunkTransport;
+use ferrite_sdk::transport::ChunkTransport;
 
 struct MyUartTransport {
     // Your UART peripheral handle

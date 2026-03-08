@@ -1,4 +1,4 @@
-use iotai_sdk::metrics::{MetricsBuffer, MetricValue};
+use ferrite_sdk::metrics::{MetricsBuffer, MetricValue};
 
 pub fn counter_increment() -> Result<(), &'static str> {
     let mut buf: MetricsBuffer<8> = MetricsBuffer::new();

@@ -25,11 +25,11 @@ MEMORY
 
 SECTIONS
 {
-  .uninit.iotai (NOLOAD) : {
+  .uninit.ferrite (NOLOAD) : {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
 }
@@ -66,24 +66,24 @@ ram_regions: &[
 The STM32F4 reset cause is in the RCC CSR register (`0x40023874`):
 
 ```rust
-fn read_stm32f4_reset_reason() -> iotai_sdk::RebootReason {
+fn read_stm32f4_reset_reason() -> ferrite_sdk::RebootReason {
     let rcc = unsafe { &*pac::RCC::ptr() };
     let csr = rcc.csr.read();
 
     let reason = if csr.lpwrrstf().bit_is_set() {
-        iotai_sdk::RebootReason::BrownoutReset
+        ferrite_sdk::RebootReason::BrownoutReset
     } else if csr.wwdgrstf().bit_is_set() {
-        iotai_sdk::RebootReason::WatchdogTimeout
+        ferrite_sdk::RebootReason::WatchdogTimeout
     } else if csr.iwdgrstf().bit_is_set() {
-        iotai_sdk::RebootReason::WatchdogTimeout
+        ferrite_sdk::RebootReason::WatchdogTimeout
     } else if csr.sftrstf().bit_is_set() {
-        iotai_sdk::RebootReason::SoftwareReset
+        ferrite_sdk::RebootReason::SoftwareReset
     } else if csr.porrstf().bit_is_set() {
-        iotai_sdk::RebootReason::PowerOnReset
+        ferrite_sdk::RebootReason::PowerOnReset
     } else if csr.pinrstf().bit_is_set() {
-        iotai_sdk::RebootReason::PinReset
+        ferrite_sdk::RebootReason::PinReset
     } else {
-        iotai_sdk::RebootReason::Unknown
+        ferrite_sdk::RebootReason::Unknown
     };
 
     // Clear reset flags by setting RMVF bit
@@ -119,4 +119,4 @@ probe-rs run --chip STM32F411CEUx target/thumbv7em-none-eabihf/release/my-firmwa
 
 ## Retained RAM behavior
 
-SRAM on STM32F4 is retained across software resets, watchdog resets, and pin resets. It is cleared on power-on reset (POR) and brownout reset (BOR). This matches the expected behavior for iotai-sdk.
+SRAM on STM32F4 is retained across software resets, watchdog resets, and pin resets. It is cleared on power-on reset (POR) and brownout reset (BOR). This matches the expected behavior for ferrite-sdk.

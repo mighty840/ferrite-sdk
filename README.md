@@ -1,26 +1,26 @@
 <p align="center">
-  <img src="docs/public/logo.svg" alt="iotai-sdk logo" width="120" />
+  <img src="docs/public/logo.svg" alt="ferrite-sdk logo" width="120" />
 </p>
 
-<h1 align="center">iotai-sdk</h1>
+<h1 align="center">ferrite-sdk</h1>
 
 <p align="center">
   <strong>Firmware observability for ARM Cortex-M — crashes, metrics, and logs with zero alloc.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/iotai-sdk/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/iotai-sdk/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI"></a>
-  <a href="https://crates.io/crates/iotai-sdk"><img src="https://img.shields.io/crates/v/iotai-sdk?style=flat-square&logo=rust&label=crates.io" alt="crates.io"></a>
-  <a href="https://docs.rs/iotai-sdk"><img src="https://img.shields.io/docsrs/iotai-sdk?style=flat-square&logo=docs.rs&label=docs.rs" alt="docs.rs"></a>
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue?style=flat-square" alt="License"></a>
-  <a href="https://your-org.github.io/iotai-sdk/"><img src="https://img.shields.io/badge/docs-VitePress-646CFF?style=flat-square&logo=vitepress" alt="Docs"></a>
+  <a href="https://github.com/your-org/ferrite-sdk/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/ferrite-sdk/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI"></a>
+  <a href="https://crates.io/crates/ferrite-sdk"><img src="https://img.shields.io/crates/v/ferrite-sdk?style=flat-square&logo=rust&label=crates.io" alt="crates.io"></a>
+  <a href="https://docs.rs/ferrite-sdk"><img src="https://img.shields.io/docsrs/ferrite-sdk?style=flat-square&logo=docs.rs&label=docs.rs" alt="docs.rs"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
+  <a href="https://your-org.github.io/ferrite-sdk/"><img src="https://img.shields.io/badge/docs-VitePress-646CFF?style=flat-square&logo=vitepress" alt="Docs"></a>
 </p>
 
 ---
 
 ## What It Does
 
-iotai-sdk captures everything you need to debug embedded devices in the field:
+ferrite-sdk captures everything you need to debug embedded devices in the field:
 
 - **HardFault capture** — all Cortex-M registers, CFSR/HFSR, 64-byte stack snapshot
 - **Reboot reason tracking** — power-on, watchdog, fault, brownout, software reset
@@ -40,8 +40,8 @@ Default configuration: **~1.7 KB RAM, ~6 KB flash**. No alloc, no std, no panics
 
 ```toml
 [dependencies]
-iotai-sdk = { version = "0.1", features = ["cortex-m", "defmt", "embassy"] }
-iotai-sdk-embassy = "0.1"
+ferrite-sdk = { version = "0.1", features = ["cortex-m", "defmt", "embassy"] }
+ferrite-embassy = "0.1"
 ```
 
 **2. Add linker fragment** (see [`linker/nrf52840-retained.x`](linker/nrf52840-retained.x))
@@ -49,7 +49,7 @@ iotai-sdk-embassy = "0.1"
 **3. Initialize the SDK:**
 
 ```rust
-iotai_sdk::init(SdkConfig {
+ferrite_sdk::init(SdkConfig {
     device_id: "sensor-42",
     firmware_version: env!("CARGO_PKG_VERSION"),
     build_id: 0,
@@ -61,8 +61,8 @@ iotai_sdk::init(SdkConfig {
 **4. Record telemetry:**
 
 ```rust
-iotai_sdk::metric_gauge!("temperature", 23.5);
-iotai_sdk::metric_increment!("packets_sent");
+ferrite_sdk::metric_gauge!("temperature", 23.5);
+ferrite_sdk::metric_increment!("packets_sent");
 defmt::info!("system started");
 ```
 
@@ -71,7 +71,7 @@ defmt::info!("system started");
 ```rust
 #[embassy_executor::task]
 async fn upload(transport: MyUart) -> ! {
-    iotai_sdk_embassy::upload_task::upload_loop(transport, Duration::from_secs(60)).await
+    ferrite_embassy::upload_task::upload_loop(transport, Duration::from_secs(60)).await
 }
 ```
 
@@ -89,27 +89,27 @@ All `thumbv7m-none-eabi`, `thumbv7em-none-eabi`, and `thumbv7em-none-eabihf` tar
 
 | Crate | Description |
 |-------|-------------|
-| [`iotai-sdk`](iotai-sdk/) | Core `no_std` SDK — crashes, metrics, trace, chunks |
-| [`iotai-sdk-embassy`](iotai-sdk-embassy/) | Embassy async upload task |
-| [`iotai-sdk-rtic`](iotai-sdk-rtic/) | RTIC resource wrapper + blocking upload |
-| [`iotai-sdk-ffi`](iotai-sdk-ffi/) | C FFI static library for Zephyr/FreeRTOS |
-| [`iotai-server`](iotai-server/) | Companion HTTP server + CLI + SQLite |
-| [`iotai-dashboard`](iotai-dashboard/) | Dioxus WASM web dashboard |
+| [`ferrite-sdk`](ferrite-sdk/) | Core `no_std` SDK — crashes, metrics, trace, chunks |
+| [`ferrite-embassy`](ferrite-embassy/) | Embassy async upload task |
+| [`ferrite-rtic`](ferrite-rtic/) | RTIC resource wrapper + blocking upload |
+| [`ferrite-ffi`](ferrite-ffi/) | C FFI static library for Zephyr/FreeRTOS |
+| [`ferrite-server`](ferrite-server/) | Companion HTTP server + CLI + SQLite |
+| [`ferrite-dashboard`](ferrite-dashboard/) | Dioxus WASM web dashboard |
 
 ## Build
 
 ```bash
 # Host tests (no embedded toolchain needed)
-cargo build -p iotai-sdk --no-default-features
-cargo test -p iotai-sdk --no-default-features
-cargo test -p iotai-server
+cargo build -p ferrite-sdk --no-default-features
+cargo test -p ferrite-sdk --no-default-features
+cargo test -p ferrite-server
 
 # Cross-compile for Cortex-M
 rustup target add thumbv7em-none-eabihf
-cargo build -p iotai-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
+cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 
 # Run the server
-cargo run -p iotai-server -- serve --port 8080
+cargo run -p ferrite-server -- serve --port 8080
 
 # Docs site
 cd docs && npm install && npm run dev
@@ -117,7 +117,7 @@ cd docs && npm install && npm run dev
 
 ## Documentation
 
-Full documentation is available at the [VitePress docs site](https://your-org.github.io/iotai-sdk/), covering:
+Full documentation is available at the [VitePress docs site](https://your-org.github.io/ferrite-sdk/), covering:
 
 - [Architecture & design](docs/guide/architecture.md)
 - [Binary chunk wire format](docs/reference/chunk-format.md)
@@ -127,9 +127,4 @@ Full documentation is available at the [VitePress docs site](https://your-org.gi
 
 ## License
 
-Licensed under either of:
-
-- [MIT License](LICENSE-MIT)
-- [Apache License, Version 2.0](LICENSE-APACHE)
-
-at your option.
+Licensed under the [MIT License](LICENSE).

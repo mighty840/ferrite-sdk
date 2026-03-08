@@ -1,16 +1,16 @@
-# iotai-sdk — Build Guide for AI Coding Agents
+# ferrite-sdk — Build Guide for AI Coding Agents
 
 ## Build (host, no embedded toolchain needed)
 ```bash
-cargo build -p iotai-sdk --no-default-features
-cargo test -p iotai-sdk --no-default-features
-cargo test -p iotai-server
+cargo build -p ferrite-sdk --no-default-features
+cargo test -p ferrite-sdk --no-default-features
+cargo test -p ferrite-server
 ```
 
 ## Build for embedded (requires ARM toolchain)
 ```bash
 rustup target add thumbv7em-none-eabihf
-cargo build -p iotai-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
+cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 ```
 
 ## Flash examples (requires probe-rs)
@@ -27,7 +27,7 @@ cargo run --release
 ```
 
 ## Key design decisions
-- No alloc anywhere in iotai-sdk core
+- No alloc anywhere in ferrite-sdk core
 - No panics in production code paths (tests excepted)
 - Feature flags gate all hardware dependencies
 - cortex-m feature must be disabled for host tests
@@ -54,5 +54,5 @@ defmt_sink.rs    → defmt Logger impl (defmt feature)
 1. Add variant to ChunkType enum in `chunks/types.rs`
 2. Add encode fn to ChunkEncoder in `chunks/encoder.rs`
 3. Add decode match arm in ChunkDecoder in `chunks/decoder.rs`
-4. Add SQL column in `iotai-server/src/store.rs`
+4. Add SQL column in `ferrite-server/src/store.rs`
 5. Add test in `chunks/encoder.rs` tests

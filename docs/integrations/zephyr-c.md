@@ -1,50 +1,50 @@
 # Zephyr (C) Integration
 
-This guide explains how to integrate iotai-sdk into a Zephyr RTOS project using the C FFI static library. You will cross-compile the Rust FFI crate, generate a C header, link the static library into your Zephyr build, implement the transport callback, and call the SDK from your Zephyr application.
+This guide explains how to integrate ferrite-sdk into a Zephyr RTOS project using the C FFI static library. You will cross-compile the Rust FFI crate, generate a C header, link the static library into your Zephyr build, implement the transport callback, and call the SDK from your Zephyr application.
 
 ## Overview
 
-The `iotai-sdk-ffi` crate produces a static library (`libiotai_sdk_ffi.a`) and exposes all SDK functionality through `extern "C"` functions. From the Zephyr side, you:
+The `ferrite-ffi` crate produces a static library (`libferrite_ffi.a`) and exposes all SDK functionality through `extern "C"` functions. From the Zephyr side, you:
 
 1. Download (or build) the pre-compiled `.a` for your target.
 2. Copy the C header file into your project.
 3. Add the library to your CMake build.
 4. Implement the `send_chunk` callback using your Zephyr transport driver.
-5. Call `iotai_sdk_init()`, record metrics, and call `iotai_upload()`.
+5. Call `ferrite_sdk_init()`, record metrics, and call `ferrite_upload()`.
 
 ## Step 1 -- Build the static library
 
-From the iotai-sdk repository root, build the FFI crate for your target:
+From the ferrite-sdk repository root, build the FFI crate for your target:
 
 ```bash
 # For Cortex-M4F (nRF52840, STM32F4, etc.)
-cargo build -p iotai-sdk-ffi \
+cargo build -p ferrite-ffi \
   --target thumbv7em-none-eabihf \
   --release \
   --features cortex-m
 
 # The output is at:
-# target/thumbv7em-none-eabihf/release/libiotai_sdk_ffi.a
+# target/thumbv7em-none-eabihf/release/libferrite_ffi.a
 ```
 
 For Cortex-M3 targets (no hardware FPU):
 
 ```bash
-cargo build -p iotai-sdk-ffi \
+cargo build -p ferrite-ffi \
   --target thumbv7m-none-eabi \
   --release \
   --features cortex-m
 ```
 
-Copy the resulting `.a` file into your Zephyr project, e.g., `lib/libiotai_sdk_ffi.a`.
+Copy the resulting `.a` file into your Zephyr project, e.g., `lib/libferrite_ffi.a`.
 
 ## Step 2 -- Create the C header
 
-Create `include/iotai_sdk.h` in your Zephyr project:
+Create `include/ferrite_sdk.h` in your Zephyr project:
 
 ```c
-#ifndef IOTAI_SDK_H
-#define IOTAI_SDK_H
+#ifndef FERRITE_SDK_H
+#define FERRITE_SDK_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -58,15 +58,15 @@ extern "C" {
 /* ------------------------------------------------------------------ */
 
 typedef enum {
-    IOTAI_OK              =  0,
-    IOTAI_NOT_INITIALIZED = -1,
-    IOTAI_ALREADY_INIT    = -2,
-    IOTAI_BUFFER_FULL     = -3,
-    IOTAI_KEY_TOO_LONG    = -4,
-    IOTAI_NULL_PTR        = -5,
-    IOTAI_ENCODING        = -6,
-    IOTAI_TRANSPORT       = -7,
-} iotai_error_t;
+    FERRITE_OK              =  0,
+    FERRITE_NOT_INITIALIZED = -1,
+    FERRITE_ALREADY_INIT    = -2,
+    FERRITE_BUFFER_FULL     = -3,
+    FERRITE_KEY_TOO_LONG    = -4,
+    FERRITE_NULL_PTR        = -5,
+    FERRITE_ENCODING        = -6,
+    FERRITE_TRANSPORT       = -7,
+} ferrite_error_t;
 
 /* ------------------------------------------------------------------ */
 /* RAM region                                                          */
@@ -75,7 +75,7 @@ typedef enum {
 typedef struct {
     uint32_t start;
     uint32_t end;
-} iotai_ram_region_t;
+} ferrite_ram_region_t;
 
 /* ------------------------------------------------------------------ */
 /* Transport                                                           */
@@ -86,10 +86,10 @@ typedef struct {
  *
  * @param data  Pointer to chunk bytes.
  * @param len   Number of bytes.
- * @param ctx   Opaque context pointer (passed through from iotai_transport_t).
+ * @param ctx   Opaque context pointer (passed through from ferrite_transport_t).
  * @return 0 on success, non-zero on error.
  */
-typedef int32_t (*iotai_send_chunk_fn)(const uint8_t *data, uint32_t len, void *ctx);
+typedef int32_t (*ferrite_send_chunk_fn)(const uint8_t *data, uint32_t len, void *ctx);
 
 /**
  * Callback to query transport availability.
@@ -97,13 +97,13 @@ typedef int32_t (*iotai_send_chunk_fn)(const uint8_t *data, uint32_t len, void *
  * @param ctx  Opaque context pointer.
  * @return true if the transport link is ready.
  */
-typedef bool (*iotai_is_available_fn)(void *ctx);
+typedef bool (*ferrite_is_available_fn)(void *ctx);
 
 typedef struct {
-    iotai_send_chunk_fn  send_chunk;    /* Required */
-    iotai_is_available_fn is_available; /* Optional (NULL = always available) */
+    ferrite_send_chunk_fn  send_chunk;    /* Required */
+    ferrite_is_available_fn is_available; /* Optional (NULL = always available) */
     void                 *ctx;          /* Opaque context forwarded to callbacks */
-} iotai_transport_t;
+} ferrite_transport_t;
 
 /* ------------------------------------------------------------------ */
 /* Upload statistics                                                   */
@@ -115,7 +115,7 @@ typedef struct {
     bool     fault_uploaded;
     uint32_t metrics_uploaded;
     uint32_t trace_bytes_uploaded;
-} iotai_upload_stats_t;
+} ferrite_upload_stats_t;
 
 /* ------------------------------------------------------------------ */
 /* Fault record                                                        */
@@ -133,7 +133,7 @@ typedef struct {
     uint32_t stack_snapshot[16];
     /* Cortex-M fault status registers */
     uint32_t cfsr, hfsr, mmfar, bfar;
-} iotai_fault_record_t;
+} ferrite_fault_record_t;
 
 /* ------------------------------------------------------------------ */
 /* SDK functions                                                       */
@@ -149,12 +149,12 @@ typedef struct {
  * @param ram_regions       Pointer to array of valid RAM regions.
  * @param ram_region_count  Number of RAM regions.
  */
-iotai_error_t iotai_sdk_init(
+ferrite_error_t ferrite_sdk_init(
     const char           *device_id,
     const char           *firmware_version,
     uint64_t              build_id,
     uint64_t            (*ticks_fn)(void),
-    const iotai_ram_region_t *ram_regions,
+    const ferrite_ram_region_t *ram_regions,
     uint32_t              ram_region_count
 );
 
@@ -168,7 +168,7 @@ iotai_error_t iotai_sdk_init(
  *   9 = PinReset, 10 = BrownoutReset, 11 = FirmwareUpdate,
  *   12 = UserRequested.
  */
-iotai_error_t iotai_record_reboot_reason(uint8_t reason);
+ferrite_error_t ferrite_record_reboot_reason(uint8_t reason);
 
 /**
  * Retrieve the reboot reason from the previous boot.
@@ -176,7 +176,7 @@ iotai_error_t iotai_record_reboot_reason(uint8_t reason);
  * On success, writes the reason code to *out_reason.
  * If no valid record exists, writes 0 (Unknown).
  */
-iotai_error_t iotai_last_reboot_reason(uint8_t *out_reason);
+ferrite_error_t ferrite_last_reboot_reason(uint8_t *out_reason);
 
 /**
  * Increment a counter metric by delta.
@@ -184,7 +184,7 @@ iotai_error_t iotai_last_reboot_reason(uint8_t *out_reason);
  * @param key    NUL-terminated metric key (max 32 chars).
  * @param delta  Value to add.
  */
-iotai_error_t iotai_metric_increment(const char *key, uint32_t delta);
+ferrite_error_t ferrite_metric_increment(const char *key, uint32_t delta);
 
 /**
  * Set a gauge metric to value.
@@ -192,7 +192,7 @@ iotai_error_t iotai_metric_increment(const char *key, uint32_t delta);
  * @param key    NUL-terminated metric key (max 32 chars).
  * @param value  New gauge value.
  */
-iotai_error_t iotai_metric_gauge(const char *key, float value);
+ferrite_error_t ferrite_metric_gauge(const char *key, float value);
 
 /**
  * Record a histogram observation.
@@ -200,14 +200,14 @@ iotai_error_t iotai_metric_gauge(const char *key, float value);
  * @param key    NUL-terminated metric key (max 32 chars).
  * @param value  Observed value.
  */
-iotai_error_t iotai_metric_observe(const char *key, float value);
+ferrite_error_t ferrite_metric_observe(const char *key, float value);
 
 /**
  * Retrieve the fault record from the previous boot.
  *
  * @param out  Pointer to fault record struct. out->valid is false if no fault.
  */
-iotai_error_t iotai_last_fault(iotai_fault_record_t *out);
+ferrite_error_t ferrite_last_fault(ferrite_fault_record_t *out);
 
 /**
  * Run a full blocking upload session.
@@ -215,16 +215,16 @@ iotai_error_t iotai_last_fault(iotai_fault_record_t *out);
  * @param transport  Transport descriptor with send_chunk callback.
  * @param out_stats  Optional pointer to receive upload statistics (may be NULL).
  */
-iotai_error_t iotai_upload(
-    const iotai_transport_t *transport,
-    iotai_upload_stats_t    *out_stats
+ferrite_error_t ferrite_upload(
+    const ferrite_transport_t *transport,
+    ferrite_upload_stats_t    *out_stats
 );
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* IOTAI_SDK_H */
+#endif /* FERRITE_SDK_H */
 ```
 
 ## Step 3 -- Add to your Zephyr CMake build
@@ -240,12 +240,12 @@ project(my_app)
 # Your application sources
 target_sources(app PRIVATE src/main.c)
 
-# Include path for iotai_sdk.h
+# Include path for ferrite_sdk.h
 target_include_directories(app PRIVATE include)
 
 # Link the pre-built static library
 target_link_libraries(app PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/libiotai_sdk_ffi.a
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/libferrite_ffi.a
 )
 ```
 
@@ -253,10 +253,10 @@ You also need to add the retained RAM section to your board's device tree overla
 
 ```
 /* In your Zephyr linker overlay (e.g., sections-rom.ld) */
-SECTION_DATA_PROLOGUE(.uninit.iotai, (NOLOAD),)
+SECTION_DATA_PROLOGUE(.uninit.ferrite, (NOLOAD),)
 {
     . = ALIGN(4);
-    KEEP(*(.uninit.iotai))
+    KEEP(*(.uninit.ferrite))
     . = ALIGN(4);
 } GROUP_DATA_LINK_IN(RETAINED, RETAINED)
 ```
@@ -271,7 +271,7 @@ Here is a complete UART transport implementation for Zephyr:
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
-#include "iotai_sdk.h"
+#include "ferrite_sdk.h"
 
 static const struct device *uart_dev;
 
@@ -307,7 +307,7 @@ For a BLE transport, you would implement `send_chunk` to write to a GATT charact
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
-#include "iotai_sdk.h"
+#include "ferrite_sdk.h"
 
 static const struct device *uart_dev;
 
@@ -331,11 +331,11 @@ int main(void)
     }
 
     /* Initialize the SDK */
-    iotai_ram_region_t regions[] = {
+    ferrite_ram_region_t regions[] = {
         { .start = 0x20000000, .end = 0x20040000 },
     };
 
-    iotai_error_t err = iotai_sdk_init(
+    ferrite_error_t err = ferrite_sdk_init(
         "zephyr-sensor-01",     /* device_id */
         "1.0.0",                /* firmware_version */
         0,                      /* build_id */
@@ -344,24 +344,24 @@ int main(void)
         1                       /* ram_region_count */
     );
 
-    if (err != IOTAI_OK) {
-        printk("iotai init failed: %d\n", err);
+    if (err != FERRITE_OK) {
+        printk("ferrite init failed: %d\n", err);
         return -1;
     }
 
     /* Record reboot reason */
-    iotai_record_reboot_reason(1); /* PowerOnReset */
+    ferrite_record_reboot_reason(1); /* PowerOnReset */
 
     /* Check if we have a fault from the previous boot */
-    iotai_fault_record_t fault;
-    iotai_last_fault(&fault);
+    ferrite_fault_record_t fault;
+    ferrite_last_fault(&fault);
     if (fault.valid) {
         printk("Previous fault: type=%u PC=0x%08X LR=0x%08X CFSR=0x%08X\n",
                fault.fault_type, fault.pc, fault.lr, fault.cfsr);
     }
 
     /* Set up transport */
-    iotai_transport_t transport = {
+    ferrite_transport_t transport = {
         .send_chunk   = uart_send_chunk,
         .is_available = uart_is_available,
         .ctx          = NULL,
@@ -371,18 +371,18 @@ int main(void)
     int iteration = 0;
     while (1) {
         /* Record some metrics */
-        iotai_metric_gauge("temperature", 23.5f + (float)(iteration % 10));
-        iotai_metric_increment("loop_count", 1);
-        iotai_metric_observe("process_time_us", 150.0f + (float)(iteration % 50));
+        ferrite_metric_gauge("temperature", 23.5f + (float)(iteration % 10));
+        ferrite_metric_increment("loop_count", 1);
+        ferrite_metric_observe("process_time_us", 150.0f + (float)(iteration % 50));
 
         iteration++;
 
         /* Upload every 60 seconds */
         if (iteration % 60 == 0) {
-            iotai_upload_stats_t stats;
-            iotai_error_t upload_err = iotai_upload(&transport, &stats);
+            ferrite_upload_stats_t stats;
+            ferrite_error_t upload_err = ferrite_upload(&transport, &stats);
 
-            if (upload_err == IOTAI_OK) {
+            if (upload_err == FERRITE_OK) {
                 printk("Upload OK: %u chunks, %u bytes\n",
                        stats.chunks_sent, stats.bytes_sent);
             } else {
@@ -422,12 +422,12 @@ Zephyr's default linker scripts zero-initialize all SRAM. To create a retained R
 Create `linker/retained.ld`:
 
 ```ld
-SECTION_DATA_PROLOGUE(.uninit.iotai, (NOLOAD),)
+SECTION_DATA_PROLOGUE(.uninit.ferrite, (NOLOAD),)
 {
     . = ALIGN(4);
-    _iotai_retained_start = .;
-    KEEP(*(.uninit.iotai))
-    _iotai_retained_end = .;
+    _ferrite_retained_start = .;
+    KEEP(*(.uninit.ferrite))
+    _ferrite_retained_end = .;
     . = ALIGN(4);
 } GROUP_DATA_LINK_IN(RAM, RAM)
 ```
@@ -445,10 +445,10 @@ For some SoCs, you can reserve a memory region in the device tree:
 ```dts
 / {
     soc {
-        iotai_retained: memory@2003FF00 {
+        ferrite_retained: memory@2003FF00 {
             compatible = "zephyr,memory-region";
             reg = <0x2003FF00 0x100>;
-            zephyr,memory-region = "IOTAI_RETAINED";
+            zephyr,memory-region = "FERRITE_RETAINED";
         };
     };
 };
@@ -456,19 +456,19 @@ For some SoCs, you can reserve a memory region in the device tree:
 
 ## Error handling
 
-All C FFI functions return `iotai_error_t`. Check the return value after every call:
+All C FFI functions return `ferrite_error_t`. Check the return value after every call:
 
 | Error | Value | Meaning |
 |---|---|---|
-| `IOTAI_OK` | 0 | Success |
-| `IOTAI_NOT_INITIALIZED` | -1 | `iotai_sdk_init()` was not called |
-| `IOTAI_ALREADY_INIT` | -2 | `iotai_sdk_init()` was called more than once |
-| `IOTAI_BUFFER_FULL` | -3 | Metrics buffer is full (oldest entry was evicted) |
-| `IOTAI_KEY_TOO_LONG` | -4 | Metric key exceeds 32 characters |
-| `IOTAI_NULL_PTR` | -5 | A required pointer argument was NULL |
-| `IOTAI_ENCODING` | -6 | Chunk encoding failed |
-| `IOTAI_TRANSPORT` | -7 | Transport callback returned an error |
+| `FERRITE_OK` | 0 | Success |
+| `FERRITE_NOT_INITIALIZED` | -1 | `ferrite_sdk_init()` was not called |
+| `FERRITE_ALREADY_INIT` | -2 | `ferrite_sdk_init()` was called more than once |
+| `FERRITE_BUFFER_FULL` | -3 | Metrics buffer is full (oldest entry was evicted) |
+| `FERRITE_KEY_TOO_LONG` | -4 | Metric key exceeds 32 characters |
+| `FERRITE_NULL_PTR` | -5 | A required pointer argument was NULL |
+| `FERRITE_ENCODING` | -6 | Chunk encoding failed |
+| `FERRITE_TRANSPORT` | -7 | Transport callback returned an error |
 
 ## Thread safety
 
-The SDK uses critical sections internally. On Cortex-M, this means interrupts are briefly disabled during metric recording and upload orchestration. If you call SDK functions from multiple Zephyr threads, the critical sections ensure mutual exclusion. However, you should avoid calling `iotai_upload()` from more than one thread simultaneously -- the upload session is not reentrant.
+The SDK uses critical sections internally. On Cortex-M, this means interrupts are briefly disabled during metric recording and upload orchestration. If you call SDK functions from multiple Zephyr threads, the critical sections ensure mutual exclusion. However, you should avoid calling `ferrite_upload()` from more than one thread simultaneously -- the upload session is not reentrant.

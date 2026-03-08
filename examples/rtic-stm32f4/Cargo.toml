@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iotai-sdk = { path = "../../iotai-sdk", features = ["cortex-m"] }
+ferrite-sdk = { path = "../../ferrite-sdk", features = ["cortex-m"] }
 cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7"
 stm32f4xx-hal = { version = "0.21", features = ["stm32f411", "rt"] }

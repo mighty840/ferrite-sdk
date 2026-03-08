@@ -1,8 +1,8 @@
-use iotai_sdk::chunks::encoder::ChunkEncoder;
-use iotai_sdk::chunks::decoder::ChunkDecoder;
-use iotai_sdk::chunks::types::ChunkType;
-use iotai_sdk::fault::FaultRecord;
-use iotai_sdk::metrics::{MetricEntry, MetricValue};
+use ferrite_sdk::chunks::encoder::ChunkEncoder;
+use ferrite_sdk::chunks::decoder::ChunkDecoder;
+use ferrite_sdk::chunks::types::ChunkType;
+use ferrite_sdk::fault::FaultRecord;
+use ferrite_sdk::metrics::{MetricEntry, MetricValue};
 
 pub fn encode_decode_metrics() -> Result<(), &'static str> {
     let mut encoder = ChunkEncoder::new();
@@ -71,7 +71,7 @@ pub fn crc_mismatch_detected() -> Result<(), &'static str> {
     out[8] ^= 0xFF;
 
     match ChunkDecoder::decode(&out[..n]) {
-        Err(iotai_sdk::chunks::types::DecodeError::CrcMismatch { .. }) => Ok(()),
+        Err(ferrite_sdk::chunks::types::DecodeError::CrcMismatch { .. }) => Ok(()),
         Ok(_) => Err("expected CRC mismatch error"),
         Err(_) => Err("expected CRC mismatch, got different error"),
     }
