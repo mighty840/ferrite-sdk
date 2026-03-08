@@ -12,4 +12,4 @@ SECTIONS {
     _ferrite_retained_end = .;
     . = ALIGN(4);
   } > RETAINED
-}
+} INSERT AFTER .uninit;

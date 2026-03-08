@@ -8,6 +8,18 @@ use panic_semihosting as _;
 mod tests;
 mod transport;
 
+// Provide a minimal interrupt vector table for QEMU (lm3s6965evb).
+// The `device` feature of cortex-m-rt expects `__INTERRUPTS` to be defined
+// by a device crate. Since we don't use one, we provide it here.
+// lm3s6965evb has 54 interrupts.
+extern "C" {
+    fn DefaultHandler();
+}
+
+#[no_mangle]
+#[link_section = ".vector_table.interrupts"]
+pub static __INTERRUPTS: [unsafe extern "C" fn(); 54] = [DefaultHandler; 54];
+
 #[entry]
 fn main() -> ! {
     hprintln!("=== ferrite-sdk QEMU integration tests ===");
