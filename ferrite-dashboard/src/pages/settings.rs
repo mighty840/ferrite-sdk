@@ -202,8 +202,16 @@ fn ToggleSetting(
     enabled: bool,
     on_toggle: EventHandler<MouseEvent>,
 ) -> Element {
-    let toggle_bg = if enabled { "bg-ferrite-600" } else { "bg-gray-200" };
-    let toggle_pos = if enabled { "translate-x-5" } else { "translate-x-0" };
+    let toggle_bg = if enabled {
+        "bg-ferrite-600"
+    } else {
+        "bg-gray-200"
+    };
+    let toggle_pos = if enabled {
+        "translate-x-5"
+    } else {
+        "translate-x-0"
+    };
 
     rsx! {
         div {

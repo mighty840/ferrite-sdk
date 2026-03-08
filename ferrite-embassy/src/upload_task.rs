@@ -38,10 +38,7 @@ pub fn trigger_upload_now() {
 /// Periodic upload loop. Runs forever, uploading every `interval`.
 ///
 /// Call this from your own `#[embassy_executor::task]` function.
-pub async fn upload_loop<T: AsyncChunkTransport>(
-    mut transport: T,
-    interval: Duration,
-) -> ! {
+pub async fn upload_loop<T: AsyncChunkTransport>(mut transport: T, interval: Duration) -> ! {
     loop {
         Timer::after(interval).await;
 

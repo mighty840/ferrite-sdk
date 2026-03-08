@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
 use crate::api::types::MetricEntry;
 use crate::components::MetricChart;
+use dioxus::prelude::*;
 
 #[component]
 pub fn MetricsPage() -> Element {

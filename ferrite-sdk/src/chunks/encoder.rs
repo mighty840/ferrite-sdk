@@ -63,11 +63,7 @@ impl ChunkEncoder {
     }
 
     /// Encode a FaultRecord into one chunk, calling `emit` with the encoded bytes.
-    pub fn encode_fault<F: FnMut(&[u8])>(
-        &mut self,
-        record: &FaultRecord,
-        mut emit: F,
-    ) {
+    pub fn encode_fault<F: FnMut(&[u8])>(&mut self, record: &FaultRecord, mut emit: F) {
         let mut payload = [0u8; MAX_PAYLOAD_SIZE];
         let len = record.serialize_to(&mut payload);
         let mut out = [0u8; 256];
@@ -76,11 +72,7 @@ impl ChunkEncoder {
     }
 
     /// Encode all metrics, calling `emit` for each chunk.
-    pub fn encode_metrics<'a, I, F>(
-        &mut self,
-        entries: I,
-        mut emit: F,
-    )
+    pub fn encode_metrics<'a, I, F>(&mut self, entries: I, mut emit: F)
     where
         I: Iterator<Item = &'a MetricEntry>,
         F: FnMut(&[u8]),
@@ -124,11 +116,7 @@ impl ChunkEncoder {
     }
 
     /// Encode trace buffer contents, calling `emit` for each fragment chunk.
-    pub fn encode_trace<const N: usize, F>(
-        &mut self,
-        buffer: &TraceBuffer<N>,
-        mut emit: F,
-    )
+    pub fn encode_trace<const N: usize, F>(&mut self, buffer: &TraceBuffer<N>, mut emit: F)
     where
         F: FnMut(&[u8]),
     {
@@ -327,7 +315,10 @@ mod tests {
         out[8] ^= 0xFF;
 
         let result = ChunkDecoder::decode(&out[..n]);
-        assert!(matches!(result, Err(crate::chunks::types::DecodeError::CrcMismatch { .. })));
+        assert!(matches!(
+            result,
+            Err(crate::chunks::types::DecodeError::CrcMismatch { .. })
+        ));
     }
 
     #[test]
@@ -360,7 +351,7 @@ mod tests {
 
     #[test]
     fn encode_decode_metrics_roundtrip() {
-        use crate::metrics::{MetricValue, MetricEntry};
+        use crate::metrics::{MetricEntry, MetricValue};
 
         let mut encoder = ChunkEncoder::new();
         let mut chunks = std::vec::Vec::new();

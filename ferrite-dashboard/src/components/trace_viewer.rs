@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::api::types::TraceEntry;
+use dioxus::prelude::*;
 
 #[component]
 pub fn TraceViewer(traces: Vec<TraceEntry>) -> Element {

@@ -1,5 +1,5 @@
-use dioxus::prelude::*;
 use crate::api::types::{FaultEvent, FaultSeverity};
+use dioxus::prelude::*;
 
 #[component]
 pub fn FaultViewer(fault: FaultEvent) -> Element {

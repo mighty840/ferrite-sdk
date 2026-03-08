@@ -32,9 +32,15 @@ impl ApiClient {
         for (k, v) in self.auth_header() {
             req = req.header(&k, &v);
         }
-        let resp = req.send().await.map_err(|e| ApiError::Network(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
         match resp.status().as_u16() {
-            200 => resp.json().await.map_err(|e| ApiError::Parse(e.to_string())),
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
             401 => Err(ApiError::Unauthorized),
             404 => Err(ApiError::NotFound),
             code => Err(ApiError::Server(format!("HTTP {}", code))),
@@ -48,9 +54,15 @@ impl ApiClient {
         for (k, v) in self.auth_header() {
             req = req.header(&k, &v);
         }
-        let resp = req.send().await.map_err(|e| ApiError::Network(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
         match resp.status().as_u16() {
-            200 => resp.json().await.map_err(|e| ApiError::Parse(e.to_string())),
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
             401 => Err(ApiError::Unauthorized),
             404 => Err(ApiError::NotFound),
             code => Err(ApiError::Server(format!("HTTP {}", code))),
@@ -64,9 +76,15 @@ impl ApiClient {
         for (k, v) in self.auth_header() {
             req = req.header(&k, &v);
         }
-        let resp = req.send().await.map_err(|e| ApiError::Network(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
         match resp.status().as_u16() {
-            200 => resp.json().await.map_err(|e| ApiError::Parse(e.to_string())),
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
             401 => Err(ApiError::Unauthorized),
             404 => Err(ApiError::NotFound),
             code => Err(ApiError::Server(format!("HTTP {}", code))),
@@ -80,9 +98,15 @@ impl ApiClient {
         for (k, v) in self.auth_header() {
             req = req.header(&k, &v);
         }
-        let resp = req.send().await.map_err(|e| ApiError::Network(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
         match resp.status().as_u16() {
-            200 => resp.json().await.map_err(|e| ApiError::Parse(e.to_string())),
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
             401 => Err(ApiError::Unauthorized),
             404 => Err(ApiError::NotFound),
             code => Err(ApiError::Server(format!("HTTP {}", code))),
@@ -96,9 +120,15 @@ impl ApiClient {
         for (k, v) in self.auth_header() {
             req = req.header(&k, &v);
         }
-        let resp = req.send().await.map_err(|e| ApiError::Network(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
         match resp.status().as_u16() {
-            200 => resp.json().await.map_err(|e| ApiError::Parse(e.to_string())),
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
             401 => Err(ApiError::Unauthorized),
             404 => Err(ApiError::NotFound),
             code => Err(ApiError::Server(format!("HTTP {}", code))),

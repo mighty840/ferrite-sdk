@@ -332,7 +332,13 @@ impl Store {
         self.conn.execute(
             "INSERT INTO metrics (device_rowid, key, metric_type, value_json, timestamp_ticks)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![device_rowid, key, metric_type as i64, value_json, timestamp_ticks as i64],
+            params![
+                device_rowid,
+                key,
+                metric_type as i64,
+                value_json,
+                timestamp_ticks as i64
+            ],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -512,7 +518,19 @@ mod tests {
         let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
 
         let f1 = store
-            .insert_fault(dev, 0, 0x0800_2000, 0x0800_1000, 0x400, 0x4000_0000, 0, 0, 0x2000_3F00, &[0xDEAD; 4], Some("main+0x20"))
+            .insert_fault(
+                dev,
+                0,
+                0x0800_2000,
+                0x0800_1000,
+                0x400,
+                0x4000_0000,
+                0,
+                0,
+                0x2000_3F00,
+                &[0xDEAD; 4],
+                Some("main+0x20"),
+            )
             .unwrap();
         assert!(f1 > 0);
 
@@ -527,8 +545,12 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
 
-        store.insert_metric(dev, "temperature", 1, r#"{"value":23.5}"#, 1000).unwrap();
-        store.insert_metric(dev, "uptime", 0, r#"{"value":42}"#, 2000).unwrap();
+        store
+            .insert_metric(dev, "temperature", 1, r#"{"value":23.5}"#, 1000)
+            .unwrap();
+        store
+            .insert_metric(dev, "uptime", 0, r#"{"value":42}"#, 2000)
+            .unwrap();
 
         let metrics = store.list_metrics_for_device("dev-001").unwrap();
         assert_eq!(metrics.len(), 2);
@@ -556,7 +578,9 @@ mod tests {
         assert_eq!(store.count_metrics_for_device(dev).unwrap(), 0);
         assert_eq!(store.count_reboots_for_device(dev).unwrap(), 0);
 
-        store.insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None).unwrap();
+        store
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .unwrap();
         store.insert_metric(dev, "k", 0, "{}", 0).unwrap();
         store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
 
@@ -571,7 +595,9 @@ mod tests {
         let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
 
         for _ in 0..5 {
-            store.insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None).unwrap();
+            store
+                .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+                .unwrap();
         }
 
         let faults = store.list_all_faults(3).unwrap();
@@ -584,7 +610,9 @@ mod tests {
         let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
 
         for i in 0..5 {
-            store.insert_metric(dev, &format!("key_{i}"), 0, "{}", i as u64).unwrap();
+            store
+                .insert_metric(dev, &format!("key_{i}"), 0, "{}", i as u64)
+                .unwrap();
         }
 
         let metrics = store.list_all_metrics(2).unwrap();

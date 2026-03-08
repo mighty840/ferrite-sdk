@@ -1,13 +1,13 @@
-pub mod navbar;
 pub mod device_card;
-pub mod metric_chart;
 pub mod fault_viewer;
-pub mod trace_viewer;
 pub mod loading;
+pub mod metric_chart;
+pub mod navbar;
+pub mod trace_viewer;
 
-pub use navbar::Navbar;
 pub use device_card::DeviceCard;
-pub use metric_chart::MetricChart;
 pub use fault_viewer::FaultViewer;
+pub use loading::{ErrorDisplay, Loading};
+pub use metric_chart::MetricChart;
+pub use navbar::Navbar;
 pub use trace_viewer::TraceViewer;
-pub use loading::{Loading, ErrorDisplay};

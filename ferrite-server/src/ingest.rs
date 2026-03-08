@@ -449,13 +449,7 @@ fn parse_heartbeat_payload(payload: &[u8]) -> Option<ParsedHeartbeat> {
     }
     Some(ParsedHeartbeat {
         uptime_ticks: u64::from_le_bytes([
-            payload[0],
-            payload[1],
-            payload[2],
-            payload[3],
-            payload[4],
-            payload[5],
-            payload[6],
+            payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
             payload[7],
         ]),
         free_stack_bytes: u32::from_le_bytes([payload[8], payload[9], payload[10], payload[11]]),
@@ -688,7 +682,10 @@ async fn ingest_elf(
 async fn list_devices(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let store = state.store.lock().await;
     match store.list_devices() {
-        Ok(devices) => (StatusCode::OK, Json(serde_json::json!({ "devices": devices }))),
+        Ok(devices) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "devices": devices })),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -702,7 +699,10 @@ async fn list_device_faults(
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
     match store.list_faults_for_device(&device_id) {
-        Ok(faults) => (StatusCode::OK, Json(serde_json::json!({ "faults": faults }))),
+        Ok(faults) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "faults": faults })),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -716,7 +716,10 @@ async fn list_device_metrics(
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
     match store.list_metrics_for_device(&device_id) {
-        Ok(metrics) => (StatusCode::OK, Json(serde_json::json!({ "metrics": metrics }))),
+        Ok(metrics) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "metrics": metrics })),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -891,7 +894,7 @@ mod tests {
         // value: 8 bytes (counter u32 + 4 padding)
         payload.extend_from_slice(&42u32.to_le_bytes());
         payload.extend_from_slice(&[0; 4]); // padding
-        // timestamp: 8 bytes
+                                            // timestamp: 8 bytes
         payload.extend_from_slice(&1000u64.to_le_bytes());
 
         let entries = parse_metrics_payload(&payload);

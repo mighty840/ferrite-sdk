@@ -1,57 +1,68 @@
-use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 use crate::api::types::*;
 use crate::components::DeviceCard;
 use crate::Route;
+use dioxus::prelude::*;
+use dioxus_router::prelude::*;
 
 #[component]
 pub fn DashboardPage() -> Element {
-    let devices = use_signal(|| vec![
-        Device {
-            id: "dev-001".into(),
-            name: "Temperature Sensor A".into(),
-            device_type: "sensor".into(),
-            status: DeviceStatus::Online,
-            firmware_version: "1.4.2".into(),
-            last_seen: chrono::Utc::now(),
-            ip_address: Some("192.168.1.10".into()),
-            tags: vec!["production".into(), "floor-1".into()],
-        },
-        Device {
-            id: "dev-002".into(),
-            name: "Motor Controller B".into(),
-            device_type: "actuator".into(),
-            status: DeviceStatus::Degraded,
-            firmware_version: "2.1.0".into(),
-            last_seen: chrono::Utc::now(),
-            ip_address: Some("192.168.1.11".into()),
-            tags: vec!["production".into()],
-        },
-        Device {
-            id: "dev-003".into(),
-            name: "Gateway Hub C".into(),
-            device_type: "gateway".into(),
-            status: DeviceStatus::Online,
-            firmware_version: "3.0.1".into(),
-            last_seen: chrono::Utc::now(),
-            ip_address: Some("192.168.1.1".into()),
-            tags: vec!["infrastructure".into()],
-        },
-        Device {
-            id: "dev-004".into(),
-            name: "Pressure Sensor D".into(),
-            device_type: "sensor".into(),
-            status: DeviceStatus::Offline,
-            firmware_version: "1.2.0".into(),
-            last_seen: chrono::Utc::now(),
-            ip_address: None,
-            tags: vec!["staging".into()],
-        },
-    ]);
+    let devices = use_signal(|| {
+        vec![
+            Device {
+                id: "dev-001".into(),
+                name: "Temperature Sensor A".into(),
+                device_type: "sensor".into(),
+                status: DeviceStatus::Online,
+                firmware_version: "1.4.2".into(),
+                last_seen: chrono::Utc::now(),
+                ip_address: Some("192.168.1.10".into()),
+                tags: vec!["production".into(), "floor-1".into()],
+            },
+            Device {
+                id: "dev-002".into(),
+                name: "Motor Controller B".into(),
+                device_type: "actuator".into(),
+                status: DeviceStatus::Degraded,
+                firmware_version: "2.1.0".into(),
+                last_seen: chrono::Utc::now(),
+                ip_address: Some("192.168.1.11".into()),
+                tags: vec!["production".into()],
+            },
+            Device {
+                id: "dev-003".into(),
+                name: "Gateway Hub C".into(),
+                device_type: "gateway".into(),
+                status: DeviceStatus::Online,
+                firmware_version: "3.0.1".into(),
+                last_seen: chrono::Utc::now(),
+                ip_address: Some("192.168.1.1".into()),
+                tags: vec!["infrastructure".into()],
+            },
+            Device {
+                id: "dev-004".into(),
+                name: "Pressure Sensor D".into(),
+                device_type: "sensor".into(),
+                status: DeviceStatus::Offline,
+                firmware_version: "1.2.0".into(),
+                last_seen: chrono::Utc::now(),
+                ip_address: None,
+                tags: vec!["staging".into()],
+            },
+        ]
+    });
 
-    let online_count = devices().iter().filter(|d| d.status == DeviceStatus::Online).count();
-    let degraded_count = devices().iter().filter(|d| d.status == DeviceStatus::Degraded).count();
-    let offline_count = devices().iter().filter(|d| d.status == DeviceStatus::Offline).count();
+    let online_count = devices()
+        .iter()
+        .filter(|d| d.status == DeviceStatus::Online)
+        .count();
+    let degraded_count = devices()
+        .iter()
+        .filter(|d| d.status == DeviceStatus::Degraded)
+        .count();
+    let offline_count = devices()
+        .iter()
+        .filter(|d| d.status == DeviceStatus::Offline)
+        .count();
     let total_count = devices().len();
 
     rsx! {

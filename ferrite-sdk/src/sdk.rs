@@ -1,10 +1,10 @@
-use critical_section::Mutex;
-use core::cell::RefCell;
-use crate::metrics::MetricsBuffer;
-use crate::trace::TraceBuffer;
 use crate::chunks::ChunkEncoder;
 use crate::fault::RamRegion;
+use crate::metrics::MetricsBuffer;
+use crate::trace::TraceBuffer;
 use crate::SdkError;
+use core::cell::RefCell;
+use critical_section::Mutex;
 
 /// SDK configuration provided by the user at init time.
 pub struct SdkConfig<'a> {
@@ -93,9 +93,9 @@ where
 {
     critical_section::with(|cs| {
         let mut borrow = SDK.borrow(cs).borrow_mut();
-        let state = borrow.as_mut().unwrap_or_else(|| {
-            panic!("ferrite-sdk: SDK not initialized")
-        });
+        let state = borrow
+            .as_mut()
+            .unwrap_or_else(|| panic!("ferrite-sdk: SDK not initialized"));
         f(state)
     })
 }

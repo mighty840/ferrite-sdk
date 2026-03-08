@@ -84,11 +84,10 @@ impl Symbolicator {
         let addr2line = self.addr2line_path.clone();
 
         // Run addr2line in a blocking task to avoid blocking the async runtime.
-        let result = tokio::task::spawn_blocking(move || {
-            run_addr2line(&addr2line, &elf_path, &addr)
-        })
-        .await
-        .map_err(|e| SymbolicateError::JoinError(e.to_string()))?;
+        let result =
+            tokio::task::spawn_blocking(move || run_addr2line(&addr2line, &elf_path, &addr))
+                .await
+                .map_err(|e| SymbolicateError::JoinError(e.to_string()))?;
 
         result
     }
@@ -135,10 +134,7 @@ impl std::error::Error for SymbolicateError {}
 
 /// Try to find `arm-none-eabi-addr2line` on PATH.
 fn which_addr2line() -> Option<PathBuf> {
-    let candidates = [
-        "arm-none-eabi-addr2line",
-        "arm-none-eabi-addr2line.exe",
-    ];
+    let candidates = ["arm-none-eabi-addr2line", "arm-none-eabi-addr2line.exe"];
     for candidate in &candidates {
         if let Ok(output) = Command::new("which").arg(candidate).output() {
             if output.status.success() {

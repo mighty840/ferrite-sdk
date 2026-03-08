@@ -230,7 +230,7 @@ mod tests {
         // "hello" = 5 bytes payload → 12 bytes per frame
         buf.write_frame(0, 100, b"hello"); // 12 bytes, used=12
         buf.write_frame(1, 200, b"world"); // 12 bytes, used=24
-        // Next frame should cause eviction (24 + 12 = 36 > 32)
+                                           // Next frame should cause eviction (24 + 12 = 36 > 32)
         buf.write_frame(2, 300, b"third");
 
         // Should have evicted at least one frame
@@ -245,7 +245,7 @@ mod tests {
         // "ab" = 2 bytes payload → 9 bytes per frame
         buf.write_frame(0, 0, b"ab"); // 9 bytes
         buf.write_frame(0, 0, b"cd"); // 9 bytes, total 18
-        // Next write forces eviction
+                                      // Next write forces eviction
         buf.write_frame(0, 0, b"ef");
 
         assert!(buf.frames_lost() > 0);

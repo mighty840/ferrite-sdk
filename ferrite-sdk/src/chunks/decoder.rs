@@ -1,5 +1,5 @@
-use crate::chunks::types::{ChunkHeader, ChunkType, DecodeError, DecodedChunk};
 use crate::chunks::encoder::crc16_ccitt;
+use crate::chunks::types::{ChunkHeader, ChunkType, DecodeError, DecodedChunk};
 
 /// Decodes raw bytes into a chunk, validating magic, version, and CRC.
 pub struct ChunkDecoder;
@@ -22,8 +22,7 @@ impl ChunkDecoder {
         }
 
         // Parse chunk type
-        let chunk_type = ChunkType::from_u8(bytes[2])
-            .ok_or(DecodeError::UnknownType(bytes[2]))?;
+        let chunk_type = ChunkType::from_u8(bytes[2]).ok_or(DecodeError::UnknownType(bytes[2]))?;
 
         let flags = bytes[3];
         let payload_len = u16::from_le_bytes([bytes[4], bytes[5]]) as usize;

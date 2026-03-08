@@ -70,7 +70,12 @@ impl MetricEntry {
                 out[pos..pos + 4].fill(0); // padding
                 pos += 4;
             }
-            MetricValue::Histogram { min, max, sum, count } => {
+            MetricValue::Histogram {
+                min,
+                max,
+                sum,
+                count,
+            } => {
                 out[pos] = MetricType::Histogram as u8;
                 pos += 1;
                 // Pack min(f32) + max(f32) into 8 bytes
@@ -139,11 +144,13 @@ impl<const N: usize> MetricsBuffer<N> {
                 self.entries.remove(0);
                 let mut k = heapless::String::new();
                 k.push_str(key).map_err(|_| SdkError::KeyTooLong)?;
-                self.entries.push(MetricEntry {
-                    key: k,
-                    value: MetricValue::Counter(delta),
-                    timestamp_ticks: ticks,
-                }).map_err(|_| SdkError::BufferFull)?;
+                self.entries
+                    .push(MetricEntry {
+                        key: k,
+                        value: MetricValue::Counter(delta),
+                        timestamp_ticks: ticks,
+                    })
+                    .map_err(|_| SdkError::BufferFull)?;
             }
             Ok(())
         }
@@ -171,11 +178,13 @@ impl<const N: usize> MetricsBuffer<N> {
                 self.entries.remove(0);
                 let mut k = heapless::String::new();
                 k.push_str(key).map_err(|_| SdkError::KeyTooLong)?;
-                self.entries.push(MetricEntry {
-                    key: k,
-                    value: MetricValue::Gauge(value),
-                    timestamp_ticks: ticks,
-                }).map_err(|_| SdkError::BufferFull)?;
+                self.entries
+                    .push(MetricEntry {
+                        key: k,
+                        value: MetricValue::Gauge(value),
+                        timestamp_ticks: ticks,
+                    })
+                    .map_err(|_| SdkError::BufferFull)?;
             }
             Ok(())
         }
@@ -189,9 +198,18 @@ impl<const N: usize> MetricsBuffer<N> {
 
         if let Some(idx) = self.find_key(key) {
             match &mut self.entries[idx].value {
-                MetricValue::Histogram { min, max, sum, count } => {
-                    if value < *min { *min = value; }
-                    if value > *max { *max = value; }
+                MetricValue::Histogram {
+                    min,
+                    max,
+                    sum,
+                    count,
+                } => {
+                    if value < *min {
+                        *min = value;
+                    }
+                    if value > *max {
+                        *max = value;
+                    }
                     *sum += value;
                     *count += 1;
                 }
@@ -223,16 +241,18 @@ impl<const N: usize> MetricsBuffer<N> {
                 self.entries.remove(0);
                 let mut k = heapless::String::new();
                 k.push_str(key).map_err(|_| SdkError::KeyTooLong)?;
-                self.entries.push(MetricEntry {
-                    key: k,
-                    value: MetricValue::Histogram {
-                        min: value,
-                        max: value,
-                        sum: value,
-                        count: 1,
-                    },
-                    timestamp_ticks: ticks,
-                }).map_err(|_| SdkError::BufferFull)?;
+                self.entries
+                    .push(MetricEntry {
+                        key: k,
+                        value: MetricValue::Histogram {
+                            min: value,
+                            max: value,
+                            sum: value,
+                            count: 1,
+                        },
+                        timestamp_ticks: ticks,
+                    })
+                    .map_err(|_| SdkError::BufferFull)?;
             }
             Ok(())
         }
@@ -347,7 +367,12 @@ mod tests {
 
         let entry = buf.iter().find(|e| e.key == "latency").unwrap();
         match entry.value {
-            MetricValue::Histogram { min, max, sum, count } => {
+            MetricValue::Histogram {
+                min,
+                max,
+                sum,
+                count,
+            } => {
                 assert_eq!(min, 5.0);
                 assert_eq!(max, 20.0);
                 assert_eq!(sum, 35.0);

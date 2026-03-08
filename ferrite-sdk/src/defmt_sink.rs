@@ -46,7 +46,8 @@ mod sink {
                 let ticks = (crate::metrics::ticks() & 0xFFFF_FFFF) as u32;
                 crate::sdk::try_with_sdk(|sdk| {
                     sdk.trace.write_frame(5, ticks, payload);
-                }).ok();
+                })
+                .ok();
             }
         }
 

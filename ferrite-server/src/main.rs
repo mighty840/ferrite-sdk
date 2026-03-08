@@ -13,7 +13,10 @@ use store::Store;
 use symbolicate::Symbolicator;
 
 #[derive(Parser)]
-#[command(name = "ferrite-server", about = "Companion ingestion server for ferrite-sdk")]
+#[command(
+    name = "ferrite-server",
+    about = "Companion ingestion server for ferrite-sdk"
+)]
 struct Cli {
     /// HTTP listen address
     #[arg(long, default_value = "0.0.0.0:4000")]

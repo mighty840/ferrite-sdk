@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
 use crate::api::types::*;
 use crate::components::FaultViewer;
+use dioxus::prelude::*;
 
 #[component]
 pub fn FaultsPage() -> Element {
@@ -83,8 +83,14 @@ pub fn FaultsPage() -> Element {
         })
         .collect();
 
-    let critical_count = faults.iter().filter(|f| matches!(f.severity, FaultSeverity::Critical) && !f.resolved).count();
-    let warning_count = faults.iter().filter(|f| matches!(f.severity, FaultSeverity::Warning) && !f.resolved).count();
+    let critical_count = faults
+        .iter()
+        .filter(|f| matches!(f.severity, FaultSeverity::Critical) && !f.resolved)
+        .count();
+    let warning_count = faults
+        .iter()
+        .filter(|f| matches!(f.severity, FaultSeverity::Warning) && !f.resolved)
+        .count();
 
     rsx! {
         div {

@@ -1,5 +1,5 @@
-use crate::transport::ChunkTransport;
 use crate::sdk;
+use crate::transport::ChunkTransport;
 
 /// Upload statistics returned after a successful upload session.
 #[derive(Debug, Default)]
@@ -36,7 +36,9 @@ impl UploadManager {
     ///
     /// On transport error: abort session, retain data for next attempt.
     /// On success: clear uploaded buffers.
-    pub fn upload<T: ChunkTransport>(transport: &mut T) -> Result<UploadStats, UploadError<T::Error>> {
+    pub fn upload<T: ChunkTransport>(
+        transport: &mut T,
+    ) -> Result<UploadStats, UploadError<T::Error>> {
         if !sdk::is_initialized() {
             return Err(UploadError::NotInitialized);
         }
@@ -45,14 +47,21 @@ impl UploadManager {
             return Err(UploadError::TransportUnavailable);
         }
 
-        transport.begin_session().map_err(UploadError::TransportError)?;
+        transport
+            .begin_session()
+            .map_err(UploadError::TransportError)?;
 
         let mut stats = UploadStats::default();
         let mut upload_ok = true;
 
         // Helper to send a chunk and track stats
-        let send = |transport: &mut T, chunk: &[u8], stats: &mut UploadStats| -> Result<(), UploadError<T::Error>> {
-            transport.send_chunk(chunk).map_err(UploadError::TransportError)?;
+        let send = |transport: &mut T,
+                    chunk: &[u8],
+                    stats: &mut UploadStats|
+         -> Result<(), UploadError<T::Error>> {
+            transport
+                .send_chunk(chunk)
+                .map_err(UploadError::TransportError)?;
             stats.chunks_sent += 1;
             stats.bytes_sent += chunk.len() as u32;
             Ok(())
@@ -78,20 +87,17 @@ impl UploadManager {
 
             // 2. RebootReason (if pending)
             if let Some(reason) = crate::reboot_reason::last_reboot_reason() {
-                let boot_seq = unsafe { (*crate::memory::get_retained_block_ptr()).header.sequence };
-                state.encoder.encode_reboot_reason(
-                    reason as u8,
-                    0,
-                    boot_seq,
-                    0,
-                    |chunk| {
+                let boot_seq =
+                    unsafe { (*crate::memory::get_retained_block_ptr()).header.sequence };
+                state
+                    .encoder
+                    .encode_reboot_reason(reason as u8, 0, boot_seq, 0, |chunk| {
                         if upload_ok {
                             if let Err(_) = send(transport, chunk, &mut stats) {
                                 upload_ok = false;
                             }
                         }
-                    },
-                );
+                    });
                 if !upload_ok {
                     return Err(UploadError::EncodingError);
                 }
@@ -173,7 +179,9 @@ impl UploadManager {
             Ok(())
         })?;
 
-        transport.end_session().map_err(UploadError::TransportError)?;
+        transport
+            .end_session()
+            .map_err(UploadError::TransportError)?;
 
         Ok(stats)
     }
@@ -193,7 +201,10 @@ impl UploadManager {
             return Err(UploadError::TransportUnavailable);
         }
 
-        transport.begin_session().await.map_err(UploadError::TransportError)?;
+        transport
+            .begin_session()
+            .await
+            .map_err(UploadError::TransportError)?;
 
         let mut stats = UploadStats::default();
 
@@ -215,12 +226,15 @@ impl UploadManager {
 
             // 2. RebootReason
             if let Some(reason) = crate::reboot_reason::last_reboot_reason() {
-                let boot_seq = unsafe { (*crate::memory::get_retained_block_ptr()).header.sequence };
-                state.encoder.encode_reboot_reason(reason as u8, 0, boot_seq, 0, |chunk| {
-                    let mut v = heapless::Vec::new();
-                    let _ = v.extend_from_slice(chunk);
-                    let _ = chunk_buf.push(v);
-                });
+                let boot_seq =
+                    unsafe { (*crate::memory::get_retained_block_ptr()).header.sequence };
+                state
+                    .encoder
+                    .encode_reboot_reason(reason as u8, 0, boot_seq, 0, |chunk| {
+                        let mut v = heapless::Vec::new();
+                        let _ = v.extend_from_slice(chunk);
+                        let _ = chunk_buf.push(v);
+                    });
             }
 
             // 3. FaultRecord
@@ -251,16 +265,25 @@ impl UploadManager {
 
             // 6. Heartbeat
             let uptime = crate::metrics::ticks();
-            state.encoder.encode_heartbeat(uptime, 0, state.metrics.len() as u32, state.trace.frames_lost(), |chunk| {
-                let mut v = heapless::Vec::new();
-                let _ = v.extend_from_slice(chunk);
-                let _ = chunk_buf.push(v);
-            });
+            state.encoder.encode_heartbeat(
+                uptime,
+                0,
+                state.metrics.len() as u32,
+                state.trace.frames_lost(),
+                |chunk| {
+                    let mut v = heapless::Vec::new();
+                    let _ = v.extend_from_slice(chunk);
+                    let _ = chunk_buf.push(v);
+                },
+            );
         });
 
         // Send all chunks
         for chunk in &chunk_buf {
-            transport.send_chunk(chunk).await.map_err(UploadError::TransportError)?;
+            transport
+                .send_chunk(chunk)
+                .await
+                .map_err(UploadError::TransportError)?;
             stats.chunks_sent += 1;
             stats.bytes_sent += chunk.len() as u32;
         }
@@ -273,7 +296,10 @@ impl UploadManager {
         crate::reboot_reason::clear_reboot_reason();
         crate::fault::clear_fault_record();
 
-        transport.end_session().await.map_err(UploadError::TransportError)?;
+        transport
+            .end_session()
+            .await
+            .map_err(UploadError::TransportError)?;
 
         Ok(stats)
     }
@@ -282,9 +308,9 @@ impl UploadManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::ChunkTransport;
     use crate::chunks::decoder::ChunkDecoder;
     use crate::chunks::types::ChunkType;
+    use crate::transport::ChunkTransport;
 
     extern crate std;
     use std::vec::Vec;

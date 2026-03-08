@@ -1,12 +1,8 @@
-use dioxus::prelude::*;
 use crate::api::types::MetricEntry;
+use dioxus::prelude::*;
 
 #[component]
-pub fn MetricChart(
-    title: String,
-    entries: Vec<MetricEntry>,
-    color: Option<String>,
-) -> Element {
+pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<String>) -> Element {
     let stroke = color.unwrap_or_else(|| "#3b82f6".to_string());
 
     // Build SVG path from metric entries
@@ -16,7 +12,11 @@ pub fn MetricChart(
         let values: Vec<f64> = entries.iter().map(|e| e.value).collect();
         let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
         let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let range = if (max - min).abs() < 0.001 { 1.0 } else { max - min };
+        let range = if (max - min).abs() < 0.001 {
+            1.0
+        } else {
+            max - min
+        };
 
         let width = 300.0;
         let height = 80.0;
@@ -49,7 +49,10 @@ pub fn MetricChart(
     };
 
     let unit = entries.first().map(|e| e.unit.clone()).unwrap_or_default();
-    let latest_value = entries.last().map(|e| format!("{:.1}", e.value)).unwrap_or_else(|| "--".to_string());
+    let latest_value = entries
+        .last()
+        .map(|e| format!("{:.1}", e.value))
+        .unwrap_or_else(|| "--".to_string());
 
     rsx! {
         div {

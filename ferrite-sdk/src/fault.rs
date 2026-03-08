@@ -1,5 +1,5 @@
-use crate::SdkError;
 use crate::memory;
+use crate::SdkError;
 
 /// Valid RAM region for stack snapshot safety checks.
 #[derive(Debug, Clone, Copy)]
@@ -25,8 +25,14 @@ pub struct ExceptionFrame {
 impl ExceptionFrame {
     pub const fn zeroed() -> Self {
         Self {
-            r0: 0, r1: 0, r2: 0, r3: 0,
-            r12: 0, lr: 0, pc: 0, xpsr: 0,
+            r0: 0,
+            r1: 0,
+            r2: 0,
+            r3: 0,
+            r12: 0,
+            lr: 0,
+            pc: 0,
+            xpsr: 0,
         }
     }
 }
@@ -49,8 +55,14 @@ pub struct ExtendedRegisters {
 impl ExtendedRegisters {
     pub const fn zeroed() -> Self {
         Self {
-            r4: 0, r5: 0, r6: 0, r7: 0,
-            r8: 0, r9: 0, r10: 0, r11: 0,
+            r4: 0,
+            r5: 0,
+            r6: 0,
+            r7: 0,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
             sp: 0,
         }
     }
@@ -109,12 +121,24 @@ impl FaultRecord {
             fault_type: FaultType::HardFault,
             _pad: [0; 2],
             frame: ExceptionFrame {
-                r0: 1, r1: 2, r2: 3, r3: 4,
-                r12: 5, lr: 0x0800_1000, pc: 0x0800_2000, xpsr: 0x6100_0000,
+                r0: 1,
+                r1: 2,
+                r2: 3,
+                r3: 4,
+                r12: 5,
+                lr: 0x0800_1000,
+                pc: 0x0800_2000,
+                xpsr: 0x6100_0000,
             },
             extended: ExtendedRegisters {
-                r4: 10, r5: 11, r6: 12, r7: 13,
-                r8: 14, r9: 15, r10: 16, r11: 17,
+                r4: 10,
+                r5: 11,
+                r6: 12,
+                r7: 13,
+                r8: 14,
+                r9: 15,
+                r10: 16,
+                r11: 17,
                 sp: 0x2000_3F00,
             },
             stack_snapshot: [0xDEAD_BEEF; 16],
@@ -139,8 +163,14 @@ impl FaultRecord {
 
         // ExceptionFrame: 8 x u32
         for val in [
-            self.frame.r0, self.frame.r1, self.frame.r2, self.frame.r3,
-            self.frame.r12, self.frame.lr, self.frame.pc, self.frame.xpsr,
+            self.frame.r0,
+            self.frame.r1,
+            self.frame.r2,
+            self.frame.r3,
+            self.frame.r12,
+            self.frame.lr,
+            self.frame.pc,
+            self.frame.xpsr,
         ] {
             out[pos..pos + 4].copy_from_slice(&val.to_le_bytes());
             pos += 4;
@@ -148,8 +178,14 @@ impl FaultRecord {
 
         // ExtendedRegisters: 9 x u32
         for val in [
-            self.extended.r4, self.extended.r5, self.extended.r6, self.extended.r7,
-            self.extended.r8, self.extended.r9, self.extended.r10, self.extended.r11,
+            self.extended.r4,
+            self.extended.r5,
+            self.extended.r6,
+            self.extended.r7,
+            self.extended.r8,
+            self.extended.r9,
+            self.extended.r10,
+            self.extended.r11,
             self.extended.sp,
         ] {
             out[pos..pos + 4].copy_from_slice(&val.to_le_bytes());
@@ -297,7 +333,10 @@ mod cortex_m_handler {
             },
             extended,
             stack_snapshot: snapshot,
-            cfsr, hfsr, mmfar, bfar,
+            cfsr,
+            hfsr,
+            mmfar,
+            bfar,
         };
         (*retained).reboot_reason.reason = crate::reboot_reason::RebootReason::HardFault;
 

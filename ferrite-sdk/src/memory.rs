@@ -1,5 +1,5 @@
-use crate::reboot_reason::RebootReasonRecord;
 use crate::fault::FaultRecord;
+use crate::reboot_reason::RebootReasonRecord;
 
 pub const RETAINED_MAGIC: u32 = 0xAB_CD_12_34;
 

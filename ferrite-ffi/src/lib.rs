@@ -1,13 +1,13 @@
 #![no_std]
 
-use core::slice;
 use core::ffi::c_char;
+use core::slice;
 
-use ferrite_sdk::transport::ChunkTransport;
-use ferrite_sdk::fault::{FaultType, FaultRecord, ExceptionFrame, ExtendedRegisters, RamRegion};
+use ferrite_sdk::fault::{ExceptionFrame, ExtendedRegisters, FaultRecord, FaultType, RamRegion};
 use ferrite_sdk::reboot_reason::RebootReason;
-use ferrite_sdk::upload::{UploadManager, UploadStats};
 use ferrite_sdk::sdk::SdkConfig;
+use ferrite_sdk::transport::ChunkTransport;
+use ferrite_sdk::upload::{UploadManager, UploadStats};
 
 // ---------------------------------------------------------------------------
 // Error enum
@@ -47,7 +47,8 @@ impl From<ferrite_sdk::SdkError> for IotaiError {
 /// Callback to send a single chunk.
 /// `data` points to chunk bytes, `len` is the byte count.
 /// Returns 0 on success, non-zero on error.
-pub type IotaiSendChunkFn = Option<unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32>;
+pub type IotaiSendChunkFn =
+    Option<unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32>;
 
 /// Callback to query transport availability.
 /// Returns `true` (non-zero) if the link is ready.
@@ -97,7 +98,8 @@ pub struct IotaiRamRegion {
 /// Internal adapter that implements `ChunkTransport` by forwarding to C
 /// function pointers stored in an `IotaiTransport`.
 struct FfiTransport {
-    send_chunk_fn: unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32,
+    send_chunk_fn:
+        unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32,
     is_available_fn: Option<unsafe extern "C" fn(ctx: *mut core::ffi::c_void) -> bool>,
     ctx: *mut core::ffi::c_void,
 }
@@ -110,9 +112,7 @@ impl ChunkTransport for FfiTransport {
     type Error = FfiTransportError;
 
     fn send_chunk(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
-        let rc = unsafe {
-            (self.send_chunk_fn)(chunk.as_ptr(), chunk.len() as u32, self.ctx)
-        };
+        let rc = unsafe { (self.send_chunk_fn)(chunk.as_ptr(), chunk.len() as u32, self.ctx) };
         if rc == 0 {
             Ok(())
         } else {
@@ -282,10 +282,7 @@ pub unsafe extern "C" fn ferrite_last_reboot_reason(out_reason: *mut u8) -> Iota
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_increment(
-    key: *const c_char,
-    delta: u32,
-) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_increment(key: *const c_char, delta: u32) -> IotaiError {
     if key.is_null() {
         return IotaiError::NullPtr;
     }
@@ -306,10 +303,7 @@ pub unsafe extern "C" fn ferrite_metric_increment(
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_gauge(
-    key: *const c_char,
-    value: f32,
-) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_gauge(key: *const c_char, value: f32) -> IotaiError {
     if key.is_null() {
         return IotaiError::NullPtr;
     }
@@ -330,10 +324,7 @@ pub unsafe extern "C" fn ferrite_metric_gauge(
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_observe(
-    key: *const c_char,
-    value: f32,
-) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_observe(key: *const c_char, value: f32) -> IotaiError {
     if key.is_null() {
         return IotaiError::NullPtr;
     }
@@ -398,13 +389,28 @@ impl IotaiFaultRecord {
             valid: false,
             fault_type: 0,
             _pad: [0; 2],
-            r0: 0, r1: 0, r2: 0, r3: 0,
-            r12: 0, lr: 0, pc: 0, xpsr: 0,
-            r4: 0, r5: 0, r6: 0, r7: 0,
-            r8: 0, r9: 0, r10: 0, r11: 0,
+            r0: 0,
+            r1: 0,
+            r2: 0,
+            r3: 0,
+            r12: 0,
+            lr: 0,
+            pc: 0,
+            xpsr: 0,
+            r4: 0,
+            r5: 0,
+            r6: 0,
+            r7: 0,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
             sp: 0,
             stack_snapshot: [0; 16],
-            cfsr: 0, hfsr: 0, mmfar: 0, bfar: 0,
+            cfsr: 0,
+            hfsr: 0,
+            mmfar: 0,
+            bfar: 0,
         }
     }
 
