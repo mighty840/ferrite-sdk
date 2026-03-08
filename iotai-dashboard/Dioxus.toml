@@ -1,0 +1,10 @@
+[application]
+name = "iotai-dashboard"
+default_platform = "web"
+
+[web.app]
+title = "iotai Dashboard"
+
+[web.watcher]
+reload_html = true
+watch_path = ["src"]
