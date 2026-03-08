@@ -231,8 +231,10 @@ pub fn clear_fault_record() {
     }
 }
 
-// Cortex-M specific: HardFault handler and register capture
-#[cfg(feature = "cortex-m")]
+// Cortex-M3/M4/M7 specific: HardFault handler with ExceptionFrame and
+// extended register capture. Not available on Cortex-M0/M0+ (thumbv6m)
+// which lacks Thumb-2 instructions and fault status registers.
+#[cfg(all(feature = "cortex-m", has_fault_registers))]
 mod cortex_m_handler {
     use super::*;
 

@@ -8,6 +8,12 @@ members = [
   "ferrite-ffi",
   "ferrite-dashboard",
 ]
+exclude = [
+  "examples/embassy-nrf52840",
+  "examples/embassy-rp2040",
+  "examples/rtic-stm32f4",
+  "tests/qemu",
+]
 
 [workspace.dependencies]
 cortex-m = "0.7"
