@@ -30,10 +30,8 @@ jobs:
           sudo apt-get install -y qemu-system-arm
 
       - name: Build QEMU test binary
-        run: >
-          cargo build
-          --manifest-path tests/qemu/Cargo.toml
-          --target thumbv7m-none-eabi
+        working-directory: tests/qemu
+        run: cargo build --target thumbv7m-none-eabi
 
       - name: Run QEMU integration tests
         run: >
@@ -41,5 +39,5 @@ jobs:
           -machine lm3s6965evb
           -nographic
           -semihosting-config enable=on,target=native
-          -kernel target/thumbv7m-none-eabi/debug/ferrite-qemu-tests
+          -kernel tests/qemu/target/thumbv7m-none-eabi/debug/ferrite-qemu-tests
         timeout-minutes: 2
