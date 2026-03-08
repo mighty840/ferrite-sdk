@@ -1,0 +1,32 @@
+:root {
+  /* iotai brand orange */
+  --vp-c-brand-1: #e8632a;
+  --vp-c-brand-2: #d4571f;
+  --vp-c-brand-3: #c04e1a;
+  --vp-c-brand-soft: rgba(232, 99, 42, 0.14);
+
+  /* Tip styling uses brand color */
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-tip-2: var(--vp-c-brand-2);
+  --vp-c-tip-3: var(--vp-c-brand-3);
+  --vp-c-tip-soft: var(--vp-c-brand-soft);
+}
+
+.dark {
+  --vp-c-brand-1: #f0884e;
+  --vp-c-brand-2: #e8632a;
+  --vp-c-brand-3: #d4571f;
+  --vp-c-brand-soft: rgba(232, 99, 42, 0.16);
+}
+
+/* Hero gradient accent */
+.VPHero .clip {
+  background: linear-gradient(135deg, #e8632a 0%, #ff9a5c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom badge colors */
+.vp-doc .custom-block.tip {
+  border-color: var(--vp-c-brand-1);
+}

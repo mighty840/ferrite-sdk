@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- CONCEPT 3: Chip Core — IC package with radiant observation point at center -->
+  <defs>
+    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+    <linearGradient id="dieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <filter id="coreGlow3">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="pinGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#020617"/>
+
+  <!-- PCB substrate texture — subtle traces -->
+  <g stroke="#0D3320" stroke-width="0.5" opacity="0.3">
+    <path d="M0,128 H180 L200,148"/>
+    <path d="M0,160 H160 L180,180"/>
+    <path d="M512,128 H332 L312,148"/>
+    <path d="M512,160 H352 L332,180"/>
+    <path d="M0,352 H180 L200,332"/>
+    <path d="M0,384 H160 L180,364"/>
+    <path d="M512,352 H332 L312,332"/>
+    <path d="M512,384 H352 L332,364"/>
+    <path d="M128,0 V180 L148,200"/>
+    <path d="M160,0 V160 L180,180"/>
+    <path d="M128,512 V332 L148,312"/>
+    <path d="M160,512 V352 L180,332"/>
+    <path d="M352,0 V180 L332,200"/>
+    <path d="M384,0 V160 L364,180"/>
+    <path d="M352,512 V332 L332,312"/>
+    <path d="M384,512 V352 L364,332"/>
+  </g>
+
+  <!-- IC Package body -->
+  <rect x="156" y="136" width="200" height="200" rx="6" fill="url(#dieGrad)"
+        stroke="#1E293B" stroke-width="2"/>
+
+  <!-- Pin 1 indicator (notch) -->
+  <circle cx="176" cy="156" r="8" fill="none" stroke="#334155" stroke-width="1.5"/>
+
+  <!-- Die surface pattern -->
+  <g stroke="#1E293B" stroke-width="0.5" opacity="0.5">
+    <rect x="180" y="160" width="152" height="152" rx="2" fill="none" stroke="#334155"/>
+    <line x1="180" y1="210" x2="332" y2="210"/>
+    <line x1="180" y1="260" x2="332" y2="260"/>
+    <line x1="230" y1="160" x2="230" y2="312"/>
+    <line x1="280" y1="160" x2="280" y2="312"/>
+  </g>
+
+  <!-- IC Pins — Top -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="186" y="112" width="10" height="28" rx="2"/>
+    <rect x="210" y="112" width="10" height="28" rx="2"/>
+    <rect x="234" y="112" width="10" height="28" rx="2"/>
+    <rect x="258" y="112" width="10" height="28" rx="2"/>
+    <rect x="282" y="112" width="10" height="28" rx="2"/>
+    <rect x="306" y="112" width="10" height="28" rx="2"/>
+  </g>
+  <!-- IC Pins — Bottom -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="186" y="332" width="10" height="28" rx="2"/>
+    <rect x="210" y="332" width="10" height="28" rx="2"/>
+    <rect x="234" y="332" width="10" height="28" rx="2"/>
+    <rect x="258" y="332" width="10" height="28" rx="2"/>
+    <rect x="282" y="332" width="10" height="28" rx="2"/>
+    <rect x="306" y="332" width="10" height="28" rx="2"/>
+  </g>
+  <!-- IC Pins — Left -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="132" y="166" width="28" height="10" rx="2"/>
+    <rect x="132" y="190" width="28" height="10" rx="2"/>
+    <rect x="132" y="214" width="28" height="10" rx="2"/>
+    <rect x="132" y="238" width="28" height="10" rx="2"/>
+    <rect x="132" y="262" width="28" height="10" rx="2"/>
+    <rect x="132" y="286" width="28" height="10" rx="2"/>
+  </g>
+  <!-- IC Pins — Right -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="352" y="166" width="28" height="10" rx="2"/>
+    <rect x="352" y="190" width="28" height="10" rx="2"/>
+    <rect x="352" y="214" width="28" height="10" rx="2"/>
+    <rect x="352" y="238" width="28" height="10" rx="2"/>
+    <rect x="352" y="262" width="28" height="10" rx="2"/>
+    <rect x="352" y="286" width="28" height="10" rx="2"/>
+  </g>
+
+  <!-- Central observation core — radiant point -->
+  <circle cx="256" cy="236" r="30" fill="url(#coreGrad)" opacity="0.15" filter="url(#coreGlow3)"/>
+  <circle cx="256" cy="236" r="18" fill="url(#coreGrad)" opacity="0.3" filter="url(#coreGlow3)"/>
+  <circle cx="256" cy="236" r="8" fill="url(#coreGrad)" filter="url(#coreGlow3)"/>
+
+  <!-- Radiant lines from core -->
+  <g stroke="url(#coreGrad)" stroke-width="1" opacity="0.4">
+    <line x1="256" y1="206" x2="256" y2="170"/>
+    <line x1="256" y1="266" x2="256" y2="302"/>
+    <line x1="226" y1="236" x2="190" y2="236"/>
+    <line x1="286" y1="236" x2="322" y2="236"/>
+    <line x1="235" y1="215" x2="210" y2="190"/>
+    <line x1="277" y1="257" x2="302" y2="282"/>
+    <line x1="277" y1="215" x2="302" y2="190"/>
+    <line x1="235" y1="257" x2="210" y2="282"/>
+  </g>
+
+  <!-- Text: iotai -->
+  <text x="256" y="430" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+        font-size="48" font-weight="700" letter-spacing="6" fill="url(#chipGrad)">
+    iotai
+  </text>
+
+  <!-- Subtitle -->
+  <text x="256" y="460" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace"
+        font-size="11" letter-spacing="3" fill="#10B981" opacity="0.5">
+    CORTEX-M OBSERVABILITY
+  </text>
+</svg>

@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- CONCEPT 4: Hex Lattice — Hexagonal silicon grid forming abstract "i" observation mark -->
+  <defs>
+    <linearGradient id="hexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#6366F1"/>
+    </linearGradient>
+    <linearGradient id="activeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="50%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="alertGrad4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+    <filter id="hexGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#0F0B1E"/>
+
+  <!-- Faint hex grid background pattern -->
+  <!-- Row 1 -->
+  <g fill="none" stroke="#1E1640" stroke-width="1" opacity="0.4">
+    <!-- Hexagons defined as paths, ~40px wide, staggered -->
+    <path d="M96,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M140,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M184,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M228,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M272,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M316,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M360,100 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 2 offset -->
+    <path d="M74,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M118,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M162,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M206,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M250,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M294,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M338,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M382,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 3 -->
+    <path d="M96,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M140,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M184,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M228,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M272,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M316,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M360,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 4 offset -->
+    <path d="M74,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M118,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M162,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M206,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M250,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M294,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M338,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M382,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 5 -->
+    <path d="M96,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M140,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M184,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M228,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M272,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M316,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M360,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 6 offset -->
+    <path d="M74,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M118,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M162,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M206,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M250,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M294,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M338,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M382,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <!-- Row 7 -->
+    <path d="M96,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M140,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M184,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M228,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M272,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M316,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+    <path d="M360,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"/>
+  </g>
+
+  <!-- Highlighted hex cluster forming abstract "i" shape -->
+  <!-- Dot of the "i" -->
+  <path d="M250,136 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#alertGrad4)" opacity="0.9" filter="url(#hexGlow)"/>
+
+  <!-- Stem of the "i" — vertical column of highlighted hexagons -->
+  <path d="M228,172 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#activeGrad)" opacity="0.7" filter="url(#hexGlow)"/>
+  <path d="M250,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#activeGrad)" opacity="0.8" filter="url(#hexGlow)"/>
+  <path d="M228,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#activeGrad)" opacity="0.85" filter="url(#hexGlow)"/>
+  <path d="M250,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#activeGrad)" opacity="0.9" filter="url(#hexGlow)"/>
+  <path d="M228,316 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#activeGrad)" opacity="0.95" filter="url(#hexGlow)"/>
+
+  <!-- Flanking accent hexagons — data flowing through -->
+  <path d="M206,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.3"/>
+  <path d="M294,208 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.3"/>
+  <path d="M184,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.2"/>
+  <path d="M272,244 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.2"/>
+  <path d="M206,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.25"/>
+  <path d="M294,280 l20,-12 l20,12 l0,24 l-20,12 l-20,-12 Z"
+        fill="url(#hexGrad)" opacity="0.25"/>
+
+  <!-- Text: iotai -->
+  <text x="256" y="425" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+        font-size="52" font-weight="700" letter-spacing="8" fill="url(#activeGrad)">
+    iotai
+  </text>
+
+  <!-- Tagline -->
+  <text x="256" y="458" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace"
+        font-size="11" letter-spacing="5" fill="#818CF8" opacity="0.5">
+    SILICON INTELLIGENCE
+  </text>
+</svg>

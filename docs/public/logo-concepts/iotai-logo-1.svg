@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- CONCEPT 1: Circuit Eye — An observing eye constructed from PCB traces -->
+  <defs>
+    <linearGradient id="eyeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00E5A0"/>
+      <stop offset="100%" stop-color="#0088CC"/>
+    </linearGradient>
+    <linearGradient id="irisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B35"/>
+      <stop offset="50%" stop-color="#F7931E"/>
+      <stop offset="100%" stop-color="#FF4444"/>
+    </linearGradient>
+    <filter id="glow1">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark background -->
+  <rect width="512" height="512" rx="64" fill="#0A0E17"/>
+
+  <!-- Circuit trace lines radiating outward -->
+  <g stroke="#00E5A0" stroke-width="1.5" fill="none" opacity="0.3">
+    <!-- Left traces -->
+    <path d="M40,256 H120 L140,236"/>
+    <path d="M40,280 H100 L120,280 H140"/>
+    <path d="M40,232 H90 L110,212"/>
+    <path d="M60,310 H110 L130,290"/>
+    <path d="M60,200 H100 L115,185"/>
+    <!-- Right traces -->
+    <path d="M472,256 H392 L372,236"/>
+    <path d="M472,280 H412 L392,280 H372"/>
+    <path d="M472,232 H422 L402,212"/>
+    <path d="M452,310 H402 L382,290"/>
+    <path d="M452,200 H412 L397,185"/>
+    <!-- Top traces -->
+    <path d="M256,60 V130 L236,150"/>
+    <path d="M280,60 V110 L280,130 V150"/>
+    <path d="M232,80 V120 L212,140"/>
+    <!-- Bottom traces -->
+    <path d="M256,452 V370 L236,350"/>
+    <path d="M280,452 V390 L280,370 V350"/>
+    <path d="M232,432 V380 L212,360"/>
+  </g>
+
+  <!-- Circuit trace pads (small squares at endpoints) -->
+  <g fill="#00E5A0" opacity="0.4">
+    <rect x="36" y="253" width="6" height="6" rx="1"/>
+    <rect x="36" y="277" width="6" height="6" rx="1"/>
+    <rect x="36" y="229" width="6" height="6" rx="1"/>
+    <rect x="56" y="307" width="6" height="6" rx="1"/>
+    <rect x="56" y="197" width="6" height="6" rx="1"/>
+    <rect x="470" y="253" width="6" height="6" rx="1"/>
+    <rect x="470" y="277" width="6" height="6" rx="1"/>
+    <rect x="470" y="229" width="6" height="6" rx="1"/>
+    <rect x="450" y="307" width="6" height="6" rx="1"/>
+    <rect x="450" y="197" width="6" height="6" rx="1"/>
+    <rect x="253" y="56" width="6" height="6" rx="1"/>
+    <rect x="277" y="56" width="6" height="6" rx="1"/>
+    <rect x="229" y="76" width="6" height="6" rx="1"/>
+    <rect x="253" y="450" width="6" height="6" rx="1"/>
+    <rect x="277" y="450" width="6" height="6" rx="1"/>
+    <rect x="229" y="430" width="6" height="6" rx="1"/>
+  </g>
+
+  <!-- Outer eye shape — almond/lens form -->
+  <path d="M130,256 Q256,140 382,256 Q256,372 130,256 Z"
+        fill="none" stroke="url(#eyeGrad)" stroke-width="3.5" filter="url(#glow1)"/>
+
+  <!-- Inner eye rim -->
+  <path d="M160,256 Q256,170 352,256 Q256,342 160,256 Z"
+        fill="#0A0E17" fill-opacity="0.6" stroke="url(#eyeGrad)" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Iris — outer ring -->
+  <circle cx="256" cy="256" r="62" fill="none" stroke="url(#irisGrad)" stroke-width="3" filter="url(#glow1)"/>
+
+  <!-- Iris — inner pattern (circuit-like radial lines) -->
+  <g stroke="#F7931E" stroke-width="1" opacity="0.6">
+    <line x1="256" y1="200" x2="256" y2="218"/>
+    <line x1="256" y1="294" x2="256" y2="312"/>
+    <line x1="200" y1="256" x2="218" y2="256"/>
+    <line x1="294" y1="256" x2="312" y2="256"/>
+    <line x1="216" y1="216" x2="228" y2="228"/>
+    <line x1="284" y1="284" x2="296" y2="296"/>
+    <line x1="296" y1="216" x2="284" y2="228"/>
+    <line x1="216" y1="296" x2="228" y2="284"/>
+  </g>
+
+  <!-- Iris fill — semi-transparent gradient disc -->
+  <circle cx="256" cy="256" r="48" fill="url(#irisGrad)" opacity="0.15"/>
+
+  <!-- Pupil -->
+  <circle cx="256" cy="256" r="18" fill="url(#irisGrad)"/>
+
+  <!-- Pupil highlight -->
+  <circle cx="248" cy="248" r="5" fill="#FFFFFF" opacity="0.8"/>
+  <circle cx="264" cy="262" r="2.5" fill="#FFFFFF" opacity="0.4"/>
+
+  <!-- Text: iotai -->
+  <text x="256" y="440" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+        font-size="42" font-weight="700" letter-spacing="8" fill="url(#eyeGrad)">
+    iotai
+  </text>
+</svg>

@@ -1,0 +1,62 @@
+# Contributing
+
+Thank you for your interest in contributing to iotai-sdk. This guide covers the development workflow, code conventions, and how to submit changes.
+
+## Development setup
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/iotai-sdk.git
+cd iotai-sdk
+
+# Install the ARM target for embedded builds
+rustup target add thumbv7em-none-eabihf
+
+# Run host tests (no embedded toolchain needed)
+cargo build -p iotai-sdk --no-default-features
+cargo test -p iotai-sdk --no-default-features
+cargo test -p iotai-server
+```
+
+## Project conventions
+
+- **No alloc** in the `iotai-sdk` core crate. All buffers are fixed-size.
+- **No panics** in production code paths. Functions return `Result<T, SdkError>` or silently handle errors. Tests may panic.
+- **Feature flags** gate all hardware dependencies. The `cortex-m` feature must be disabled for host tests.
+- **`critical-section`** crate provides portable critical sections across embedded and host targets.
+- **Hand-rolled encoding** for the chunk wire format. Keep it simple and dependency-free.
+
+## Workspace structure
+
+The workspace contains five crates:
+
+| Crate | Tests run on |
+|---|---|
+| `iotai-sdk` | Host (`--no-default-features`) |
+| `iotai-sdk-embassy` | Not tested on host (requires Embassy runtime) |
+| `iotai-sdk-rtic` | Not tested on host (requires RTIC runtime) |
+| `iotai-sdk-ffi` | Not tested on host (produces staticlib) |
+| `iotai-server` | Host |
+
+## Adding a new ChunkType
+
+1. Add the variant to the `ChunkType` enum in `iotai-sdk/src/chunks/types.rs`
+2. Add an `encode_*` method to `ChunkEncoder` in `chunks/encoder.rs`
+3. Add a decode match arm in `ChunkDecoder` in `chunks/decoder.rs`
+4. Add a SQL column or table in `iotai-server/src/store.rs`
+5. Add a parser and handler in `iotai-server/src/ingest.rs`
+6. Add tests for encode/decode roundtrip
+
+## Pull request checklist
+
+- [ ] `cargo test -p iotai-sdk --no-default-features` passes
+- [ ] `cargo test -p iotai-server` passes
+- [ ] `cargo build -p iotai-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf` succeeds
+- [ ] No new `alloc` usage in `iotai-sdk`
+- [ ] No new panics in production code paths
+- [ ] New public API items have doc comments
+- [ ] Wire format changes are documented in `reference/chunk-format.md`
+
+## License
+
+Contributions are accepted under the MIT OR Apache-2.0 dual license.

@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- CONCEPT 5: Signal Shield — Protective shield with embedded signal flow -->
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="50%" stop-color="#0284C7"/>
+      <stop offset="100%" stop-color="#0369A1"/>
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="signalGrad5" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4ADE80"/>
+      <stop offset="40%" stop-color="#22C55E"/>
+      <stop offset="60%" stop-color="#F59E0B"/>
+      <stop offset="80%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#22C55E"/>
+    </linearGradient>
+    <filter id="shieldGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="innerGlow5">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="shieldClip">
+      <path d="M256,68 L400,130 L400,270 Q400,340 340,380 L256,420 L172,380 Q112,340 112,270 L112,130 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#020C1B"/>
+
+  <!-- Ambient circuit traces behind shield -->
+  <g stroke="#0E2A45" stroke-width="1" fill="none" opacity="0.4">
+    <path d="M40,180 H100 L120,160 H150"/>
+    <path d="M40,200 H80 L95,200 H130"/>
+    <path d="M40,300 H100 L120,320 H150"/>
+    <path d="M40,320 H80 L95,320 H130"/>
+    <path d="M472,180 H412 L392,160 H362"/>
+    <path d="M472,200 H432 L417,200 H382"/>
+    <path d="M472,300 H412 L392,320 H362"/>
+    <path d="M472,320 H432 L417,320 H382"/>
+    <path d="M200,40 V90 L180,110"/>
+    <path d="M312,40 V90 L332,110"/>
+  </g>
+
+  <!-- Shield outer glow -->
+  <path d="M256,68 L400,130 L400,270 Q400,340 340,380 L256,420 L172,380 Q112,340 112,270 L112,130 Z"
+        fill="url(#shieldGrad)" opacity="0.08" filter="url(#shieldGlow)"/>
+
+  <!-- Shield outline -->
+  <path d="M256,68 L400,130 L400,270 Q400,340 340,380 L256,420 L172,380 Q112,340 112,270 L112,130 Z"
+        fill="none" stroke="url(#shieldGrad)" stroke-width="2.5" filter="url(#shieldGlow)"/>
+
+  <!-- Inner shield border -->
+  <path d="M256,90 L380,142 L380,264 Q380,326 328,362 L256,398 L184,362 Q132,326 132,264 L132,142 Z"
+        fill="#020C1B" fill-opacity="0.8" stroke="url(#innerGrad)" stroke-width="1" opacity="0.4"/>
+
+  <!-- Internal grid (inside shield) -->
+  <g clip-path="url(#shieldClip)" stroke="#0A2540" stroke-width="0.5" opacity="0.5">
+    <line x1="112" y1="180" x2="400" y2="180"/>
+    <line x1="112" y1="220" x2="400" y2="220"/>
+    <line x1="112" y1="260" x2="400" y2="260"/>
+    <line x1="112" y1="300" x2="400" y2="300"/>
+    <line x1="180" y1="68" x2="180" y2="420"/>
+    <line x1="220" y1="68" x2="220" y2="420"/>
+    <line x1="260" y1="68" x2="260" y2="420"/>
+    <line x1="300" y1="68" x2="300" y2="420"/>
+    <line x1="340" y1="68" x2="340" y2="420"/>
+  </g>
+
+  <!-- Signal waveform flowing through the shield -->
+  <g clip-path="url(#shieldClip)">
+    <!-- Main signal line with fault spike -->
+    <path d="M130,240 L165,240 L175,240 L185,225 L195,255 L205,240 L230,240
+             L240,240 L248,220 L254,170 L258,150
+             L262,310 L266,290 L272,255 L278,235 L284,242 L290,238 L300,240
+             L320,240 L330,225 L340,255 L350,240 L390,240"
+          fill="none" stroke="url(#signalGrad5)" stroke-width="2.5" stroke-linecap="round"
+          stroke-linejoin="round" filter="url(#innerGlow5)"/>
+
+    <!-- Ghost/echo signal (slightly offset, faded) -->
+    <path d="M130,244 L165,244 L175,244 L185,229 L195,259 L205,244 L230,244
+             L240,244 L248,224 L254,174 L258,154
+             L262,314 L266,294 L272,259 L278,239 L284,246 L290,242 L300,244
+             L320,244 L330,229 L340,259 L350,244 L390,244"
+          fill="none" stroke="url(#signalGrad5)" stroke-width="1" stroke-linecap="round"
+          opacity="0.2"/>
+  </g>
+
+  <!-- Fault detection indicator -->
+  <circle cx="258" cy="150" r="5" fill="#EF4444" filter="url(#innerGlow5)"/>
+  <circle cx="258" cy="150" r="10" fill="none" stroke="#EF4444" stroke-width="1" opacity="0.3"/>
+  <circle cx="258" cy="150" r="16" fill="none" stroke="#EF4444" stroke-width="0.5" opacity="0.15"/>
+
+  <!-- Shield checkmark / status indicator -->
+  <g transform="translate(256, 340)">
+    <circle r="14" fill="#020C1B" stroke="#22C55E" stroke-width="1.5"/>
+    <path d="M-5,0 L-1,4 L6,-5" fill="none" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Text: iotai -->
+  <text x="256" y="472" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+        font-size="48" font-weight="700" letter-spacing="6" fill="url(#shieldGrad)">
+    iotai
+  </text>
+
+  <!-- Subtitle -->
+  <text x="256" y="500" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace"
+        font-size="10" letter-spacing="4" fill="#0EA5E9" opacity="0.5">
+    GUARDING YOUR FIRMWARE
+  </text>
+</svg>

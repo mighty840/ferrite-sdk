@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- CONCEPT 2: Pulse Monitor — Oscilloscope waveform with fault spike -->
+  <defs>
+    <linearGradient id="pulseGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+    <linearGradient id="faultGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+    <filter id="pulseGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="faultGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="screenClip">
+      <rect x="56" y="80" width="400" height="260" rx="8"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="64" fill="#0C0F1A"/>
+
+  <!-- Monitor bezel -->
+  <rect x="40" y="68" width="432" height="286" rx="16" fill="#151B2E" stroke="#1E2944" stroke-width="2"/>
+
+  <!-- Screen area -->
+  <rect x="56" y="80" width="400" height="260" rx="8" fill="#080C18"/>
+
+  <!-- Grid lines (oscilloscope style) -->
+  <g stroke="#1A2240" stroke-width="0.5" clip-path="url(#screenClip)">
+    <!-- Horizontal grid -->
+    <line x1="56" y1="106" x2="456" y2="106"/>
+    <line x1="56" y1="132" x2="456" y2="132"/>
+    <line x1="56" y1="158" x2="456" y2="158"/>
+    <line x1="56" y1="184" x2="456" y2="184"/>
+    <line x1="56" y1="210" x2="456" y2="210" stroke="#1E2944" stroke-width="1"/>
+    <line x1="56" y1="236" x2="456" y2="236"/>
+    <line x1="56" y1="262" x2="456" y2="262"/>
+    <line x1="56" y1="288" x2="456" y2="288"/>
+    <line x1="56" y1="314" x2="456" y2="314"/>
+    <!-- Vertical grid -->
+    <line x1="96" y1="80" x2="96" y2="340"/>
+    <line x1="136" y1="80" x2="136" y2="340"/>
+    <line x1="176" y1="80" x2="176" y2="340"/>
+    <line x1="216" y1="80" x2="216" y2="340"/>
+    <line x1="256" y1="80" x2="256" y2="340" stroke="#1E2944" stroke-width="1"/>
+    <line x1="296" y1="80" x2="296" y2="340"/>
+    <line x1="336" y1="80" x2="336" y2="340"/>
+    <line x1="376" y1="80" x2="376" y2="340"/>
+    <line x1="416" y1="80" x2="416" y2="340"/>
+  </g>
+
+  <!-- Normal signal waveform -->
+  <g clip-path="url(#screenClip)">
+    <path d="M56,210 L96,210 L106,210 L116,190 L126,230 L136,210 L176,210
+             L186,210 L196,190 L206,230 L216,210 L256,210"
+          fill="none" stroke="url(#pulseGrad)" stroke-width="2.5" stroke-linecap="round"
+          stroke-linejoin="round" filter="url(#pulseGlow)" opacity="0.9"/>
+
+    <!-- FAULT SPIKE — dramatic crash event -->
+    <path d="M256,210 L266,210 L274,210 L280,170 L286,100 L290,92
+             L294,310 L298,280 L304,230 L310,200 L316,215 L322,208 L330,210"
+          fill="none" stroke="url(#faultGrad)" stroke-width="3" stroke-linecap="round"
+          stroke-linejoin="round" filter="url(#faultGlow)"/>
+
+    <!-- Resume normal after fault -->
+    <path d="M330,210 L370,210 L380,210 L390,190 L400,230 L410,210 L456,210"
+          fill="none" stroke="url(#pulseGrad)" stroke-width="2.5" stroke-linecap="round"
+          stroke-linejoin="round" filter="url(#pulseGlow)" opacity="0.9"/>
+  </g>
+
+  <!-- Fault indicator dot -->
+  <circle cx="290" cy="92" r="4" fill="#EF4444" filter="url(#faultGlow)"/>
+
+  <!-- HUD overlay text on screen -->
+  <g font-family="'SF Mono', 'Fira Code', monospace" fill="#22D3EE" opacity="0.5" font-size="10">
+    <text x="66" y="100">CH1 500mV/div</text>
+    <text x="370" y="100" fill="#EF4444">FAULT</text>
+    <text x="66" y="332">T: 1ms/div</text>
+    <text x="380" y="332" fill="#22D3EE">RUN</text>
+  </g>
+
+  <!-- Status LEDs on bezel -->
+  <circle cx="68" cy="348" r="3" fill="#22D3EE" opacity="0.8"/>
+  <circle cx="82" cy="348" r="3" fill="#EF4444" opacity="0.6"/>
+  <circle cx="96" cy="348" r="3" fill="#22C55E" opacity="0.4"/>
+
+  <!-- Text: iotai -->
+  <text x="256" y="430" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
+        font-size="48" font-weight="700" letter-spacing="6" fill="url(#pulseGrad)">
+    iotai
+  </text>
+
+  <!-- Subtitle -->
+  <text x="256" y="460" text-anchor="middle" font-family="'SF Mono', 'Fira Code', monospace"
+        font-size="11" letter-spacing="4" fill="#6366F1" opacity="0.6">
+    FIRMWARE OBSERVABILITY
+  </text>
+</svg>
