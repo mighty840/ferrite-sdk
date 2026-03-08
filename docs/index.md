@@ -14,7 +14,7 @@ hero:
       link: /guide/quickstart
     - theme: alt
       text: View on GitHub
-      link: https://github.com/your-org/ferrite-sdk
+      link: https://github.com/mighty840/ferrite-sdk
 
 features:
   - icon: 💥

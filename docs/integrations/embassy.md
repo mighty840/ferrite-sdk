@@ -15,8 +15,8 @@ Both tasks run forever (return type `-> !`) and should be spawned once at startu
 
 ```toml
 [dependencies]
-ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
-ferrite-embassy = { git = "https://github.com/your-org/ferrite-sdk" }
+ferrite-sdk = { git = "https://github.com/mighty840/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
+ferrite-embassy = { git = "https://github.com/mighty840/ferrite-sdk" }
 
 embassy-executor = { version = "0.6", features = ["task-arena-size-65536", "arch-cortex-m", "executor-thread"] }
 embassy-time = "0.3"

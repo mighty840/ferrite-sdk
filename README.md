@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/ferrite-sdk/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/ferrite-sdk/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI"></a>
+  <a href="https://github.com/mighty840/ferrite-sdk/actions"><img src="https://img.shields.io/github/actions/workflow/status/mighty840/ferrite-sdk/ci.yml?branch=main&style=flat-square&logo=github&label=CI" alt="CI"></a>
   <a href="https://crates.io/crates/ferrite-sdk"><img src="https://img.shields.io/crates/v/ferrite-sdk?style=flat-square&logo=rust&label=crates.io" alt="crates.io"></a>
   <a href="https://docs.rs/ferrite-sdk"><img src="https://img.shields.io/docsrs/ferrite-sdk?style=flat-square&logo=docs.rs&label=docs.rs" alt="docs.rs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
-  <a href="https://your-org.github.io/ferrite-sdk/"><img src="https://img.shields.io/badge/docs-VitePress-646CFF?style=flat-square&logo=vitepress" alt="Docs"></a>
+  <a href="https://mighty840.github.io/ferrite-sdk/"><img src="https://img.shields.io/badge/docs-VitePress-646CFF?style=flat-square&logo=vitepress" alt="Docs"></a>
 </p>
 
 ---
@@ -117,7 +117,7 @@ cd docs && npm install && npm run dev
 
 ## Documentation
 
-Full documentation is available at the [VitePress docs site](https://your-org.github.io/ferrite-sdk/), covering:
+Full documentation is available at the [VitePress docs site](https://mighty840.github.io/ferrite-sdk/), covering:
 
 - [Architecture & design](docs/guide/architecture.md)
 - [Binary chunk wire format](docs/reference/chunk-format.md)

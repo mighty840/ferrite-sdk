@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ferrite-sdk. This guide covers th
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/ferrite-sdk.git
+git clone https://github.com/mighty840/ferrite-sdk.git
 cd ferrite-sdk
 
 # Install the ARM target for embedded builds

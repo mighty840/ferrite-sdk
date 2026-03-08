@@ -16,7 +16,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/introduction' },
       { text: 'Integrations', link: '/integrations/' },
       { text: 'Reference', link: '/reference/' },
-      { text: 'Changelog', link: 'https://github.com/your-org/ferrite-sdk/releases' },
+      { text: 'Changelog', link: 'https://github.com/mighty840/ferrite-sdk/releases' },
     ],
 
     sidebar: {
@@ -99,7 +99,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/your-org/ferrite-sdk/edit/main/docs/:path',
+      pattern: 'https://github.com/mighty840/ferrite-sdk/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 
@@ -108,7 +108,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/your-org/ferrite-sdk' },
+      { icon: 'github', link: 'https://github.com/mighty840/ferrite-sdk' },
     ],
 
     footer: {

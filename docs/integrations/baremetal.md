@@ -16,7 +16,7 @@ There is no dedicated integration crate -- you use `ferrite-sdk` directly.
 
 ```toml
 [dependencies]
-ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m"] }
+ferrite-sdk = { git = "https://github.com/mighty840/ferrite-sdk", features = ["cortex-m"] }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"
 ```

@@ -24,8 +24,8 @@ In your firmware project's `Cargo.toml`:
 
 ```toml
 [dependencies]
-ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
-ferrite-embassy = { git = "https://github.com/your-org/ferrite-sdk" }
+ferrite-sdk = { git = "https://github.com/mighty840/ferrite-sdk", features = ["cortex-m", "defmt", "embassy"] }
+ferrite-embassy = { git = "https://github.com/mighty840/ferrite-sdk" }
 
 embassy-executor = { version = "0.6", features = ["task-arena-size-65536", "arch-cortex-m", "executor-thread"] }
 embassy-time = { version = "0.3", features = ["tick-hz-32_768"] }

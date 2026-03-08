@@ -13,8 +13,8 @@ RTIC uses priority-based preemptive scheduling. The ferrite-sdk RTIC integration
 
 ```toml
 [dependencies]
-ferrite-sdk = { git = "https://github.com/your-org/ferrite-sdk", features = ["cortex-m", "defmt"] }
-ferrite-rtic = { git = "https://github.com/your-org/ferrite-sdk" }
+ferrite-sdk = { git = "https://github.com/mighty840/ferrite-sdk", features = ["cortex-m", "defmt"] }
+ferrite-rtic = { git = "https://github.com/mighty840/ferrite-sdk" }
 rtic = { version = "2", features = ["thumbv7-backend"] }
 ```
 
