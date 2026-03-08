@@ -122,10 +122,10 @@
     <line x1="235" y1="257" x2="210" y2="282"/>
   </g>
 
-  <!-- Text: iotai -->
+  <!-- Text: ferrite-sdk -->
   <text x="256" y="430" text-anchor="middle" font-family="'SF Mono', 'Fira Code', 'JetBrains Mono', monospace"
-        font-size="48" font-weight="700" letter-spacing="6" fill="url(#chipGrad)">
-    iotai
+        font-size="38" font-weight="700" letter-spacing="4" fill="url(#chipGrad)">
+    ferrite-sdk
   </text>
 
   <!-- Subtitle -->
