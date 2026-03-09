@@ -2,7 +2,6 @@ use crate::api::types::*;
 use crate::components::DeviceCard;
 use crate::Route;
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 
 #[component]
 pub fn DashboardPage() -> Element {

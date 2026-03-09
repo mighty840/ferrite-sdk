@@ -1,7 +1,6 @@
 use crate::api::types::{Device, DeviceStatus};
 use crate::Route;
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 
 #[component]
 pub fn DeviceCard(device: Device) -> Element {

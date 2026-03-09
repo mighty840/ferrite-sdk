@@ -4,7 +4,6 @@ pub mod components;
 pub mod pages;
 
 use dioxus::prelude::*;
-use dioxus_router::prelude::*;
 
 use components::Navbar;
 use pages::*;
