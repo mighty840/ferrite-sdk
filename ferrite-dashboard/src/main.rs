@@ -39,13 +39,20 @@ fn AppLayout() -> Element {
     match auth_state() {
         AuthState::Loading => rsx! {
             div {
-                class: "min-h-screen flex items-center justify-center",
+                class: "min-h-screen flex items-center justify-center bg-surface-950",
                 div {
-                    class: "text-center",
+                    class: "text-center animate-fade-in",
                     div {
-                        class: "animate-spin h-8 w-8 border-4 border-ferrite-500 border-t-transparent rounded-full mx-auto mb-4"
+                        class: "h-12 w-12 rounded-xl bg-ferrite-600/20 border border-ferrite-600/30 flex items-center justify-center mx-auto mb-4",
+                        span {
+                            class: "text-ferrite-500 font-mono font-bold text-lg",
+                            "Fe"
+                        }
                     }
-                    p { class: "text-gray-500 text-sm", "Loading..." }
+                    div {
+                        class: "animate-spin h-6 w-6 border-2 border-ferrite-500 border-t-transparent rounded-full mx-auto mb-4"
+                    }
+                    p { class: "text-gray-500 text-sm font-mono", "initializing..." }
                 }
             }
         },
@@ -56,8 +63,14 @@ fn AppLayout() -> Element {
             }
         },
         AuthState::Authenticated { .. } => rsx! {
-            Navbar {}
-            Outlet::<Route> {}
+            div {
+                class: "flex min-h-screen bg-surface-950",
+                Navbar {}
+                main {
+                    class: "flex-1 lg:ml-0 mt-14 lg:mt-0 overflow-auto dot-grid",
+                    Outlet::<Route> {}
+                }
+            }
         },
     }
 }
@@ -104,25 +117,25 @@ fn NotFound(route: Vec<String>) -> Element {
     let path = route.join("/");
     rsx! {
         div {
-            class: "min-h-screen flex items-center justify-center",
+            class: "min-h-screen flex items-center justify-center bg-surface-950",
             div {
                 class: "text-center",
                 h1 {
-                    class: "text-6xl font-bold text-gray-300 mb-4",
+                    class: "text-7xl font-mono font-bold text-surface-700 mb-4",
                     "404"
                 }
                 p {
-                    class: "text-xl text-gray-600 mb-6",
-                    "Page not found"
+                    class: "text-lg text-gray-500 mb-2",
+                    "Route not found"
                 }
                 p {
-                    class: "text-sm text-gray-400 mb-8",
-                    "The path /{path} does not exist."
+                    class: "text-sm text-gray-600 font-mono mb-8",
+                    "/{path}"
                 }
                 Link {
                     to: Route::Dashboard {},
-                    class: "inline-flex items-center px-4 py-2 bg-ferrite-600 text-white rounded-lg hover:bg-ferrite-700 text-sm font-medium transition-colors duration-150",
-                    "Go to Dashboard"
+                    class: "inline-flex items-center px-4 py-2 bg-ferrite-600 text-white rounded-lg hover:bg-ferrite-500 text-sm font-medium transition-colors duration-150",
+                    "Back to Overview"
                 }
             }
         }

@@ -94,31 +94,31 @@ pub fn FaultsPage() -> Element {
 
     rsx! {
         div {
-            class: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
             div {
-                class: "mb-6",
+                class: "mb-6 animate-fade-in",
                 h1 {
-                    class: "text-2xl font-bold text-gray-900",
+                    class: "text-2xl font-semibold text-gray-100",
                     "Faults"
                 }
                 p {
                     class: "mt-1 text-sm text-gray-500",
-                    "Monitor and manage device fault events"
+                    "Device fault events and diagnostics"
                 }
             }
 
             // Summary badges
             div {
-                class: "flex items-center space-x-4 mb-6",
+                class: "flex items-center space-x-3 mb-6",
                 if critical_count > 0 {
                     span {
-                        class: "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800",
+                        class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-red-500/10 text-red-400 border border-red-500/20",
                         "{critical_count} Critical"
                     }
                 }
                 if warning_count > 0 {
                     span {
-                        class: "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800",
+                        class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20",
                         "{warning_count} Warning"
                     }
                 }
@@ -126,9 +126,9 @@ pub fn FaultsPage() -> Element {
 
             // Filters
             div {
-                class: "flex flex-col sm:flex-row gap-4 mb-6",
+                class: "flex flex-col sm:flex-row gap-3 mb-6",
                 select {
-                    class: "px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none bg-white",
+                    class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
                     value: "{severity_filter}",
                     onchange: move |e| severity_filter.set(e.value()),
                     option { value: "all", "All severities" }
@@ -137,7 +137,7 @@ pub fn FaultsPage() -> Element {
                     option { value: "info", "Info" }
                 }
                 select {
-                    class: "px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none bg-white",
+                    class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
                     value: "{resolved_filter}",
                     onchange: move |e| resolved_filter.set(e.value()),
                     option { value: "all", "All states" }
@@ -147,13 +147,12 @@ pub fn FaultsPage() -> Element {
             }
 
             p {
-                class: "text-sm text-gray-500 mb-4",
-                "Showing {filtered.len()} fault(s)"
+                class: "text-[10px] text-gray-600 mb-4 font-mono uppercase tracking-wider",
+                "{filtered.len()} fault(s)"
             }
 
-            // Fault list
             div {
-                class: "space-y-4",
+                class: "space-y-3",
                 for fault in filtered {
                     FaultViewer { fault: fault.clone() }
                 }

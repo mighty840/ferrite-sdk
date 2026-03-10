@@ -7,7 +7,6 @@ use dioxus::prelude::*;
 pub fn DeviceDetailPage(id: String) -> Element {
     let mut active_tab = use_signal(|| "metrics".to_string());
 
-    // Demo device data
     let device = Device {
         id: id.clone(),
         name: format!("Device {}", id),
@@ -112,45 +111,45 @@ pub fn DeviceDetailPage(id: String) -> Element {
         },
     ];
 
-    let status_badge = match device.status {
-        DeviceStatus::Online => "bg-green-100 text-green-800",
-        DeviceStatus::Offline => "bg-red-100 text-red-800",
-        DeviceStatus::Degraded => "bg-yellow-100 text-yellow-800",
-        DeviceStatus::Unknown => "bg-gray-100 text-gray-800",
+    let (status_dot, status_color, status_glow) = match device.status {
+        DeviceStatus::Online => ("bg-emerald-400", "text-emerald-400", true),
+        DeviceStatus::Offline => ("bg-red-400", "text-red-400", false),
+        DeviceStatus::Degraded => ("bg-amber-400", "text-amber-400", false),
+        DeviceStatus::Unknown => ("bg-gray-500", "text-gray-500", false),
     };
 
     let last_seen = device.last_seen.format("%Y-%m-%d %H:%M:%S UTC").to_string();
 
     rsx! {
         div {
-            class: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
             // Breadcrumb
             nav {
-                class: "flex mb-6 text-sm",
+                class: "flex items-center mb-6 text-xs font-mono animate-fade-in",
                 Link {
                     to: Route::Devices {},
-                    class: "text-ferrite-600 hover:text-ferrite-800",
+                    class: "text-gray-500 hover:text-ferrite-400 transition-colors",
                     "Devices"
                 }
-                span { class: "mx-2 text-gray-400", "/" }
-                span { class: "text-gray-700", "{device.name}" }
+                span { class: "mx-2 text-gray-700", "/" }
+                span { class: "text-gray-300", "{device.name}" }
             }
 
             // Device header
             div {
-                class: "bg-white rounded-lg shadow border border-gray-200 p-6 mb-6",
+                class: "bg-surface-900 rounded-xl border border-surface-700 p-6 mb-6 animate-fade-in",
                 div {
                     class: "flex flex-col md:flex-row md:items-center md:justify-between",
                     div {
                         class: "flex items-center space-x-4",
                         div {
-                            class: "h-14 w-14 rounded-xl bg-ferrite-100 flex items-center justify-center",
+                            class: "h-12 w-12 rounded-xl bg-ferrite-600/10 border border-ferrite-600/20 flex items-center justify-center",
                             svg {
-                                class: "h-8 w-8 text-ferrite-600",
+                                class: "h-6 w-6 text-ferrite-500",
                                 fill: "none",
                                 view_box: "0 0 24 24",
                                 stroke: "currentColor",
-                                stroke_width: "2",
+                                stroke_width: "1.5",
                                 path {
                                     stroke_linecap: "round",
                                     stroke_linejoin: "round",
@@ -160,19 +159,26 @@ pub fn DeviceDetailPage(id: String) -> Element {
                         }
                         div {
                             h1 {
-                                class: "text-xl font-bold text-gray-900",
+                                class: "text-xl font-semibold text-gray-100",
                                 "{device.name}"
                             }
                             p {
-                                class: "text-sm text-gray-500 font-mono",
+                                class: "text-xs text-gray-500 font-mono",
                                 "{device.id}"
                             }
                         }
                     }
                     div {
-                        class: "mt-4 md:mt-0",
+                        class: "mt-4 md:mt-0 flex items-center space-x-2",
+                        div {
+                            class: if status_glow {
+                                "h-2.5 w-2.5 rounded-full {status_dot} pulse-glow"
+                            } else {
+                                "h-2.5 w-2.5 rounded-full {status_dot}"
+                            },
+                        }
                         span {
-                            class: "inline-flex items-center px-3 py-1 rounded-full text-sm font-medium {status_badge}",
+                            class: "text-xs font-medium {status_color} uppercase tracking-wider font-mono",
                             "{device.status}"
                         }
                     }
@@ -191,27 +197,24 @@ pub fn DeviceDetailPage(id: String) -> Element {
 
             // Tabs
             div {
-                class: "border-b border-gray-200 mb-6",
-                nav {
-                    class: "flex space-x-8",
-                    TabButton {
-                        label: "Metrics",
-                        tab_id: "metrics",
-                        active_tab: active_tab(),
-                        on_click: move |_| active_tab.set("metrics".into()),
-                    }
-                    TabButton {
-                        label: "Faults",
-                        tab_id: "faults",
-                        active_tab: active_tab(),
-                        on_click: move |_| active_tab.set("faults".into()),
-                    }
-                    TabButton {
-                        label: "Traces",
-                        tab_id: "traces",
-                        active_tab: active_tab(),
-                        on_click: move |_| active_tab.set("traces".into()),
-                    }
+                class: "flex items-center space-x-1 mb-6 bg-surface-900 rounded-lg p-1 border border-surface-700 w-fit",
+                TabButton {
+                    label: "Metrics",
+                    tab_id: "metrics",
+                    active_tab: active_tab(),
+                    on_click: move |_| active_tab.set("metrics".into()),
+                }
+                TabButton {
+                    label: "Faults",
+                    tab_id: "faults",
+                    active_tab: active_tab(),
+                    on_click: move |_| active_tab.set("faults".into()),
+                }
+                TabButton {
+                    label: "Traces",
+                    tab_id: "traces",
+                    active_tab: active_tab(),
+                    on_click: move |_| active_tab.set("traces".into()),
                 }
             }
 
@@ -219,7 +222,7 @@ pub fn DeviceDetailPage(id: String) -> Element {
             match active_tab().as_str() {
                 "metrics" => rsx! {
                     div {
-                        class: "grid grid-cols-1 lg:grid-cols-2 gap-6",
+                        class: "grid grid-cols-1 lg:grid-cols-2 gap-4",
                         MetricChart {
                             title: "Temperature".to_string(),
                             entries: metrics.clone(),
@@ -234,7 +237,7 @@ pub fn DeviceDetailPage(id: String) -> Element {
                 },
                 "faults" => rsx! {
                     div {
-                        class: "space-y-4",
+                        class: "space-y-3",
                         for fault in &faults {
                             FaultViewer { fault: fault.clone() }
                         }
@@ -244,7 +247,7 @@ pub fn DeviceDetailPage(id: String) -> Element {
                     TraceViewer { traces: traces.clone() }
                 },
                 _ => rsx! {
-                    p { "Unknown tab" }
+                    p { class: "text-gray-500", "Unknown tab" }
                 },
             }
         }
@@ -256,11 +259,11 @@ fn DetailField(label: String, value: String) -> Element {
     rsx! {
         div {
             p {
-                class: "text-xs font-medium text-gray-500 uppercase tracking-wide",
+                class: "text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1",
                 "{label}"
             }
             p {
-                class: "mt-1 text-sm text-gray-900",
+                class: "text-sm text-gray-200 font-mono",
                 "{value}"
             }
         }
@@ -276,9 +279,9 @@ fn TabButton(
 ) -> Element {
     let is_active = active_tab == tab_id;
     let classes = if is_active {
-        "border-ferrite-500 text-ferrite-600 border-b-2 py-3 px-1 text-sm font-medium cursor-pointer"
+        "px-4 py-2 rounded-md text-sm font-medium bg-ferrite-600 text-white cursor-pointer transition-all"
     } else {
-        "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 border-b-2 py-3 px-1 text-sm font-medium cursor-pointer"
+        "px-4 py-2 rounded-md text-sm font-medium text-gray-400 hover:text-gray-200 cursor-pointer transition-all"
     };
 
     rsx! {

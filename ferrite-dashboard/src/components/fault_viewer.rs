@@ -3,53 +3,53 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn FaultViewer(fault: FaultEvent) -> Element {
-    let severity_badge = match fault.severity {
-        FaultSeverity::Critical => "bg-red-100 text-red-800 border-red-200",
-        FaultSeverity::Warning => "bg-yellow-100 text-yellow-800 border-yellow-200",
-        FaultSeverity::Info => "bg-blue-100 text-blue-800 border-blue-200",
+    let (severity_bg, severity_text, severity_border, severity_dot) = match fault.severity {
+        FaultSeverity::Critical => (
+            "bg-red-500/5",
+            "text-red-400",
+            "border-red-500/20",
+            "bg-red-500",
+        ),
+        FaultSeverity::Warning => (
+            "bg-amber-500/5",
+            "text-amber-400",
+            "border-amber-500/20",
+            "bg-amber-500",
+        ),
+        FaultSeverity::Info => (
+            "bg-blue-500/5",
+            "text-blue-400",
+            "border-blue-500/20",
+            "bg-blue-500",
+        ),
     };
 
-    let severity_icon_color = match fault.severity {
-        FaultSeverity::Critical => "text-red-500",
-        FaultSeverity::Warning => "text-yellow-500",
-        FaultSeverity::Info => "text-blue-500",
-    };
-
-    let timestamp = fault.timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    let timestamp = fault.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
     let resolved_text = if fault.resolved {
         let at = fault
             .resolved_at
-            .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-            .unwrap_or_else(|| "unknown time".to_string());
-        format!("Resolved at {}", at)
+            .map(|t| t.format("%H:%M:%S").to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        format!("Resolved {}", at)
     } else {
         "Unresolved".to_string()
     };
 
     let resolved_color = if fault.resolved {
-        "text-green-600"
+        "text-emerald-400"
     } else {
-        "text-red-600"
+        "text-red-400"
     };
 
     rsx! {
         div {
-            class: "bg-white rounded-lg shadow border border-gray-200 p-5",
+            class: "bg-surface-900 rounded-xl border {severity_border} p-5 {severity_bg}",
             div {
                 class: "flex items-start space-x-4",
                 div {
-                    class: "flex-shrink-0 mt-0.5",
-                    svg {
-                        class: "h-6 w-6 {severity_icon_color}",
-                        fill: "none",
-                        view_box: "0 0 24 24",
-                        stroke: "currentColor",
-                        stroke_width: "2",
-                        path {
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-                        }
+                    class: "flex-shrink-0 mt-1",
+                    div {
+                        class: "h-2.5 w-2.5 rounded-full {severity_dot}"
                     }
                 }
                 div {
@@ -59,21 +59,21 @@ pub fn FaultViewer(fault: FaultEvent) -> Element {
                         div {
                             class: "flex items-center space-x-2",
                             h3 {
-                                class: "text-sm font-semibold text-gray-900",
+                                class: "text-sm font-mono font-semibold text-gray-100",
                                 "{fault.code}"
                             }
                             span {
-                                class: "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border {severity_badge}",
+                                class: "text-[10px] font-semibold {severity_text} uppercase tracking-wider",
                                 "{fault.severity}"
                             }
                         }
                         span {
-                            class: "text-xs text-gray-500",
+                            class: "text-[10px] text-gray-600 font-mono",
                             "{timestamp}"
                         }
                     }
                     p {
-                        class: "mt-1 text-sm text-gray-700",
+                        class: "mt-1.5 text-sm text-gray-400",
                         "{fault.message}"
                     }
                     div {
@@ -81,22 +81,16 @@ pub fn FaultViewer(fault: FaultEvent) -> Element {
                         div {
                             class: "flex items-center space-x-4 text-xs text-gray-500",
                             span {
-                                "Device: "
-                                span {
-                                    class: "font-medium text-gray-700",
-                                    "{fault.device_name}"
-                                }
+                                class: "font-mono",
+                                "{fault.device_name}"
                             }
                             span {
-                                "ID: "
-                                span {
-                                    class: "font-mono text-gray-600",
-                                    "{fault.device_id}"
-                                }
+                                class: "text-gray-600",
+                                "{fault.device_id}"
                             }
                         }
                         span {
-                            class: "text-xs font-medium {resolved_color}",
+                            class: "text-[10px] font-medium font-mono {resolved_color}",
                             "{resolved_text}"
                         }
                     }

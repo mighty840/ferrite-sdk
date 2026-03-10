@@ -90,28 +90,28 @@ pub fn DevicesPage() -> Element {
 
     rsx! {
         div {
-            class: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
             div {
-                class: "mb-6",
+                class: "mb-6 animate-fade-in",
                 h1 {
-                    class: "text-2xl font-bold text-gray-900",
+                    class: "text-2xl font-semibold text-gray-100",
                     "Devices"
                 }
                 p {
                     class: "mt-1 text-sm text-gray-500",
-                    "Manage and monitor your IoT devices"
+                    "Manage and monitor your device fleet"
                 }
             }
 
             // Filters
             div {
-                class: "flex flex-col sm:flex-row gap-4 mb-6",
+                class: "flex flex-col sm:flex-row gap-3 mb-6",
                 div {
                     class: "flex-1",
                     div {
                         class: "relative",
                         svg {
-                            class: "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400",
+                            class: "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600",
                             fill: "none",
                             view_box: "0 0 24 24",
                             stroke: "currentColor",
@@ -123,7 +123,7 @@ pub fn DevicesPage() -> Element {
                             }
                         }
                         input {
-                            class: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none",
+                            class: "w-full pl-10 pr-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all font-mono",
                             r#type: "text",
                             placeholder: "Search devices...",
                             value: "{search}",
@@ -132,7 +132,7 @@ pub fn DevicesPage() -> Element {
                     }
                 }
                 select {
-                    class: "px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none bg-white",
+                    class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
                     value: "{status_filter}",
                     onchange: move |e| status_filter.set(e.value()),
                     option { value: "all", "All statuses" }
@@ -142,15 +142,13 @@ pub fn DevicesPage() -> Element {
                 }
             }
 
-            // Results count
             p {
-                class: "text-sm text-gray-500 mb-4",
-                "Showing {filtered.len()} device(s)"
+                class: "text-[10px] text-gray-600 mb-4 font-mono uppercase tracking-wider",
+                "{filtered.len()} device(s)"
             }
 
-            // Device grid
             div {
-                class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4",
+                class: "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4",
                 for device in filtered {
                     DeviceCard { device: device }
                 }

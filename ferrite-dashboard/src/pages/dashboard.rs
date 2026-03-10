@@ -66,107 +66,111 @@ pub fn DashboardPage() -> Element {
 
     rsx! {
         div {
-            class: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
             // Header
             div {
-                class: "mb-8",
+                class: "mb-8 animate-fade-in",
                 h1 {
-                    class: "text-2xl font-bold text-gray-900",
-                    "Dashboard"
+                    class: "text-2xl font-semibold text-gray-100",
+                    "Overview"
                 }
                 p {
                     class: "mt-1 text-sm text-gray-500",
-                    "Overview of your IoT device fleet"
+                    "Fleet status and recent activity"
                 }
             }
 
-            // Summary cards
+            // Stat cards
             div {
-                class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8",
-                SummaryCard {
-                    title: "Total Devices",
+                class: "grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8",
+                StatCard {
+                    label: "Total Devices",
                     value: total_count.to_string(),
-                    icon_path: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z",
-                    color: "blue",
+                    accent: "text-gray-300",
+                    bg: "bg-surface-800",
+                    border: "border-surface-700",
                 }
-                SummaryCard {
-                    title: "Online",
+                StatCard {
+                    label: "Online",
                     value: online_count.to_string(),
-                    icon_path: "M5 13l4 4L19 7",
-                    color: "green",
+                    accent: "text-emerald-400",
+                    bg: "bg-emerald-500/5",
+                    border: "border-emerald-500/20",
                 }
-                SummaryCard {
-                    title: "Degraded",
+                StatCard {
+                    label: "Degraded",
                     value: degraded_count.to_string(),
-                    icon_path: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z",
-                    color: "yellow",
+                    accent: "text-amber-400",
+                    bg: "bg-amber-500/5",
+                    border: "border-amber-500/20",
                 }
-                SummaryCard {
-                    title: "Offline",
+                StatCard {
+                    label: "Offline",
                     value: offline_count.to_string(),
-                    icon_path: "M6 18L18 6M6 6l12 12",
-                    color: "red",
+                    accent: "text-red-400",
+                    bg: "bg-red-500/5",
+                    border: "border-red-500/20",
                 }
             }
 
-            // Recent devices grid
+            // Devices section
             div {
-                class: "mb-6",
+                class: "mb-8",
                 div {
                     class: "flex items-center justify-between mb-4",
                     h2 {
-                        class: "text-lg font-semibold text-gray-900",
+                        class: "text-sm font-medium text-gray-400 uppercase tracking-wider",
                         "Devices"
                     }
                     Link {
                         to: Route::Devices {},
-                        class: "text-sm text-ferrite-600 hover:text-ferrite-800 font-medium",
+                        class: "text-xs text-ferrite-500 hover:text-ferrite-400 font-medium transition-colors",
                         "View all"
                     }
                 }
                 div {
-                    class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+                    class: "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4",
                     for device in devices() {
                         DeviceCard { device: device }
                     }
                 }
             }
 
-            // Recent activity
+            // Activity feed
             div {
-                class: "bg-white rounded-lg shadow border border-gray-200",
+                class: "bg-surface-900 rounded-xl border border-surface-700",
                 div {
-                    class: "px-6 py-4 border-b border-gray-200",
+                    class: "px-5 py-4 border-b border-surface-700",
                     h2 {
-                        class: "text-lg font-semibold text-gray-900",
+                        class: "text-sm font-medium text-gray-400 uppercase tracking-wider",
                         "Recent Activity"
                     }
                 }
                 div {
-                    class: "divide-y divide-gray-200",
+                    class: "divide-y divide-surface-750",
                     ActivityItem {
-                        icon_color: "text-green-500",
+                        color: "bg-emerald-500",
                         title: "Device online",
                         description: "Temperature Sensor A reconnected",
-                        time: "2 minutes ago",
+                        time: "2m ago",
                     }
                     ActivityItem {
-                        icon_color: "text-yellow-500",
+                        color: "bg-amber-500",
                         title: "Warning fault",
                         description: "Motor Controller B: high vibration detected",
-                        time: "15 minutes ago",
+                        time: "15m ago",
                     }
                     ActivityItem {
-                        icon_color: "text-red-500",
+                        color: "bg-red-500",
                         title: "Device offline",
                         description: "Pressure Sensor D lost connection",
-                        time: "1 hour ago",
+                        time: "1h ago",
                     }
                     ActivityItem {
-                        icon_color: "text-blue-500",
+                        color: "bg-blue-500",
                         title: "Firmware update",
                         description: "Gateway Hub C updated to v3.0.1",
-                        time: "3 hours ago",
+                        time: "3h ago",
                     }
                 }
             }
@@ -175,50 +179,23 @@ pub fn DashboardPage() -> Element {
 }
 
 #[component]
-fn SummaryCard(
-    title: &'static str,
+fn StatCard(
+    label: &'static str,
     value: String,
-    icon_path: &'static str,
-    color: &'static str,
+    accent: &'static str,
+    bg: &'static str,
+    border: &'static str,
 ) -> Element {
-    let (bg, icon_color, text_color) = match color {
-        "green" => ("bg-green-50", "text-green-500", "text-green-700"),
-        "yellow" => ("bg-yellow-50", "text-yellow-500", "text-yellow-700"),
-        "red" => ("bg-red-50", "text-red-500", "text-red-700"),
-        _ => ("bg-blue-50", "text-blue-500", "text-blue-700"),
-    };
-
     rsx! {
         div {
-            class: "bg-white rounded-lg shadow border border-gray-200 p-5",
-            div {
-                class: "flex items-center",
-                div {
-                    class: "flex-shrink-0 p-3 rounded-lg {bg}",
-                    svg {
-                        class: "h-6 w-6 {icon_color}",
-                        fill: "none",
-                        view_box: "0 0 24 24",
-                        stroke: "currentColor",
-                        stroke_width: "2",
-                        path {
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            d: icon_path,
-                        }
-                    }
-                }
-                div {
-                    class: "ml-4",
-                    p {
-                        class: "text-sm font-medium text-gray-500",
-                        "{title}"
-                    }
-                    p {
-                        class: "text-2xl font-bold {text_color}",
-                        "{value}"
-                    }
-                }
+            class: "rounded-xl border p-5 {bg} {border} animate-fade-in",
+            p {
+                class: "text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2",
+                "{label}"
+            }
+            p {
+                class: "text-3xl font-mono font-bold {accent}",
+                "{value}"
             }
         }
     }
@@ -226,36 +203,33 @@ fn SummaryCard(
 
 #[component]
 fn ActivityItem(
-    icon_color: &'static str,
+    color: &'static str,
     title: &'static str,
     description: &'static str,
     time: &'static str,
 ) -> Element {
     rsx! {
         div {
-            class: "px-6 py-4 flex items-center space-x-4",
+            class: "px-5 py-3.5 flex items-center space-x-4 hover:bg-surface-850 transition-colors",
             div {
                 class: "flex-shrink-0",
-                svg {
-                    class: "h-5 w-5 {icon_color}",
-                    fill: "currentColor",
-                    view_box: "0 0 20 20",
-                    circle { cx: "10", cy: "10", r: "5" }
+                div {
+                    class: "h-2 w-2 rounded-full {color}"
                 }
             }
             div {
                 class: "flex-1 min-w-0",
                 p {
-                    class: "text-sm font-medium text-gray-900",
+                    class: "text-sm font-medium text-gray-200",
                     "{title}"
                 }
                 p {
-                    class: "text-sm text-gray-500",
+                    class: "text-xs text-gray-500",
                     "{description}"
                 }
             }
             span {
-                class: "text-xs text-gray-400 flex-shrink-0",
+                class: "text-[10px] text-gray-600 font-mono flex-shrink-0",
                 "{time}"
             }
         }

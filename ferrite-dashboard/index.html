@@ -3,40 +3,83 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ferrite Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['DM Sans', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                    },
                     colors: {
                         ferrite: {
-                            50: '#eff6ff',
-                            100: '#dbeafe',
-                            200: '#bfdbfe',
-                            300: '#93c5fd',
-                            400: '#60a5fa',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            700: '#1d4ed8',
-                            800: '#1e40af',
-                            900: '#1e3a5f',
-                        }
-                    }
-                }
-            }
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            700: '#c2410c',
+                            800: '#9a3412',
+                            900: '#7c2d12',
+                            950: '#431407',
+                        },
+                        surface: {
+                            950: '#08090d',
+                            900: '#0d0f14',
+                            850: '#11131a',
+                            800: '#161922',
+                            750: '#1a1e28',
+                            700: '#1e222e',
+                            650: '#242a38',
+                            600: '#2a3042',
+                        },
+                    },
+                },
+            },
         }
     </script>
     <style>
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        body { font-family: 'DM Sans', system-ui, sans-serif; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 4px currentColor, 0 0 8px currentColor; opacity: 1; }
+            50% { box-shadow: 0 0 2px currentColor, 0 0 4px currentColor; opacity: 0.7; }
         }
-        .animate-spin {
-            animation: spin 1s linear infinite;
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
+
+        @keyframes slide-in-left { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+        .animate-slide-in { animation: slide-in-left 0.25s ease-out forwards; }
+
+        /* Dot grid background */
+        .dot-grid {
+            background-image: radial-gradient(circle, rgba(249, 115, 22, 0.04) 1px, transparent 1px);
+            background-size: 24px 24px;
         }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #11131a; }
+        ::-webkit-scrollbar-thumb { background: #2a3042; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a4052; }
+
+        /* Chart gradient */
+        .chart-gradient { stop-color: currentColor; }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-surface-950 min-h-screen text-gray-200">
     <div id="main"></div>
 </body>
 </html>
