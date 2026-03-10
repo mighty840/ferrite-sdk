@@ -29,6 +29,11 @@ Thumbs.db
 *.bin
 *.hex
 
+# Database
+ferrite.db
+ferrite.db-shm
+ferrite.db-wal
+
 # Environment
 .env
 .env.*
