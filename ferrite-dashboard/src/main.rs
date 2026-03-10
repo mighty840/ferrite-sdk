@@ -106,9 +106,7 @@ fn NotFound(route: Vec<String>) -> Element {
     }
 }
 
-/// WASM entry point.
-#[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn main() {
+fn main() {
     dioxus::launch(App);
 }
 

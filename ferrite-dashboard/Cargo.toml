@@ -3,9 +3,6 @@ name = "ferrite-dashboard"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 dioxus = { version = "0.7", features = ["web", "router"] }
 serde = { version = "1", features = ["derive"] }
