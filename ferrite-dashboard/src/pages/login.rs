@@ -19,30 +19,37 @@ fn KeycloakLogin(auth_mode: AuthModeInfo) -> Element {
 
     rsx! {
         div {
-            class: "min-h-screen flex items-center justify-center bg-gray-50",
+            class: "min-h-screen flex items-center justify-center bg-surface-950 dot-grid",
             div {
-                class: "max-w-md w-full space-y-8 p-8",
+                class: "max-w-sm w-full mx-4 animate-fade-in",
+                // Logo
                 div {
-                    class: "text-center",
+                    class: "text-center mb-8",
+                    div {
+                        class: "h-14 w-14 rounded-xl bg-ferrite-600/20 border border-ferrite-600/30 flex items-center justify-center mx-auto mb-4",
+                        span {
+                            class: "text-ferrite-500 font-mono font-bold text-xl",
+                            "Fe"
+                        }
+                    }
                     h1 {
-                        class: "text-3xl font-bold text-ferrite-900",
-                        "ferrite"
+                        class: "text-2xl font-semibold text-gray-100 tracking-tight",
+                        "Ferrite"
                     }
                     p {
-                        class: "mt-2 text-sm text-gray-500",
-                        "Sign in to the dashboard"
+                        class: "text-sm text-gray-500 mt-1 font-mono",
+                        "device observability"
                     }
                 }
                 div {
-                    class: "bg-white rounded-lg shadow border border-gray-200 p-6",
+                    class: "bg-surface-900 rounded-xl border border-surface-700 p-6",
                     p {
-                        class: "text-sm text-gray-600 mb-4 text-center",
-                        "Authenticate with your organization's identity provider."
+                        class: "text-sm text-gray-400 mb-5 text-center",
+                        "Authenticate with your identity provider"
                     }
                     button {
-                        class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-ferrite-600 hover:bg-ferrite-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ferrite-500 transition-colors duration-150",
+                        class: "w-full flex justify-center items-center py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-ferrite-600 hover:bg-ferrite-500 focus:outline-none focus:ring-2 focus:ring-ferrite-500/50 transition-all duration-150",
                         onclick: move |_| {
-                            // Redirect to Keycloak authorization endpoint
                             let auth_url = format!(
                                 "{}/protocol/openid-connect/auth?response_type=code&client_id={}&redirect_uri={}&scope=openid%20profile%20email",
                                 authority,
@@ -56,7 +63,7 @@ fn KeycloakLogin(auth_mode: AuthModeInfo) -> Element {
                                 let _ = window.location().set_href(&auth_url);
                             }
                         },
-                        "Sign in with Keycloak"
+                        "Sign in with SSO"
                     }
                 }
             }
@@ -75,27 +82,35 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
 
     rsx! {
         div {
-            class: "min-h-screen flex items-center justify-center bg-gray-50",
+            class: "min-h-screen flex items-center justify-center bg-surface-950 dot-grid",
             div {
-                class: "max-w-md w-full space-y-8 p-8",
+                class: "max-w-sm w-full mx-4 animate-fade-in",
+                // Logo
                 div {
-                    class: "text-center",
+                    class: "text-center mb-8",
+                    div {
+                        class: "h-14 w-14 rounded-xl bg-ferrite-600/20 border border-ferrite-600/30 flex items-center justify-center mx-auto mb-4",
+                        span {
+                            class: "text-ferrite-500 font-mono font-bold text-xl",
+                            "Fe"
+                        }
+                    }
                     h1 {
-                        class: "text-3xl font-bold text-ferrite-900",
-                        "ferrite"
+                        class: "text-2xl font-semibold text-gray-100 tracking-tight",
+                        "Ferrite"
                     }
                     p {
-                        class: "mt-2 text-sm text-gray-500",
-                        "Sign in to the dashboard"
+                        class: "text-sm text-gray-500 mt-1 font-mono",
+                        "device observability"
                     }
                 }
                 div {
-                    class: "bg-white rounded-lg shadow border border-gray-200 p-6",
+                    class: "bg-surface-900 rounded-xl border border-surface-700 p-6",
                     if let Some(err) = error() {
                         div {
-                            class: "rounded-lg bg-red-50 border border-red-200 p-3 mb-4",
+                            class: "rounded-lg bg-red-500/10 border border-red-500/20 p-3 mb-4",
                             p {
-                                class: "text-sm text-red-700",
+                                class: "text-sm text-red-400",
                                 "{err}"
                             }
                         }
@@ -109,16 +124,13 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
                             loading.set(true);
                             error.set(None);
                             spawn(async move {
-                                // Encode credentials as base64 for Basic auth
                                 let credentials = format!("{}:{}", user, pass);
-                                // Use btoa for base64
                                 let b64 = web_sys::window()
                                     .and_then(|w| w.btoa(&credentials).ok())
                                     .unwrap_or_default();
 
                                 let token = AuthToken::Basic(b64.clone());
 
-                                // Test the credentials against the server
                                 // Use same-origin; dx serve proxies to ferrite-server in dev
                                 let api_url = web_sys::window()
                                     .and_then(|w| w.location().origin().ok())
@@ -135,7 +147,6 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
 
                                 match resp {
                                     Ok(r) if r.status().is_success() || r.status().as_u16() == 404 => {
-                                        // Store in session storage
                                         if let Some(storage) = web_sys::window()
                                             .and_then(|w| w.session_storage().ok())
                                             .flatten()
@@ -153,7 +164,7 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
                                         });
                                     }
                                     Ok(r) if r.status().as_u16() == 401 => {
-                                        error.set(Some("Invalid username or password".into()));
+                                        error.set(Some("Invalid credentials".into()));
                                     }
                                     Ok(r) => {
                                         error.set(Some(format!("Server error: HTTP {}", r.status())));
@@ -166,11 +177,11 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
                         },
                         div {
                             label {
-                                class: "block text-sm font-medium text-gray-700 mb-1",
+                                class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
                                 "Username"
                             }
                             input {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none",
+                                class: "w-full px-3 py-2.5 bg-surface-800 border border-surface-650 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all font-mono",
                                 r#type: "text",
                                 placeholder: "admin",
                                 value: "{username}",
@@ -179,11 +190,11 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
                         }
                         div {
                             label {
-                                class: "block text-sm font-medium text-gray-700 mb-1",
+                                class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
                                 "Password"
                             }
                             input {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none",
+                                class: "w-full px-3 py-2.5 bg-surface-800 border border-surface-650 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all font-mono",
                                 r#type: "password",
                                 placeholder: "password",
                                 value: "{password}",
@@ -191,16 +202,20 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
                             }
                         }
                         button {
-                            class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-ferrite-600 hover:bg-ferrite-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ferrite-500 transition-colors duration-150 disabled:opacity-50",
+                            class: "w-full flex justify-center py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-ferrite-600 hover:bg-ferrite-500 focus:outline-none focus:ring-2 focus:ring-ferrite-500/50 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed",
                             r#type: "submit",
                             disabled: loading(),
                             if loading() {
-                                "Signing in..."
+                                "Authenticating..."
                             } else {
                                 "Sign in"
                             }
                         }
                     }
+                }
+                p {
+                    class: "text-center text-[10px] text-gray-600 mt-4 font-mono",
+                    "Ferrite Observability Platform"
                 }
             }
         }

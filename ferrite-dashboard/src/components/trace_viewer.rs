@@ -5,27 +5,30 @@ use dioxus::prelude::*;
 pub fn TraceViewer(traces: Vec<TraceEntry>) -> Element {
     rsx! {
         div {
-            class: "bg-gray-900 rounded-lg shadow overflow-hidden",
+            class: "bg-surface-950 rounded-xl border border-surface-700 overflow-hidden",
             div {
-                class: "flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700",
-                h3 {
-                    class: "text-sm font-medium text-gray-200",
-                    "Trace Log"
-                }
+                class: "flex items-center justify-between px-4 py-3 bg-surface-900 border-b border-surface-700",
                 div {
                     class: "flex items-center space-x-2",
-                    span {
-                        class: "text-xs text-gray-400",
-                        "{traces.len()} entries"
+                    div {
+                        class: "h-2 w-2 rounded-full bg-emerald-500 pulse-glow"
                     }
+                    h3 {
+                        class: "text-xs font-medium text-gray-400 uppercase tracking-wider",
+                        "Trace Log"
+                    }
+                }
+                span {
+                    class: "text-[10px] text-gray-600 font-mono",
+                    "{traces.len()} entries"
                 }
             }
             div {
                 class: "overflow-y-auto max-h-96 font-mono text-xs",
                 if traces.is_empty() {
                     div {
-                        class: "p-4 text-gray-500 text-center",
-                        "No trace entries available"
+                        class: "p-8 text-gray-600 text-center text-sm",
+                        "No trace entries"
                     }
                 }
                 for trace in &traces {
@@ -39,11 +42,11 @@ pub fn TraceViewer(traces: Vec<TraceEntry>) -> Element {
 fn trace_line(trace: &TraceEntry) -> Element {
     let level_color = match trace.level.to_uppercase().as_str() {
         "ERROR" => "text-red-400",
-        "WARN" => "text-yellow-400",
-        "INFO" => "text-green-400",
+        "WARN" => "text-amber-400",
+        "INFO" => "text-emerald-400",
         "DEBUG" => "text-blue-400",
-        "TRACE" => "text-gray-500",
-        _ => "text-gray-400",
+        "TRACE" => "text-gray-600",
+        _ => "text-gray-500",
     };
 
     let timestamp = trace.timestamp.format("%H:%M:%S%.3f").to_string();
@@ -55,9 +58,9 @@ fn trace_line(trace: &TraceEntry) -> Element {
 
     rsx! {
         div {
-            class: "px-4 py-1 hover:bg-gray-800 border-b border-gray-800 flex",
+            class: "px-4 py-1.5 hover:bg-surface-900 border-b border-surface-900/50 flex items-start",
             span {
-                class: "text-gray-500 mr-3 flex-shrink-0 w-24",
+                class: "text-gray-600 mr-3 flex-shrink-0 w-24 tabular-nums",
                 "{timestamp}"
             }
             span {
@@ -65,11 +68,11 @@ fn trace_line(trace: &TraceEntry) -> Element {
                 "{trace.level}"
             }
             span {
-                class: "text-purple-400 mr-3 flex-shrink-0",
+                class: "text-ferrite-500/70 mr-3 flex-shrink-0",
                 "{trace.module}{span_info}"
             }
             span {
-                class: "text-gray-300 break-all",
+                class: "text-gray-400 break-all",
                 "{trace.message}"
             }
         }

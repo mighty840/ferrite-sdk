@@ -3,21 +3,8 @@ name = "ferrite-dashboard"
 default_platform = "web"
 
 [web.app]
-title = "ferrite Dashboard"
+title = "Ferrite"
 
 [web.watcher]
 reload_html = true
 watch_path = ["src"]
-
-# Proxy API requests to ferrite-server during development
-[[web.proxy]]
-backend = "http://localhost:4000/auth"
-
-[[web.proxy]]
-backend = "http://localhost:4000/devices"
-
-[[web.proxy]]
-backend = "http://localhost:4000/ingest"
-
-[[web.proxy]]
-backend = "http://localhost:4000/health"

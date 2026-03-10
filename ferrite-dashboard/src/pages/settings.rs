@@ -6,17 +6,17 @@ pub fn SettingsPage() -> Element {
     let mut oidc_authority = use_signal(|| "https://auth.example.com".to_string());
     let mut oidc_client_id = use_signal(|| "ferrite-dashboard".to_string());
     let mut refresh_interval = use_signal(|| "5".to_string());
-    let mut dark_mode = use_signal(|| false);
+    let mut dark_mode = use_signal(|| true);
     let mut notifications = use_signal(|| true);
     let mut saved = use_signal(|| false);
 
     rsx! {
         div {
-            class: "max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-3xl mx-auto",
             div {
-                class: "mb-6",
+                class: "mb-6 animate-fade-in",
                 h1 {
-                    class: "text-2xl font-bold text-gray-900",
+                    class: "text-2xl font-semibold text-gray-100",
                     "Settings"
                 }
                 p {
@@ -27,45 +27,30 @@ pub fn SettingsPage() -> Element {
 
             if saved() {
                 div {
-                    class: "mb-6 rounded-lg bg-green-50 border border-green-200 p-4",
-                    div {
-                        class: "flex items-center",
-                        svg {
-                            class: "h-5 w-5 text-green-500 mr-3",
-                            fill: "none",
-                            view_box: "0 0 24 24",
-                            stroke: "currentColor",
-                            stroke_width: "2",
-                            path {
-                                stroke_linecap: "round",
-                                stroke_linejoin: "round",
-                                d: "M5 13l4 4L19 7"
-                            }
-                        }
-                        p {
-                            class: "text-sm text-green-700",
-                            "Settings saved successfully"
-                        }
+                    class: "mb-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3",
+                    p {
+                        class: "text-sm text-emerald-400 font-mono",
+                        "Settings saved"
                     }
                 }
             }
 
             // API Configuration
             div {
-                class: "bg-white rounded-lg shadow border border-gray-200 mb-6",
+                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
                 div {
-                    class: "px-6 py-4 border-b border-gray-200",
+                    class: "px-5 py-4 border-b border-surface-700",
                     h2 {
-                        class: "text-lg font-semibold text-gray-900",
+                        class: "text-sm font-medium text-gray-200",
                         "API Configuration"
                     }
                     p {
-                        class: "text-sm text-gray-500",
-                        "Configure the connection to the ferrite backend"
+                        class: "text-xs text-gray-500 mt-0.5",
+                        "Connection to the ferrite backend"
                     }
                 }
                 div {
-                    class: "px-6 py-4 space-y-4",
+                    class: "px-5 py-4 space-y-4",
                     SettingsField {
                         label: "API Base URL",
                         help: "The base URL of the ferrite REST API server",
@@ -74,11 +59,11 @@ pub fn SettingsPage() -> Element {
                     }
                     div {
                         label {
-                            class: "block text-sm font-medium text-gray-700 mb-1",
-                            "Refresh Interval (seconds)"
+                            class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
+                            "Refresh Interval"
                         }
                         select {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none bg-white",
+                            class: "w-full px-3 py-2.5 bg-surface-800 border border-surface-650 rounded-lg text-sm text-gray-200 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
                             value: "{refresh_interval}",
                             onchange: move |e| refresh_interval.set(e.value()),
                             option { value: "1", "1 second" }
@@ -88,8 +73,8 @@ pub fn SettingsPage() -> Element {
                             option { value: "60", "60 seconds" }
                         }
                         p {
-                            class: "mt-1 text-xs text-gray-500",
-                            "How often to poll for new data"
+                            class: "mt-1 text-[10px] text-gray-600 font-mono",
+                            "Polling interval for data refresh"
                         }
                     }
                 }
@@ -97,20 +82,20 @@ pub fn SettingsPage() -> Element {
 
             // Authentication
             div {
-                class: "bg-white rounded-lg shadow border border-gray-200 mb-6",
+                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
                 div {
-                    class: "px-6 py-4 border-b border-gray-200",
+                    class: "px-5 py-4 border-b border-surface-700",
                     h2 {
-                        class: "text-lg font-semibold text-gray-900",
+                        class: "text-sm font-medium text-gray-200",
                         "Authentication"
                     }
                     p {
-                        class: "text-sm text-gray-500",
-                        "OpenID Connect settings for secure authentication"
+                        class: "text-xs text-gray-500 mt-0.5",
+                        "OpenID Connect settings"
                     }
                 }
                 div {
-                    class: "px-6 py-4 space-y-4",
+                    class: "px-5 py-4 space-y-4",
                     SettingsField {
                         label: "OIDC Authority",
                         help: "The OIDC provider authority URL",
@@ -119,7 +104,7 @@ pub fn SettingsPage() -> Element {
                     }
                     SettingsField {
                         label: "Client ID",
-                        help: "The OIDC client identifier for this dashboard",
+                        help: "The OIDC client identifier",
                         value: oidc_client_id(),
                         on_change: move |e: Event<FormData>| oidc_client_id.set(e.value()),
                     }
@@ -128,16 +113,16 @@ pub fn SettingsPage() -> Element {
 
             // Preferences
             div {
-                class: "bg-white rounded-lg shadow border border-gray-200 mb-6",
+                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
                 div {
-                    class: "px-6 py-4 border-b border-gray-200",
+                    class: "px-5 py-4 border-b border-surface-700",
                     h2 {
-                        class: "text-lg font-semibold text-gray-900",
+                        class: "text-sm font-medium text-gray-200",
                         "Preferences"
                     }
                 }
                 div {
-                    class: "px-6 py-4 space-y-4",
+                    class: "px-5 py-4 space-y-4",
                     ToggleSetting {
                         label: "Dark Mode",
                         description: "Use dark theme for the dashboard",
@@ -146,18 +131,17 @@ pub fn SettingsPage() -> Element {
                     }
                     ToggleSetting {
                         label: "Notifications",
-                        description: "Show browser notifications for critical faults",
+                        description: "Browser notifications for critical faults",
                         enabled: notifications(),
                         on_toggle: move |_| notifications.set(!notifications()),
                     }
                 }
             }
 
-            // Save button
             div {
                 class: "flex justify-end",
                 button {
-                    class: "px-6 py-2 bg-ferrite-600 text-white rounded-lg hover:bg-ferrite-700 focus:ring-2 focus:ring-offset-2 focus:ring-ferrite-500 text-sm font-medium transition-colors duration-150",
+                    class: "px-6 py-2.5 bg-ferrite-600 text-white rounded-lg hover:bg-ferrite-500 focus:ring-2 focus:ring-ferrite-500/50 text-sm font-medium transition-all duration-150",
                     onclick: move |_| {
                         saved.set(true);
                     },
@@ -178,17 +162,17 @@ fn SettingsField(
     rsx! {
         div {
             label {
-                class: "block text-sm font-medium text-gray-700 mb-1",
+                class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
                 "{label}"
             }
             input {
-                class: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-ferrite-500 focus:border-ferrite-500 outline-none",
+                class: "w-full px-3 py-2.5 bg-surface-800 border border-surface-650 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all font-mono",
                 r#type: "text",
                 value: "{value}",
                 oninput: move |e| on_change.call(e),
             }
             p {
-                class: "mt-1 text-xs text-gray-500",
+                class: "mt-1 text-[10px] text-gray-600 font-mono",
                 "{help}"
             }
         }
@@ -205,7 +189,7 @@ fn ToggleSetting(
     let toggle_bg = if enabled {
         "bg-ferrite-600"
     } else {
-        "bg-gray-200"
+        "bg-surface-650"
     };
     let toggle_pos = if enabled {
         "translate-x-5"
@@ -218,7 +202,7 @@ fn ToggleSetting(
             class: "flex items-center justify-between py-2",
             div {
                 p {
-                    class: "text-sm font-medium text-gray-700",
+                    class: "text-sm font-medium text-gray-200",
                     "{label}"
                 }
                 p {

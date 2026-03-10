@@ -4,7 +4,6 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn MetricsPage() -> Element {
-    // Demo metric data
     let temperature: Vec<MetricEntry> = (0..30)
         .map(|i| MetricEntry {
             device_id: "dev-001".into(),
@@ -67,16 +66,16 @@ pub fn MetricsPage() -> Element {
 
     rsx! {
         div {
-            class: "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8",
+            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
             div {
-                class: "mb-6",
+                class: "mb-6 animate-fade-in",
                 h1 {
-                    class: "text-2xl font-bold text-gray-900",
+                    class: "text-2xl font-semibold text-gray-100",
                     "Metrics"
                 }
                 p {
                     class: "mt-1 text-sm text-gray-500",
-                    "Real-time metrics from all connected devices"
+                    "Real-time telemetry from connected devices"
                 }
             }
 
@@ -89,9 +88,9 @@ pub fn MetricsPage() -> Element {
                 QuickStat { label: "Data Points/min", value: "847", unit: "" }
             }
 
-            // Charts grid
+            // Charts
             div {
-                class: "grid grid-cols-1 lg:grid-cols-2 gap-6",
+                class: "grid grid-cols-1 lg:grid-cols-2 gap-4",
                 MetricChart {
                     title: "Temperature (Sensor A)".to_string(),
                     entries: temperature,
@@ -131,20 +130,19 @@ pub fn MetricsPage() -> Element {
 fn QuickStat(label: &'static str, value: &'static str, unit: &'static str) -> Element {
     rsx! {
         div {
-            class: "bg-white rounded-lg shadow border border-gray-200 p-4 text-center",
+            class: "bg-surface-900 rounded-xl border border-surface-700 p-4",
             p {
-                class: "text-xs font-medium text-gray-500 uppercase tracking-wide",
+                class: "text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2",
                 "{label}"
             }
-            p {
-                class: "mt-1",
+            div {
                 span {
-                    class: "text-2xl font-bold text-gray-900",
+                    class: "text-2xl font-mono font-bold text-gray-100",
                     "{value}"
                 }
                 if !unit.is_empty() {
                     span {
-                        class: "text-sm text-gray-500 ml-1",
+                        class: "text-xs text-gray-500 ml-1 font-mono",
                         "{unit}"
                     }
                 }
