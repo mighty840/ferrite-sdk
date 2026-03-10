@@ -1,3 +1,6 @@
+mod auth;
+mod auth_middleware;
+mod config;
 mod ingest;
 mod report;
 mod store;
@@ -9,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use config::AuthConfig;
 use store::Store;
 use symbolicate::Symbolicator;
 
@@ -54,16 +58,23 @@ pub struct AppState {
     pub store: Mutex<Store>,
     pub symbolicator: Mutex<Symbolicator>,
     pub elf_dir: PathBuf,
+    pub config: &'static AuthConfig,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
+    // Load .env file if present
+    let _ = dotenvy::dotenv();
+
     let cli = Cli::parse();
 
     // Ensure elf directory exists
     std::fs::create_dir_all(&cli.elf_dir)?;
+
+    // Load auth config from environment (leaked for 'static lifetime)
+    let config: &'static AuthConfig = Box::leak(Box::new(AuthConfig::from_env()));
 
     let store = Store::open(&cli.db)?;
     let symbolicator = Symbolicator::new(cli.addr2line.clone(), cli.elf_dir.clone());
@@ -72,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
         store: Mutex::new(store),
         symbolicator: Mutex::new(symbolicator),
         elf_dir: cli.elf_dir.clone(),
+        config,
     });
 
     match cli.command.unwrap_or(Command::Serve) {

@@ -1,9 +1,27 @@
+use crate::auth::AuthState;
 use crate::Route;
 use dioxus::prelude::*;
 
 #[component]
 pub fn Navbar() -> Element {
     let mut mobile_open = use_signal(|| false);
+    let auth_state = use_context::<Signal<AuthState>>();
+
+    let user_initial = match &auth_state() {
+        AuthState::Authenticated { user, .. } => user
+            .name
+            .chars()
+            .next()
+            .unwrap_or('U')
+            .to_uppercase()
+            .to_string(),
+        _ => "U".to_string(),
+    };
+
+    let user_name = match &auth_state() {
+        AuthState::Authenticated { user, .. } => user.name.clone(),
+        _ => "User".to_string(),
+    };
 
     rsx! {
         nav {
@@ -58,8 +76,46 @@ pub fn Navbar() -> Element {
                             }
                         }
                         div {
-                            class: "h-8 w-8 rounded-full bg-ferrite-500 flex items-center justify-center text-white text-sm font-medium",
-                            "U"
+                            class: "flex items-center space-x-3",
+                            div {
+                                class: "h-8 w-8 rounded-full bg-ferrite-500 flex items-center justify-center text-white text-sm font-medium",
+                                "{user_initial}"
+                            }
+                            span {
+                                class: "text-gray-300 text-sm",
+                                "{user_name}"
+                            }
+                            button {
+                                class: "text-gray-400 hover:text-white text-sm ml-2",
+                                title: "Sign out",
+                                onclick: move |_| {
+                                    // Clear session storage
+                                    if let Some(storage) = web_sys::window()
+                                        .and_then(|w| w.session_storage().ok())
+                                        .flatten()
+                                    {
+                                        let _ = storage.remove_item("ferrite_auth_token");
+                                        let _ = storage.remove_item("ferrite_auth_type");
+                                        let _ = storage.remove_item("ferrite_auth_user");
+                                    }
+                                    // Reload the page to reset state
+                                    if let Some(window) = web_sys::window() {
+                                        let _ = window.location().reload();
+                                    }
+                                },
+                                svg {
+                                    class: "h-5 w-5",
+                                    fill: "none",
+                                    view_box: "0 0 24 24",
+                                    stroke: "currentColor",
+                                    stroke_width: "2",
+                                    path {
+                                        stroke_linecap: "round",
+                                        stroke_linejoin: "round",
+                                        d: "M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                                    }
+                                }
+                            }
                         }
                     }
                     // Mobile menu button
