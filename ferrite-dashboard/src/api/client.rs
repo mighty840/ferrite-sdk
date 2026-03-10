@@ -1,9 +1,10 @@
 use super::types::*;
+use crate::auth::{AuthModeInfo, AuthToken};
 
 /// HTTP client for communicating with the ferrite backend API.
 pub struct ApiClient {
     base_url: String,
-    token: Option<String>,
+    token: Option<AuthToken>,
 }
 
 impl ApiClient {
@@ -14,14 +15,32 @@ impl ApiClient {
         }
     }
 
-    pub fn set_token(&mut self, token: String) {
+    pub fn set_token(&mut self, token: AuthToken) {
         self.token = Some(token);
     }
 
     fn auth_header(&self) -> Vec<(String, String)> {
         match &self.token {
-            Some(t) => vec![("Authorization".into(), format!("Bearer {}", t))],
+            Some(token) => vec![("Authorization".into(), token.header_value())],
             None => vec![],
+        }
+    }
+
+    /// Discover the server's authentication mode.
+    pub async fn get_auth_mode(&self) -> Result<AuthModeInfo, ApiError> {
+        let url = format!("{}/auth/mode", self.base_url);
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .json()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
+            code => Err(ApiError::Server(format!("HTTP {}", code))),
         }
     }
 

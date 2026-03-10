@@ -731,6 +731,10 @@ async fn list_device_metrics(
 // Router
 // ---------------------------------------------------------------------------
 
+async fn auth_mode(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    Json(state.config.mode_response())
+}
+
 pub fn router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -738,11 +742,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        .route("/auth/mode", get(auth_mode))
         .route("/ingest/chunks", post(ingest_chunks))
         .route("/ingest/elf", post(ingest_elf))
         .route("/devices", get(list_devices))
         .route("/devices/{id}/faults", get(list_device_faults))
         .route("/devices/{id}/metrics", get(list_device_metrics))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth_middleware::require_auth,
+        ))
         .layer(cors)
         .with_state(state)
 }
