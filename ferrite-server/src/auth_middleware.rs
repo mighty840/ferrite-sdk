@@ -6,7 +6,7 @@
 
 use axum::{
     extract::State,
-    http::{header, Request, StatusCode},
+    http::{header, Method, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -20,6 +20,11 @@ pub async fn require_auth(
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    // Let CORS preflight requests through — the CorsLayer handles them
+    if req.method() == Method::OPTIONS {
+        return next.run(req).await;
+    }
+
     let path = req.uri().path().to_string();
 
     // Auth discovery and health endpoints are always public
