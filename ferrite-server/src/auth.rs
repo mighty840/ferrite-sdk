@@ -10,7 +10,9 @@ use crate::config::{AuthConfig, AuthMode, BasicAuthConfig, KeycloakConfig};
 // ---------------------------------------------------------------------------
 
 /// Claims extracted from a validated token or basic auth credentials.
+/// Fields are read by downstream extractors (e.g. route handlers pulling from request extensions).
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct UserClaims {
     pub sub: String,
     pub email: Option<String>,

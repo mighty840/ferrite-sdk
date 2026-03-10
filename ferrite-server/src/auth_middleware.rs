@@ -50,14 +50,14 @@ pub async fn require_auth(
 
     // All other routes require user authentication
     let auth_header = auth::extract_auth_header(req.headers());
-    match auth::validate_request(auth_header, &state.config).await {
+    match auth::validate_request(auth_header, state.config).await {
         Ok(claims) => {
             let mut req = req;
             req.extensions_mut().insert(claims);
             next.run(req).await
         }
         Err(_) => {
-            let www_auth = auth::AuthError::www_authenticate_header(&state.config);
+            let www_auth = auth::AuthError::www_authenticate_header(state.config);
             (
                 StatusCode::UNAUTHORIZED,
                 [(header::WWW_AUTHENTICATE, www_auth)],
