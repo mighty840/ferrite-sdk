@@ -86,6 +86,10 @@ async fn main() -> anyhow::Result<()> {
         config,
     });
 
+    if config.ingest_api_key.is_none() {
+        tracing::warn!("INGEST_API_KEY is not set — ingest endpoints are publicly accessible");
+    }
+
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => {
             tracing::info!("Starting ferrite-server on {}", cli.http);
