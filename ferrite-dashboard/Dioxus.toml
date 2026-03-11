@@ -8,3 +8,21 @@ title = "Ferrite"
 [web.watcher]
 reload_html = true
 watch_path = ["src"]
+
+[[web.proxy]]
+backend = "http://localhost:4000/auth"
+
+[[web.proxy]]
+backend = "http://localhost:4000/devices"
+
+[[web.proxy]]
+backend = "http://localhost:4000/ingest"
+
+[[web.proxy]]
+backend = "http://localhost:4000/health"
+
+[[web.proxy]]
+backend = "http://localhost:4000/faults"
+
+[[web.proxy]]
+backend = "http://localhost:4000/metrics"

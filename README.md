@@ -80,6 +80,7 @@ async fn upload(transport: MyUart) -> ! {
 | Target | Architecture | Example |
 |--------|-------------|---------|
 | nRF52840 | Cortex-M4F | `examples/embassy-nrf52840` |
+| STM32L4 | Cortex-M4F | [Embassy](https://github.com/mighty840/ferrite-nucleo-l4a6zg), [bare-metal](https://github.com/mighty840/ferrite-nucleo-l4a6zg-baremetal), [RTIC](https://github.com/mighty840/ferrite-nucleo-l4a6zg-rtic) |
 | STM32F4 | Cortex-M4F | Linker script included |
 | RP2040 | Cortex-M0+ | Linker script included |
 
@@ -123,7 +124,7 @@ Full documentation is available at the [VitePress docs site](https://mighty840.g
 - [Binary chunk wire format](docs/reference/chunk-format.md)
 - [C FFI API reference](docs/reference/c-api.md)
 - [Integration guides](docs/integrations/) (Embassy, RTIC, bare-metal, Zephyr, FreeRTOS)
-- [Target platform setup](docs/targets/) (nRF52840, RP2040, STM32F4)
+- [Target platform setup](docs/targets/) (nRF52840, RP2040, STM32F4, STM32L4)
 
 ## License
 

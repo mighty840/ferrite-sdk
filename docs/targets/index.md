@@ -9,6 +9,7 @@ ferrite-sdk supports ARM Cortex-M3, M4, and M4F processors. Each target needs a 
 | [nRF52840](./nrf52840) | `thumbv7em-none-eabihf` | `linker/nrf52840-retained.x` |
 | [RP2040](./rp2040) | `thumbv6m-none-eabi` | `linker/rp2040-retained.x` |
 | [STM32F4](./stm32f4) | `thumbv7em-none-eabihf` | `linker/stm32f4-retained.x` |
+| [STM32L4](./stm32l4) | `thumbv7em-none-eabihf` | `linker/stm32l4-retained.x` |
 
 ## Porting to a new target
 
