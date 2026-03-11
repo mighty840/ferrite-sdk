@@ -52,7 +52,10 @@ impl Device {
             .map(|s| {
                 // Try JSON array first, then comma-separated
                 serde_json::from_str::<Vec<String>>(s).unwrap_or_else(|_| {
-                    s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+                    s.split(',')
+                        .map(|t| t.trim().to_string())
+                        .filter(|t| !t.is_empty())
+                        .collect()
                 })
             })
             .unwrap_or_default()

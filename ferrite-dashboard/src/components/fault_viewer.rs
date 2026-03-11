@@ -5,9 +5,24 @@ use dioxus::prelude::*;
 pub fn FaultViewer(fault: FaultEvent) -> Element {
     let type_name = fault.fault_type_name();
     let (severity_bg, severity_text, severity_border, severity_dot) = match fault.fault_type {
-        0 => ("bg-red-500/5", "text-red-400", "border-red-500/20", "bg-red-500"),
-        1 | 2 => ("bg-amber-500/5", "text-amber-400", "border-amber-500/20", "bg-amber-500"),
-        _ => ("bg-blue-500/5", "text-blue-400", "border-blue-500/20", "bg-blue-500"),
+        0 => (
+            "bg-red-500/5",
+            "text-red-400",
+            "border-red-500/20",
+            "bg-red-500",
+        ),
+        1 | 2 => (
+            "bg-amber-500/5",
+            "text-amber-400",
+            "border-amber-500/20",
+            "bg-amber-500",
+        ),
+        _ => (
+            "bg-blue-500/5",
+            "text-blue-400",
+            "border-blue-500/20",
+            "bg-blue-500",
+        ),
     };
 
     let pc_hex = format!("0x{:08X}", fault.pc);

@@ -40,9 +40,18 @@ pub fn DashboardPage() -> Element {
         _ => Vec::new(),
     };
 
-    let online_count = devices.iter().filter(|d| d.status_str() == "online").count();
-    let provisioned_count = devices.iter().filter(|d| d.status_str() == "provisioned").count();
-    let _offline_count = devices.iter().filter(|d| d.status_str() == "offline").count();
+    let online_count = devices
+        .iter()
+        .filter(|d| d.status_str() == "online")
+        .count();
+    let provisioned_count = devices
+        .iter()
+        .filter(|d| d.status_str() == "provisioned")
+        .count();
+    let _offline_count = devices
+        .iter()
+        .filter(|d| d.status_str() == "offline")
+        .count();
     let total_count = devices.len();
     let fault_count = faults.len();
 
@@ -188,10 +197,10 @@ fn StatCard(
 #[component]
 fn FaultRow(fault: FaultEvent) -> Element {
     let color = match fault.fault_type {
-        0 => "bg-red-500",     // HardFault
-        1 => "bg-amber-500",   // MemManage
-        2 => "bg-orange-500",  // BusFault
-        _ => "bg-yellow-500",  // UsageFault
+        0 => "bg-red-500",    // HardFault
+        1 => "bg-amber-500",  // MemManage
+        2 => "bg-orange-500", // BusFault
+        _ => "bg-yellow-500", // UsageFault
     };
     let type_name = fault.fault_type_name();
     let symbol_display = fault.symbol.as_deref().unwrap_or("unknown");

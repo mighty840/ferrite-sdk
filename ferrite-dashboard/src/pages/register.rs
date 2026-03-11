@@ -38,7 +38,10 @@ pub fn RegisterPage() -> Element {
 
             match client.register_device(&key, name_opt, tags_opt).await {
                 Ok(dev) => {
-                    status_msg.set(Some((true, format!("Registered device: {}", dev.display_name()))));
+                    status_msg.set(Some((
+                        true,
+                        format!("Registered device: {}", dev.display_name()),
+                    )));
                     key_input.set(String::new());
                     name_input.set(String::new());
                     tags_input.set(String::new());

@@ -30,9 +30,15 @@ pub fn DevicesPage() -> Element {
                 .iter()
                 .filter(|d| {
                     let matches_search = search().is_empty()
-                        || d.display_name().to_lowercase().contains(&search().to_lowercase())
-                        || d.device_id.to_lowercase().contains(&search().to_lowercase())
-                        || d.key_display().to_lowercase().contains(&search().to_lowercase());
+                        || d.display_name()
+                            .to_lowercase()
+                            .contains(&search().to_lowercase())
+                        || d.device_id
+                            .to_lowercase()
+                            .contains(&search().to_lowercase())
+                        || d.key_display()
+                            .to_lowercase()
+                            .contains(&search().to_lowercase());
                     let matches_status = match status_filter().as_str() {
                         "online" => d.status_str() == "online",
                         "offline" => d.status_str() == "offline",
