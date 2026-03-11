@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 /// ELF symbolication via `arm-none-eabi-addr2line`.
 pub struct Symbolicator {
@@ -119,6 +119,7 @@ pub struct FaultSymbols {
 pub enum SymbolicateError {
     IoError(std::io::Error),
     JoinError(String),
+    Timeout,
 }
 
 impl std::fmt::Display for SymbolicateError {
@@ -126,6 +127,7 @@ impl std::fmt::Display for SymbolicateError {
         match self {
             Self::IoError(e) => write!(f, "I/O error: {e}"),
             Self::JoinError(e) => write!(f, "join error: {e}"),
+            Self::Timeout => write!(f, "addr2line timed out after 10s"),
         }
     }
 }
@@ -149,26 +151,44 @@ fn which_addr2line() -> Option<PathBuf> {
 }
 
 /// Shell out to addr2line and parse the result.
+/// Kills the subprocess if it does not complete within 10 seconds.
 fn run_addr2line(
     addr2line: &std::path::Path,
     elf_path: &std::path::Path,
     addr: &str,
 ) -> Result<Option<String>, SymbolicateError> {
-    let output = Command::new(addr2line)
+    let mut child = Command::new(addr2line)
         .args(["-e", &elf_path.to_string_lossy(), "-f", "-C", "-p", addr])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(SymbolicateError::IoError)?;
 
-    if !output.status.success() {
-        return Ok(None);
+    let timeout = std::time::Duration::from_secs(10);
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait().map_err(SymbolicateError::IoError)? {
+            Some(_status) => {
+                let output = child.wait_with_output().map_err(SymbolicateError::IoError)?;
+
+                if !output.status.success() {
+                    return Ok(None);
+                }
+
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+                // addr2line returns "?? ??:0" or similar when it can't resolve.
+                if stdout.is_empty() || stdout.starts_with("?? ") || stdout.contains("??:0") {
+                    return Ok(None);
+                }
+
+                return Ok(Some(stdout));
+            }
+            None if start.elapsed() > timeout => {
+                let _ = child.kill();
+                return Err(SymbolicateError::Timeout);
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
     }
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // addr2line returns "?? ??:0" or similar when it can't resolve.
-    if stdout.is_empty() || stdout.starts_with("?? ") || stdout.contains("??:0") {
-        return Ok(None);
-    }
-
-    Ok(Some(stdout))
 }
