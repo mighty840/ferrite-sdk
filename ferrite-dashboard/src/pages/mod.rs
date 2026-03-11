@@ -1,3 +1,4 @@
+pub mod callback;
 pub mod dashboard;
 pub mod device_detail;
 pub mod devices;
@@ -7,6 +8,7 @@ pub mod metrics;
 pub mod register;
 pub mod settings;
 
+pub use callback::CallbackPage;
 pub use dashboard::DashboardPage;
 pub use device_detail::DeviceDetailPage;
 pub use devices::DevicesPage;

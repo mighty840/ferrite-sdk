@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::auth::{AuthModeInfo, AuthState, AuthToken, UserInfo};
+use crate::auth::{AuthModeInfo, AuthState, AuthToken, OidcClient, UserInfo};
 
 /// Login page that adapts to the server's auth mode.
 #[component]
@@ -11,7 +11,7 @@ pub fn LoginPage(auth_state: Signal<AuthState>, auth_mode: AuthModeInfo) -> Elem
     }
 }
 
-/// Keycloak OIDC login — redirects to Keycloak authorization endpoint.
+/// Keycloak OIDC login — uses OidcClient PKCE flow to redirect to Keycloak.
 #[component]
 fn KeycloakLogin(auth_mode: AuthModeInfo) -> Element {
     let authority = auth_mode.authority.clone().unwrap_or_default();
@@ -50,18 +50,26 @@ fn KeycloakLogin(auth_mode: AuthModeInfo) -> Element {
                     button {
                         class: "w-full flex justify-center items-center py-2.5 px-4 rounded-lg text-sm font-medium text-white bg-ferrite-600 hover:bg-ferrite-500 focus:outline-none focus:ring-2 focus:ring-ferrite-500/50 transition-all duration-150",
                         onclick: move |_| {
-                            let auth_url = format!(
-                                "{}/protocol/openid-connect/auth?response_type=code&client_id={}&redirect_uri={}&scope=openid%20profile%20email",
-                                authority,
-                                client_id,
-                                web_sys::window()
+                            let authority = authority.clone();
+                            let client_id = client_id.clone();
+                            spawn(async move {
+                                // Store OIDC config for the callback page
+                                if let Some(storage) = web_sys::window()
+                                    .and_then(|w| w.session_storage().ok())
+                                    .flatten()
+                                {
+                                    let _ = storage.set_item("ferrite_oidc_client_id", &client_id);
+                                    let _ = storage.set_item("ferrite_oidc_authority", &authority);
+                                }
+
+                                let redirect_uri = web_sys::window()
                                     .and_then(|w| w.location().origin().ok())
                                     .unwrap_or_default()
-                                    + "/callback"
-                            );
-                            if let Some(window) = web_sys::window() {
-                                let _ = window.location().set_href(&auth_url);
-                            }
+                                    + "/callback";
+
+                                let mut oidc = OidcClient::new(&client_id, &authority, &redirect_uri);
+                                oidc.start_login().await;
+                            });
                         },
                         "Sign in with SSO"
                     }
