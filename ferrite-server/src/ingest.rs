@@ -785,7 +785,10 @@ async fn register_device(
     ) {
         Ok(_) => {
             let device = store.get_device_by_key(key).unwrap();
-            (StatusCode::OK, Json(serde_json::json!({ "device": device })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "device": device })),
+            )
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -854,7 +857,10 @@ async fn update_device_handler(
     match store.update_device(key, req.name.as_deref(), req.tags.as_deref()) {
         Ok(true) => {
             let device = store.get_device_by_key(key).unwrap();
-            (StatusCode::OK, Json(serde_json::json!({ "device": device })))
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "device": device })),
+            )
         }
         Ok(false) => (
             StatusCode::NOT_FOUND,

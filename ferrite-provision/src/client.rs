@@ -67,10 +67,7 @@ impl ServerClient {
         Ok(body)
     }
 
-    pub fn register_devices_bulk(
-        &self,
-        devices: &[BulkEntry],
-    ) -> Result<BulkRegisterResponse> {
+    pub fn register_devices_bulk(&self, devices: &[BulkEntry]) -> Result<BulkRegisterResponse> {
         let url = format!("{}/devices/register/bulk", self.base_url);
         let reqs: Vec<RegisterRequest> = devices
             .iter()

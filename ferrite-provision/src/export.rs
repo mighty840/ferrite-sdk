@@ -3,7 +3,12 @@ use anyhow::{Context, Result};
 use std::path::Path;
 
 /// Export a single provisioning record to CSV (append mode).
-pub fn append_csv(path: &Path, device_key: u32, name: Option<&str>, tags: Option<&str>) -> Result<()> {
+pub fn append_csv(
+    path: &Path,
+    device_key: u32,
+    name: Option<&str>,
+    tags: Option<&str>,
+) -> Result<()> {
     let exists = path.exists();
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -44,9 +49,27 @@ pub fn import_csv(path: &Path) -> Result<Vec<BulkEntry>> {
         }
         entries.push(BulkEntry {
             device_key,
-            name: record.get(1).and_then(|s| if s.is_empty() { None } else { Some(s.to_string()) }),
-            tags: record.get(2).and_then(|s| if s.is_empty() { None } else { Some(s.to_string()) }),
-            provisioned_by: record.get(3).and_then(|s| if s.is_empty() { None } else { Some(s.to_string()) }),
+            name: record.get(1).and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            }),
+            tags: record.get(2).and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            }),
+            provisioned_by: record.get(3).and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            }),
         });
     }
     Ok(entries)

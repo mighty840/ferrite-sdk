@@ -131,17 +131,10 @@ fn main() -> Result<()> {
 
             // Optionally register with server
             if let Some(server_url) = &server {
-                let srv = client::ServerClient::new(
-                    server_url,
-                    user.as_deref(),
-                    password.as_deref(),
-                );
-                let resp = srv.register_device(
-                    key,
-                    name.as_deref(),
-                    tags.as_deref(),
-                    user.as_deref(),
-                )?;
+                let srv =
+                    client::ServerClient::new(server_url, user.as_deref(), password.as_deref());
+                let resp =
+                    srv.register_device(key, name.as_deref(), tags.as_deref(), user.as_deref())?;
                 if let Some(err) = resp.error {
                     eprintln!("Server error: {err}");
                 } else {
