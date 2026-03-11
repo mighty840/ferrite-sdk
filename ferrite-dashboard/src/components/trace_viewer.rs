@@ -49,7 +49,6 @@ fn trace_line(trace: &TraceEntry) -> Element {
         _ => "text-gray-500",
     };
 
-    let timestamp = trace.timestamp.format("%H:%M:%S%.3f").to_string();
     let span_info = trace
         .span_id
         .as_ref()
@@ -61,7 +60,7 @@ fn trace_line(trace: &TraceEntry) -> Element {
             class: "px-4 py-1.5 hover:bg-surface-900 border-b border-surface-900/50 flex items-start",
             span {
                 class: "text-gray-600 mr-3 flex-shrink-0 w-24 tabular-nums",
-                "{timestamp}"
+                "{trace.timestamp}"
             }
             span {
                 class: "{level_color} mr-3 flex-shrink-0 w-12 uppercase font-bold",

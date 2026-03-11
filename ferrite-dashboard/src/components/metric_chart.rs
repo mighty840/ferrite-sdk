@@ -1,11 +1,30 @@
-use crate::api::types::MetricEntry;
+use crate::api::types::MetricRow;
 use dioxus::prelude::*;
 
 #[component]
-pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<String>) -> Element {
+pub fn MetricChart(title: String, entries: Vec<MetricRow>, color: Option<String>) -> Element {
     let stroke = color.unwrap_or_else(|| "#f97316".to_string());
 
-    let (path_d, area_d, min_val, max_val) = if entries.is_empty() {
+    // Try to extract numeric values from value_json
+    let values: Vec<f64> = entries
+        .iter()
+        .filter_map(|e| {
+            // Try to parse various json formats: {"counter":42}, {"gauge":3.14}, etc.
+            serde_json::from_str::<serde_json::Value>(&e.value_json)
+                .ok()
+                .and_then(|v| {
+                    if let Some(n) = v.as_f64() {
+                        Some(n)
+                    } else if let Some(obj) = v.as_object() {
+                        obj.values().next().and_then(|v| v.as_f64())
+                    } else {
+                        None
+                    }
+                })
+        })
+        .collect();
+
+    let (path_d, area_d, min_val, max_val) = if values.is_empty() {
         (
             "M 0 50 L 300 50".to_string(),
             "M 0 50 L 300 50 L 300 80 L 0 80 Z".to_string(),
@@ -13,7 +32,6 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
             100.0,
         )
     } else {
-        let values: Vec<f64> = entries.iter().map(|e| e.value).collect();
         let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
         let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = if (max - min).abs() < 0.001 {
@@ -50,7 +68,6 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
             .collect::<Vec<_>>()
             .join(" ");
 
-        // Area path: line path + close to bottom
         let area = format!(
             "{} L {:.1} {:.1} L 0 {:.1} Z",
             line_d,
@@ -62,10 +79,9 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
         (line_d, area, min, max)
     };
 
-    let unit = entries.first().map(|e| e.unit.clone()).unwrap_or_default();
-    let latest_value = entries
+    let latest_value = values
         .last()
-        .map(|e| format!("{:.1}", e.value))
+        .map(|v| format!("{:.1}", v))
         .unwrap_or_else(|| "--".to_string());
 
     // Generate unique gradient ID from title
@@ -87,17 +103,12 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
                         class: "text-xl font-mono font-bold text-gray-100",
                         "{latest_value}"
                     }
-                    span {
-                        class: "text-xs text-gray-500 ml-1 font-mono",
-                        "{unit}"
-                    }
                 }
             }
             svg {
                 class: "w-full",
                 view_box: "0 0 300 80",
                 preserve_aspect_ratio: "none",
-                // Gradient definition
                 defs {
                     linearGradient {
                         id: "{grad_id}",
@@ -109,16 +120,13 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
                         stop { offset: "100%", stop_color: "{stroke}", stop_opacity: "0.0" }
                     }
                 }
-                // Grid lines
                 line { x1: "0", y1: "20", x2: "300", y2: "20", stroke: "#1e222e", stroke_width: "0.5" }
                 line { x1: "0", y1: "40", x2: "300", y2: "40", stroke: "#1e222e", stroke_width: "0.5" }
                 line { x1: "0", y1: "60", x2: "300", y2: "60", stroke: "#1e222e", stroke_width: "0.5" }
-                // Area fill
                 path {
                     d: "{area_d}",
                     fill: "{grad_url}",
                 }
-                // Data line
                 path {
                     d: "{path_d}",
                     fill: "none",
@@ -130,8 +138,8 @@ pub fn MetricChart(title: String, entries: Vec<MetricEntry>, color: Option<Strin
             }
             div {
                 class: "flex justify-between text-[10px] text-gray-600 mt-1 font-mono",
-                span { "{min_val:.1} {unit}" }
-                span { "{max_val:.1} {unit}" }
+                span { "{min_val:.1}" }
+                span { "{max_val:.1}" }
             }
         }
     }

@@ -11,6 +11,12 @@ pub struct Device {
     pub build_id: u64,
     pub first_seen: String,
     pub last_seen: String,
+    pub device_key: Option<i64>,
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub tags: Option<String>,
+    pub provisioned_by: Option<String>,
+    pub provisioned_at: Option<String>,
 }
 
 /// A stored fault event.
@@ -69,6 +75,7 @@ impl Store {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.create_tables()?;
+        store.migrate();
         Ok(store)
     }
 
@@ -79,6 +86,7 @@ impl Store {
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let store = Self { conn };
         store.create_tables()?;
+        store.migrate();
         Ok(store)
     }
 
@@ -138,6 +146,26 @@ impl Store {
         Ok(())
     }
 
+    /// Run idempotent migrations (ALTER TABLE ADD COLUMN, ignoring errors for existing columns).
+    fn migrate(&self) {
+        let columns = [
+            "ALTER TABLE devices ADD COLUMN device_key INTEGER",
+            "ALTER TABLE devices ADD COLUMN name TEXT",
+            "ALTER TABLE devices ADD COLUMN status TEXT DEFAULT 'unknown'",
+            "ALTER TABLE devices ADD COLUMN tags TEXT",
+            "ALTER TABLE devices ADD COLUMN provisioned_by TEXT",
+            "ALTER TABLE devices ADD COLUMN provisioned_at TEXT",
+        ];
+        for sql in &columns {
+            let _ = self.conn.execute(sql, []);
+        }
+        // Index on device_key for lookups
+        let _ = self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_key ON devices(device_key)",
+            [],
+        );
+    }
+
     // ---- Device CRUD ----
 
     /// Upsert a device by device_id. Returns the row id.
@@ -181,43 +209,134 @@ impl Store {
         Ok(rowid)
     }
 
+    const DEVICE_COLUMNS: &str =
+        "id, device_id, firmware_version, build_id, first_seen, last_seen, device_key, name, status, tags, provisioned_by, provisioned_at";
+
+    fn device_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Device> {
+        Ok(Device {
+            id: row.get(0)?,
+            device_id: row.get(1)?,
+            firmware_version: row.get(2)?,
+            build_id: row.get::<_, i64>(3)? as u64,
+            first_seen: row.get(4)?,
+            last_seen: row.get(5)?,
+            device_key: row.get(6)?,
+            name: row.get(7)?,
+            status: row.get(8)?,
+            tags: row.get(9)?,
+            provisioned_by: row.get(10)?,
+            provisioned_at: row.get(11)?,
+        })
+    }
+
     pub fn list_devices(&self) -> SqlResult<Vec<Device>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, device_id, firmware_version, build_id, first_seen, last_seen
-             FROM devices ORDER BY last_seen DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(Device {
-                id: row.get(0)?,
-                device_id: row.get(1)?,
-                firmware_version: row.get(2)?,
-                build_id: row.get::<_, i64>(3)? as u64,
-                first_seen: row.get(4)?,
-                last_seen: row.get(5)?,
-            })
-        })?;
+        let sql = format!(
+            "SELECT {} FROM devices ORDER BY last_seen DESC",
+            Self::DEVICE_COLUMNS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map([], Self::device_from_row)?;
         rows.collect()
     }
 
     pub fn get_device_by_id(&self, device_id: &str) -> SqlResult<Option<Device>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, device_id, firmware_version, build_id, first_seen, last_seen
-             FROM devices WHERE device_id = ?1",
-        )?;
-        let mut rows = stmt.query_map(params![device_id], |row| {
-            Ok(Device {
-                id: row.get(0)?,
-                device_id: row.get(1)?,
-                firmware_version: row.get(2)?,
-                build_id: row.get::<_, i64>(3)? as u64,
-                first_seen: row.get(4)?,
-                last_seen: row.get(5)?,
-            })
-        })?;
+        let sql = format!(
+            "SELECT {} FROM devices WHERE device_id = ?1",
+            Self::DEVICE_COLUMNS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query_map(params![device_id], Self::device_from_row)?;
         match rows.next() {
             Some(r) => Ok(Some(r?)),
             None => Ok(None),
         }
+    }
+
+    pub fn get_device_by_key(&self, device_key: i64) -> SqlResult<Option<Device>> {
+        let sql = format!(
+            "SELECT {} FROM devices WHERE device_key = ?1",
+            Self::DEVICE_COLUMNS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query_map(params![device_key], Self::device_from_row)?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Register a new device by device_key. Returns the row id.
+    pub fn register_device(
+        &self,
+        device_key: i64,
+        name: Option<&str>,
+        tags: Option<&str>,
+        provisioned_by: Option<&str>,
+    ) -> SqlResult<i64> {
+        let hex_id = format!("{:08X}", device_key as u32);
+        self.conn.execute(
+            "INSERT INTO devices (device_id, device_key, name, tags, provisioned_by, provisioned_at, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), 'provisioned')
+             ON CONFLICT(device_id) DO UPDATE SET
+                device_key = excluded.device_key,
+                name = COALESCE(excluded.name, devices.name),
+                tags = COALESCE(excluded.tags, devices.tags),
+                provisioned_by = COALESCE(excluded.provisioned_by, devices.provisioned_by),
+                provisioned_at = COALESCE(excluded.provisioned_at, devices.provisioned_at),
+                status = COALESCE(excluded.status, devices.status),
+                last_seen = datetime('now')",
+            params![hex_id, device_key, name, tags, provisioned_by],
+        )?;
+        let rowid = self.conn.query_row(
+            "SELECT id FROM devices WHERE device_id = ?1",
+            params![hex_id],
+            |row| row.get(0),
+        )?;
+        Ok(rowid)
+    }
+
+    /// Update a device's mutable fields by device_key.
+    pub fn update_device(
+        &self,
+        device_key: i64,
+        name: Option<&str>,
+        tags: Option<&str>,
+    ) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE devices SET
+                name = COALESCE(?2, name),
+                tags = COALESCE(?3, tags),
+                last_seen = datetime('now')
+             WHERE device_key = ?1",
+            params![device_key, name, tags],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Delete a device by device_key.
+    pub fn delete_device(&self, device_key: i64) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "DELETE FROM devices WHERE device_key = ?1",
+            params![device_key],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Touch a device by device_key and update its status.
+    pub fn touch_device_by_key(&self, device_key: i64, status: &str) -> SqlResult<Option<i64>> {
+        let changed = self.conn.execute(
+            "UPDATE devices SET status = ?2, last_seen = datetime('now') WHERE device_key = ?1",
+            params![device_key, status],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        let rowid = self.conn.query_row(
+            "SELECT id FROM devices WHERE device_key = ?1",
+            params![device_key],
+            |row| row.get(0),
+        )?;
+        Ok(Some(rowid))
     }
 
     // ---- Fault events ----

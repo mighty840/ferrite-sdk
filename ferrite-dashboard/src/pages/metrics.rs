@@ -1,125 +1,98 @@
-use crate::api::types::MetricEntry;
-use crate::components::MetricChart;
+use crate::auth::AuthState;
+use crate::components::{ErrorDisplay, Loading};
 use dioxus::prelude::*;
 
 #[component]
 pub fn MetricsPage() -> Element {
-    let temperature: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-001".into(),
-            metric_name: "temperature".into(),
-            value: 22.0 + (i as f64 * 0.3).sin() * 5.0 + (i as f64 * 0.1),
-            unit: "C".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
+    let auth_state = use_context::<Signal<AuthState>>();
 
-    let humidity: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-001".into(),
-            metric_name: "humidity".into(),
-            value: 55.0 + (i as f64 * 0.5).cos() * 15.0,
-            unit: "%".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
+    let metrics_resource = use_resource(move || async move {
+        let api_url = web_sys::window()
+            .and_then(|w| w.location().origin().ok())
+            .unwrap_or_else(|| "http://localhost:4000".into());
+        let mut client = crate::api::ApiClient::new(&api_url);
+        if let AuthState::Authenticated { ref token, .. } = auth_state() {
+            client.set_token(token.clone());
+        }
+        client.list_all_metrics().await
+    });
 
-    let pressure: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-004".into(),
-            metric_name: "pressure".into(),
-            value: 1013.0 + (i as f64 * 0.2).sin() * 8.0,
-            unit: "hPa".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
+    let binding = metrics_resource.read();
+    match &*binding {
+        None => rsx! { Loading {} },
+        Some(Err(e)) => rsx! { ErrorDisplay { message: e.to_string() } },
+        Some(Ok(metrics)) => {
+            let total = metrics.len();
+            // Group by key
+            let mut keys: Vec<String> = metrics.iter().map(|m| m.key.clone()).collect();
+            keys.sort();
+            keys.dedup();
 
-    let vibration: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-002".into(),
-            metric_name: "vibration".into(),
-            value: 0.5 + (i as f64 * 0.8).sin().abs() * 2.0,
-            unit: "g".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
+            rsx! {
+                div {
+                    class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
+                    div {
+                        class: "mb-6 animate-fade-in",
+                        h1 {
+                            class: "text-2xl font-semibold text-gray-100",
+                            "Metrics"
+                        }
+                        p {
+                            class: "mt-1 text-sm text-gray-500",
+                            "Telemetry data from connected devices"
+                        }
+                    }
 
-    let cpu_usage: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-003".into(),
-            metric_name: "cpu_usage".into(),
-            value: 35.0 + (i as f64 * 0.4).sin() * 20.0,
-            unit: "%".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
+                    // Quick stats
+                    div {
+                        class: "grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8",
+                        QuickStat { label: "Total Data Points", value: total.to_string() }
+                        QuickStat { label: "Unique Keys", value: keys.len().to_string() }
+                    }
 
-    let memory: Vec<MetricEntry> = (0..30)
-        .map(|i| MetricEntry {
-            device_id: "dev-003".into(),
-            metric_name: "memory".into(),
-            value: 128.0 + i as f64 * 2.5,
-            unit: "KB".into(),
-            timestamp: chrono::Utc::now(),
-        })
-        .collect();
-
-    rsx! {
-        div {
-            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
-            div {
-                class: "mb-6 animate-fade-in",
-                h1 {
-                    class: "text-2xl font-semibold text-gray-100",
-                    "Metrics"
-                }
-                p {
-                    class: "mt-1 text-sm text-gray-500",
-                    "Real-time telemetry from connected devices"
-                }
-            }
-
-            // Quick stats
-            div {
-                class: "grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8",
-                QuickStat { label: "Avg Temperature", value: "24.3", unit: "C" }
-                QuickStat { label: "Avg Humidity", value: "58.2", unit: "%" }
-                QuickStat { label: "Active Streams", value: "12", unit: "" }
-                QuickStat { label: "Data Points/min", value: "847", unit: "" }
-            }
-
-            // Charts
-            div {
-                class: "grid grid-cols-1 lg:grid-cols-2 gap-4",
-                MetricChart {
-                    title: "Temperature (Sensor A)".to_string(),
-                    entries: temperature,
-                    color: Some("#ef4444".to_string()),
-                }
-                MetricChart {
-                    title: "Humidity (Sensor A)".to_string(),
-                    entries: humidity,
-                    color: Some("#3b82f6".to_string()),
-                }
-                MetricChart {
-                    title: "Pressure (Sensor D)".to_string(),
-                    entries: pressure,
-                    color: Some("#8b5cf6".to_string()),
-                }
-                MetricChart {
-                    title: "Vibration (Motor B)".to_string(),
-                    entries: vibration,
-                    color: Some("#f59e0b".to_string()),
-                }
-                MetricChart {
-                    title: "CPU Usage (Gateway C)".to_string(),
-                    entries: cpu_usage,
-                    color: Some("#10b981".to_string()),
-                }
-                MetricChart {
-                    title: "Memory (Gateway C)".to_string(),
-                    entries: memory,
-                    color: Some("#ec4899".to_string()),
+                    if metrics.is_empty() {
+                        div {
+                            class: "bg-surface-900 rounded-xl border border-surface-700 p-12 text-center",
+                            p {
+                                class: "text-gray-500 text-sm",
+                                "No metrics recorded yet"
+                            }
+                        }
+                    } else {
+                        // Metric table
+                        div {
+                            class: "bg-surface-900 rounded-xl border border-surface-700 overflow-hidden",
+                            div {
+                                class: "overflow-x-auto",
+                                table {
+                                    class: "w-full text-sm",
+                                    thead {
+                                        class: "bg-surface-850 border-b border-surface-700",
+                                        tr {
+                                            th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Device" }
+                                            th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Key" }
+                                            th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Value" }
+                                            th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Ticks" }
+                                            th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Time" }
+                                        }
+                                    }
+                                    tbody {
+                                        class: "divide-y divide-surface-750",
+                                        for metric in metrics.iter().take(100) {
+                                            tr {
+                                                class: "hover:bg-surface-850 transition-colors",
+                                                td { class: "px-4 py-3 text-gray-400 font-mono", "{metric.device_id}" }
+                                                td { class: "px-4 py-3 text-gray-200 font-mono", "{metric.key}" }
+                                                td { class: "px-4 py-3 text-gray-300 font-mono text-xs", "{metric.value_json}" }
+                                                td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{metric.timestamp_ticks}" }
+                                                td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{metric.created_at}" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -127,7 +100,7 @@ pub fn MetricsPage() -> Element {
 }
 
 #[component]
-fn QuickStat(label: &'static str, value: &'static str, unit: &'static str) -> Element {
+fn QuickStat(label: String, value: String) -> Element {
     rsx! {
         div {
             class: "bg-surface-900 rounded-xl border border-surface-700 p-4",
@@ -139,12 +112,6 @@ fn QuickStat(label: &'static str, value: &'static str, unit: &'static str) -> El
                 span {
                     class: "text-2xl font-mono font-bold text-gray-100",
                     "{value}"
-                }
-                if !unit.is_empty() {
-                    span {
-                        class: "text-xs text-gray-500 ml-1 font-mono",
-                        "{unit}"
-                    }
                 }
             }
         }

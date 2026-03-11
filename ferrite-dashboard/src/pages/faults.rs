@@ -1,160 +1,171 @@
 use crate::api::types::*;
-use crate::components::FaultViewer;
+use crate::auth::AuthState;
+use crate::components::{ErrorDisplay, Loading};
 use dioxus::prelude::*;
 
 #[component]
 pub fn FaultsPage() -> Element {
-    let mut severity_filter = use_signal(|| "all".to_string());
-    let mut resolved_filter = use_signal(|| "all".to_string());
+    let mut type_filter = use_signal(|| "all".to_string());
+    let auth_state = use_context::<Signal<AuthState>>();
 
-    let faults = vec![
-        FaultEvent {
-            id: "f-001".into(),
-            device_id: "dev-001".into(),
-            device_name: "Temperature Sensor A".into(),
-            severity: FaultSeverity::Critical,
-            code: "SENSOR_FAIL".into(),
-            message: "ADC read failure on channel 0 - sensor may be disconnected".into(),
-            timestamp: chrono::Utc::now(),
-            resolved: false,
-            resolved_at: None,
-        },
-        FaultEvent {
-            id: "f-002".into(),
-            device_id: "dev-002".into(),
-            device_name: "Motor Controller B".into(),
-            severity: FaultSeverity::Warning,
-            code: "HIGH_VIBRATION".into(),
-            message: "Vibration level exceeded 2.5g on axis Z".into(),
-            timestamp: chrono::Utc::now(),
-            resolved: false,
-            resolved_at: None,
-        },
-        FaultEvent {
-            id: "f-003".into(),
-            device_id: "dev-003".into(),
-            device_name: "Gateway Hub C".into(),
-            severity: FaultSeverity::Info,
-            code: "FW_AVAILABLE".into(),
-            message: "New firmware version 3.1.0 available for download".into(),
-            timestamp: chrono::Utc::now(),
-            resolved: false,
-            resolved_at: None,
-        },
-        FaultEvent {
-            id: "f-004".into(),
-            device_id: "dev-001".into(),
-            device_name: "Temperature Sensor A".into(),
-            severity: FaultSeverity::Warning,
-            code: "TEMP_HIGH".into(),
-            message: "Temperature exceeded threshold of 30C, reading 32.4C".into(),
-            timestamp: chrono::Utc::now(),
-            resolved: true,
-            resolved_at: Some(chrono::Utc::now()),
-        },
-        FaultEvent {
-            id: "f-005".into(),
-            device_id: "dev-004".into(),
-            device_name: "Pressure Sensor D".into(),
-            severity: FaultSeverity::Critical,
-            code: "CONN_LOST".into(),
-            message: "Device connection lost, no heartbeat for 300s".into(),
-            timestamp: chrono::Utc::now(),
-            resolved: false,
-            resolved_at: None,
-        },
-    ];
+    let faults_resource = use_resource(move || async move {
+        let api_url = web_sys::window()
+            .and_then(|w| w.location().origin().ok())
+            .unwrap_or_else(|| "http://localhost:4000".into());
+        let mut client = crate::api::ApiClient::new(&api_url);
+        if let AuthState::Authenticated { ref token, .. } = auth_state() {
+            client.set_token(token.clone());
+        }
+        client.list_faults().await
+    });
 
-    let filtered: Vec<&FaultEvent> = faults
-        .iter()
-        .filter(|f| {
-            let severity_ok = match severity_filter().as_str() {
-                "critical" => matches!(f.severity, FaultSeverity::Critical),
-                "warning" => matches!(f.severity, FaultSeverity::Warning),
-                "info" => matches!(f.severity, FaultSeverity::Info),
-                _ => true,
-            };
-            let resolved_ok = match resolved_filter().as_str() {
-                "resolved" => f.resolved,
-                "unresolved" => !f.resolved,
-                _ => true,
-            };
-            severity_ok && resolved_ok
-        })
-        .collect();
+    let binding = faults_resource.read();
+    match &*binding {
+        None => rsx! { Loading {} },
+        Some(Err(e)) => rsx! { ErrorDisplay { message: e.to_string() } },
+        Some(Ok(faults)) => {
+            let filtered: Vec<&FaultEvent> = faults
+                .iter()
+                .filter(|f| match type_filter().as_str() {
+                    "hardfault" => f.fault_type == 0,
+                    "memmanage" => f.fault_type == 1,
+                    "busfault" => f.fault_type == 2,
+                    "usagefault" => f.fault_type == 3,
+                    _ => true,
+                })
+                .collect();
 
-    let critical_count = faults
-        .iter()
-        .filter(|f| matches!(f.severity, FaultSeverity::Critical) && !f.resolved)
-        .count();
-    let warning_count = faults
-        .iter()
-        .filter(|f| matches!(f.severity, FaultSeverity::Warning) && !f.resolved)
-        .count();
+            let hard_count = faults.iter().filter(|f| f.fault_type == 0).count();
+            let other_count = faults.iter().filter(|f| f.fault_type != 0).count();
+            let count = filtered.len();
+
+            rsx! {
+                div {
+                    class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
+                    div {
+                        class: "mb-6 animate-fade-in",
+                        h1 {
+                            class: "text-2xl font-semibold text-gray-100",
+                            "Faults"
+                        }
+                        p {
+                            class: "mt-1 text-sm text-gray-500",
+                            "Device fault events and diagnostics"
+                        }
+                    }
+
+                    // Summary badges
+                    div {
+                        class: "flex items-center space-x-3 mb-6",
+                        if hard_count > 0 {
+                            span {
+                                class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-red-500/10 text-red-400 border border-red-500/20",
+                                "{hard_count} HardFault"
+                            }
+                        }
+                        if other_count > 0 {
+                            span {
+                                class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20",
+                                "{other_count} Other"
+                            }
+                        }
+                    }
+
+                    // Filters
+                    div {
+                        class: "flex flex-col sm:flex-row gap-3 mb-6",
+                        select {
+                            class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
+                            value: "{type_filter}",
+                            onchange: move |e| type_filter.set(e.value()),
+                            option { value: "all", "All types" }
+                            option { value: "hardfault", "HardFault" }
+                            option { value: "memmanage", "MemManage" }
+                            option { value: "busfault", "BusFault" }
+                            option { value: "usagefault", "UsageFault" }
+                        }
+                    }
+
+                    p {
+                        class: "text-[10px] text-gray-600 mb-4 font-mono uppercase tracking-wider",
+                        "{count} fault(s)"
+                    }
+
+                    if faults.is_empty() {
+                        div {
+                            class: "bg-surface-900 rounded-xl border border-surface-700 p-12 text-center",
+                            p {
+                                class: "text-gray-500 text-sm",
+                                "No faults recorded"
+                            }
+                        }
+                    } else {
+                        div {
+                            class: "space-y-3",
+                            for fault in &filtered {
+                                FaultCard { fault: (*fault).clone() }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn FaultCard(fault: FaultEvent) -> Element {
+    let type_name = fault.fault_type_name();
+    let (severity_bg, severity_text, severity_border, severity_dot) = match fault.fault_type {
+        0 => ("bg-red-500/5", "text-red-400", "border-red-500/20", "bg-red-500"),
+        1 | 2 => ("bg-amber-500/5", "text-amber-400", "border-amber-500/20", "bg-amber-500"),
+        _ => ("bg-blue-500/5", "text-blue-400", "border-blue-500/20", "bg-blue-500"),
+    };
+
+    let pc_hex = format!("0x{:08X}", fault.pc);
+    let lr_hex = format!("0x{:08X}", fault.lr);
+    let symbol = fault.symbol.as_deref().unwrap_or("unknown");
 
     rsx! {
         div {
-            class: "p-6 lg:p-8 max-w-[1400px] mx-auto",
+            class: "bg-surface-900 rounded-xl border {severity_border} p-5 {severity_bg}",
             div {
-                class: "mb-6 animate-fade-in",
-                h1 {
-                    class: "text-2xl font-semibold text-gray-100",
-                    "Faults"
+                class: "flex items-start space-x-4",
+                div {
+                    class: "flex-shrink-0 mt-1",
+                    div { class: "h-2.5 w-2.5 rounded-full {severity_dot}" }
                 }
-                p {
-                    class: "mt-1 text-sm text-gray-500",
-                    "Device fault events and diagnostics"
-                }
-            }
-
-            // Summary badges
-            div {
-                class: "flex items-center space-x-3 mb-6",
-                if critical_count > 0 {
-                    span {
-                        class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-red-500/10 text-red-400 border border-red-500/20",
-                        "{critical_count} Critical"
+                div {
+                    class: "flex-1 min-w-0",
+                    div {
+                        class: "flex items-center justify-between",
+                        div {
+                            class: "flex items-center space-x-2",
+                            h3 {
+                                class: "text-sm font-mono font-semibold text-gray-100",
+                                "{type_name}"
+                            }
+                            span {
+                                class: "text-[10px] font-semibold {severity_text} uppercase tracking-wider",
+                                "PC {pc_hex}"
+                            }
+                        }
+                        span {
+                            class: "text-[10px] text-gray-600 font-mono",
+                            "{fault.created_at}"
+                        }
                     }
-                }
-                if warning_count > 0 {
-                    span {
-                        class: "inline-flex items-center px-3 py-1 rounded-lg text-xs font-mono font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20",
-                        "{warning_count} Warning"
+                    p {
+                        class: "mt-1.5 text-sm text-gray-400 font-mono",
+                        "Symbol: {symbol} | LR: {lr_hex}"
                     }
-                }
-            }
-
-            // Filters
-            div {
-                class: "flex flex-col sm:flex-row gap-3 mb-6",
-                select {
-                    class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
-                    value: "{severity_filter}",
-                    onchange: move |e| severity_filter.set(e.value()),
-                    option { value: "all", "All severities" }
-                    option { value: "critical", "Critical" }
-                    option { value: "warning", "Warning" }
-                    option { value: "info", "Info" }
-                }
-                select {
-                    class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
-                    value: "{resolved_filter}",
-                    onchange: move |e| resolved_filter.set(e.value()),
-                    option { value: "all", "All states" }
-                    option { value: "unresolved", "Unresolved" }
-                    option { value: "resolved", "Resolved" }
-                }
-            }
-
-            p {
-                class: "text-[10px] text-gray-600 mb-4 font-mono uppercase tracking-wider",
-                "{filtered.len()} fault(s)"
-            }
-
-            div {
-                class: "space-y-3",
-                for fault in filtered {
-                    FaultViewer { fault: fault.clone() }
+                    div {
+                        class: "mt-3 flex items-center space-x-4 text-xs text-gray-500",
+                        span {
+                            class: "font-mono",
+                            "{fault.device_id}"
+                        }
+                    }
                 }
             }
         }

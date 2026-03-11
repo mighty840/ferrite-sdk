@@ -1,82 +1,104 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum DeviceStatus {
-    Online,
-    Offline,
-    Degraded,
-    Unknown,
+pub struct Device {
+    pub id: i64,
+    pub device_id: String,
+    pub firmware_version: String,
+    pub build_id: u64,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub device_key: Option<i64>,
+    pub name: Option<String>,
+    pub status: Option<String>,
+    pub tags: Option<String>,
+    pub provisioned_by: Option<String>,
+    pub provisioned_at: Option<String>,
 }
 
-impl std::fmt::Display for DeviceStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeviceStatus::Online => write!(f, "Online"),
-            DeviceStatus::Offline => write!(f, "Offline"),
-            DeviceStatus::Degraded => write!(f, "Degraded"),
-            DeviceStatus::Unknown => write!(f, "Unknown"),
+impl Device {
+    /// Format device_key as "XX-YYYYYY" hex, or "N/A" if not set.
+    pub fn key_display(&self) -> String {
+        match self.device_key {
+            Some(k) => {
+                let k = k as u32;
+                let prefix = (k >> 24) as u8;
+                let suffix = k & 0x00FF_FFFF;
+                format!("{:02X}-{:06X}", prefix, suffix)
+            }
+            None => "N/A".to_string(),
         }
     }
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Device {
-    pub id: String,
-    pub name: String,
-    pub device_type: String,
-    pub status: DeviceStatus,
-    pub firmware_version: String,
-    pub last_seen: DateTime<Utc>,
-    pub ip_address: Option<String>,
-    pub tags: Vec<String>,
-}
+    /// Display name or device_id as fallback.
+    pub fn display_name(&self) -> String {
+        self.name
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .unwrap_or_else(|| self.device_id.clone())
+    }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FaultSeverity {
-    Critical,
-    Warning,
-    Info,
-}
+    /// Status string, defaulting to "unknown".
+    pub fn status_str(&self) -> &str {
+        self.status.as_deref().unwrap_or("unknown")
+    }
 
-impl std::fmt::Display for FaultSeverity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FaultSeverity::Critical => write!(f, "Critical"),
-            FaultSeverity::Warning => write!(f, "Warning"),
-            FaultSeverity::Info => write!(f, "Info"),
-        }
+    /// Parse tags JSON string into a list.
+    pub fn tags_list(&self) -> Vec<String> {
+        self.tags
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                // Try JSON array first, then comma-separated
+                serde_json::from_str::<Vec<String>>(s).unwrap_or_else(|_| {
+                    s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect()
+                })
+            })
+            .unwrap_or_default()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FaultEvent {
-    pub id: String,
+    pub id: i64,
+    pub device_rowid: i64,
     pub device_id: String,
-    pub device_name: String,
-    pub severity: FaultSeverity,
-    pub code: String,
-    pub message: String,
-    pub timestamp: DateTime<Utc>,
-    pub resolved: bool,
-    pub resolved_at: Option<DateTime<Utc>>,
+    pub fault_type: u8,
+    pub pc: u32,
+    pub lr: u32,
+    pub cfsr: u32,
+    pub hfsr: u32,
+    pub mmfar: u32,
+    pub bfar: u32,
+    pub sp: u32,
+    pub stack_snapshot: String,
+    pub symbol: Option<String>,
+    pub created_at: String,
+}
+
+impl FaultEvent {
+    pub fn fault_type_name(&self) -> &'static str {
+        match self.fault_type {
+            0 => "HardFault",
+            1 => "MemManage",
+            2 => "BusFault",
+            3 => "UsageFault",
+            _ => "Unknown",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct MetricEntry {
+pub struct MetricRow {
+    pub id: i64,
+    pub device_rowid: i64,
     pub device_id: String,
-    pub metric_name: String,
-    pub value: f64,
-    pub unit: String,
-    pub timestamp: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LiveEvent {
-    pub event_type: String,
-    pub device_id: String,
-    pub payload: serde_json::Value,
-    pub timestamp: DateTime<Utc>,
+    pub key: String,
+    pub metric_type: u8,
+    pub value_json: String,
+    pub timestamp_ticks: u64,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -86,8 +108,16 @@ pub struct TraceEntry {
     pub level: String,
     pub module: String,
     pub message: String,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: String,
     pub span_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LiveEvent {
+    pub event_type: String,
+    pub device_id: String,
+    pub payload: serde_json::Value,
+    pub timestamp: String,
 }
 
 #[derive(Debug, Clone)]

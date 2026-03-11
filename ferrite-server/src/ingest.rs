@@ -2,10 +2,10 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -441,12 +441,18 @@ struct ParsedHeartbeat {
     free_stack_bytes: u32,
     metrics_count: u32,
     frames_lost: u32,
+    device_key: u32,
 }
 
 fn parse_heartbeat_payload(payload: &[u8]) -> Option<ParsedHeartbeat> {
     if payload.len() < 20 {
         return None;
     }
+    let device_key = if payload.len() >= 24 {
+        u32::from_le_bytes([payload[20], payload[21], payload[22], payload[23]])
+    } else {
+        0
+    };
     Some(ParsedHeartbeat {
         uptime_ticks: u64::from_le_bytes([
             payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
@@ -455,6 +461,7 @@ fn parse_heartbeat_payload(payload: &[u8]) -> Option<ParsedHeartbeat> {
         free_stack_bytes: u32::from_le_bytes([payload[8], payload[9], payload[10], payload[11]]),
         metrics_count: u32::from_le_bytes([payload[12], payload[13], payload[14], payload[15]]),
         frames_lost: u32::from_le_bytes([payload[16], payload[17], payload[18], payload[19]]),
+        device_key,
     })
 }
 
@@ -598,8 +605,13 @@ async fn ingest_chunks(
                         free_stack = hb.free_stack_bytes,
                         metrics_count = hb.metrics_count,
                         frames_lost = hb.frames_lost,
+                        device_key = hb.device_key,
                         "heartbeat received"
                     );
+                    // If device_key is present, resolve device by key and update status.
+                    if hb.device_key != 0 {
+                        let _ = store.touch_device_by_key(hb.device_key as i64, "online");
+                    }
                     // Touch the device to update last_seen.
                     let _ = store.touch_device(&current_device_id);
                 }
@@ -728,6 +740,187 @@ async fn list_device_metrics(
 }
 
 // ---------------------------------------------------------------------------
+// Device Registration handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct RegisterDeviceRequest {
+    device_key: String,
+    name: Option<String>,
+    tags: Option<String>,
+    provisioned_by: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UpdateDeviceRequest {
+    name: Option<String>,
+    tags: Option<String>,
+}
+
+/// Parse a hex device key string (e.g. "A300F1B2") into an i64.
+fn parse_device_key_hex(s: &str) -> Option<i64> {
+    // Strip optional "0x" prefix and dashes
+    let clean: String = s.replace('-', "").replace("0x", "").replace("0X", "");
+    u32::from_str_radix(&clean, 16).ok().map(|v| v as i64)
+}
+
+/// POST /devices/register
+async fn register_device(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<RegisterDeviceRequest>,
+) -> impl IntoResponse {
+    let Some(key) = parse_device_key_hex(&req.device_key) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "invalid device_key hex" })),
+        );
+    };
+
+    let store = state.store.lock().await;
+    match store.register_device(
+        key,
+        req.name.as_deref(),
+        req.tags.as_deref(),
+        req.provisioned_by.as_deref(),
+    ) {
+        Ok(_) => {
+            let device = store.get_device_by_key(key).unwrap();
+            (StatusCode::OK, Json(serde_json::json!({ "device": device })))
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// POST /devices/register/bulk
+async fn register_devices_bulk(
+    State(state): State<Arc<AppState>>,
+    Json(devices): Json<Vec<RegisterDeviceRequest>>,
+) -> impl IntoResponse {
+    let store = state.store.lock().await;
+    let mut registered = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    for req in &devices {
+        let Some(key) = parse_device_key_hex(&req.device_key) else {
+            errors.push(format!("invalid device_key: {}", req.device_key));
+            continue;
+        };
+        match store.register_device(
+            key,
+            req.name.as_deref(),
+            req.tags.as_deref(),
+            req.provisioned_by.as_deref(),
+        ) {
+            Ok(_) => {
+                if let Ok(Some(dev)) = store.get_device_by_key(key) {
+                    registered.push(dev);
+                }
+            }
+            Err(e) => errors.push(format!("{}: {}", req.device_key, e)),
+        }
+    }
+
+    let status = if errors.is_empty() {
+        StatusCode::OK
+    } else {
+        StatusCode::MULTI_STATUS
+    };
+    (
+        status,
+        Json(serde_json::json!({
+            "registered": registered.len(),
+            "devices": registered,
+            "errors": errors,
+        })),
+    )
+}
+
+/// PUT /devices/{key}
+async fn update_device_handler(
+    State(state): State<Arc<AppState>>,
+    Path(key_str): Path<String>,
+    Json(req): Json<UpdateDeviceRequest>,
+) -> impl IntoResponse {
+    let Some(key) = parse_device_key_hex(&key_str) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "invalid device_key hex" })),
+        );
+    };
+    let store = state.store.lock().await;
+    match store.update_device(key, req.name.as_deref(), req.tags.as_deref()) {
+        Ok(true) => {
+            let device = store.get_device_by_key(key).unwrap();
+            (StatusCode::OK, Json(serde_json::json!({ "device": device })))
+        }
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "device not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+/// DELETE /devices/{key}
+async fn delete_device_handler(
+    State(state): State<Arc<AppState>>,
+    Path(key_str): Path<String>,
+) -> impl IntoResponse {
+    let Some(key) = parse_device_key_hex(&key_str) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "invalid device_key hex" })),
+        );
+    };
+    let store = state.store.lock().await;
+    match store.delete_device(key) {
+        Ok(true) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "device not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+async fn list_all_faults(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let store = state.store.lock().await;
+    match store.list_all_faults(100) {
+        Ok(faults) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "faults": faults })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+async fn list_all_metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let store = state.store.lock().await;
+    match store.list_all_metrics(200) {
+        Ok(metrics) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "metrics": metrics })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -746,8 +939,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/ingest/chunks", post(ingest_chunks))
         .route("/ingest/elf", post(ingest_elf))
         .route("/devices", get(list_devices))
+        .route("/devices/register", post(register_device))
+        .route("/devices/register/bulk", post(register_devices_bulk))
+        .route(
+            "/devices/{key}",
+            put(update_device_handler).delete(delete_device_handler),
+        )
         .route("/devices/{id}/faults", get(list_device_faults))
         .route("/devices/{id}/metrics", get(list_device_metrics))
+        .route("/faults", get(list_all_faults))
+        .route("/metrics", get(list_all_metrics))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::auth_middleware::require_auth,

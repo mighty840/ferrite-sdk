@@ -146,11 +146,13 @@ impl UploadManager {
 
             // 6. Heartbeat
             let uptime = crate::metrics::ticks();
+            let dk = crate::device_key::device_key().unwrap_or(0);
             state.encoder.encode_heartbeat(
                 uptime,
                 0, // free_stack_bytes — we don't track this
                 state.metrics.len() as u32,
                 state.trace.frames_lost(),
+                dk,
                 |chunk| {
                     if upload_ok && send(transport, chunk, &mut stats).is_err() {
                         upload_ok = false;
@@ -256,11 +258,13 @@ impl UploadManager {
 
             // 6. Heartbeat
             let uptime = crate::metrics::ticks();
+            let dk = crate::device_key::device_key().unwrap_or(0);
             state.encoder.encode_heartbeat(
                 uptime,
                 0,
                 state.metrics.len() as u32,
                 state.trace.frames_lost(),
+                dk,
                 |chunk| {
                     let mut v = heapless::Vec::new();
                     let _ = v.extend_from_slice(chunk);

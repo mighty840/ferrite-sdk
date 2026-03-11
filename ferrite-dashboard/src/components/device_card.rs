@@ -1,18 +1,22 @@
-use crate::api::types::{Device, DeviceStatus};
+use crate::api::types::Device;
 use crate::Route;
 use dioxus::prelude::*;
 
 #[component]
 pub fn DeviceCard(device: Device) -> Element {
-    let (status_color, status_dot, status_glow) = match device.status {
-        DeviceStatus::Online => ("text-emerald-400", "bg-emerald-400", true),
-        DeviceStatus::Offline => ("text-red-400", "bg-red-400", false),
-        DeviceStatus::Degraded => ("text-amber-400", "bg-amber-400", false),
-        DeviceStatus::Unknown => ("text-gray-500", "bg-gray-500", false),
+    let status = device.status_str().to_string();
+    let (status_color, status_dot, status_glow) = match status.as_str() {
+        "online" => ("text-emerald-400", "bg-emerald-400", true),
+        "offline" => ("text-red-400", "bg-red-400", false),
+        "degraded" => ("text-amber-400", "bg-amber-400", false),
+        "provisioned" => ("text-blue-400", "bg-blue-400", false),
+        _ => ("text-gray-500", "bg-gray-500", false),
     };
 
-    let last_seen = device.last_seen.format("%H:%M UTC").to_string();
-    let device_id = device.id.clone();
+    let display_name = device.display_name();
+    let key_display = device.key_display();
+    let tags = device.tags_list();
+    let device_id = device.device_id.clone();
 
     rsx! {
         Link {
@@ -43,11 +47,11 @@ pub fn DeviceCard(device: Device) -> Element {
                         div {
                             h3 {
                                 class: "text-sm font-medium text-gray-200 group-hover:text-gray-100 transition-colors",
-                                "{device.name}"
+                                "{display_name}"
                             }
                             p {
                                 class: "text-[10px] text-gray-500 font-mono uppercase tracking-wider",
-                                "{device.device_type}"
+                                "{key_display}"
                             }
                         }
                     }
@@ -62,7 +66,7 @@ pub fn DeviceCard(device: Device) -> Element {
                         }
                         span {
                             class: "text-[10px] font-medium {status_color} uppercase tracking-wider",
-                            "{device.status}"
+                            "{status}"
                         }
                     }
                 }
@@ -77,20 +81,18 @@ pub fn DeviceCard(device: Device) -> Element {
                     div {
                         class: "flex justify-between text-xs",
                         span { class: "text-gray-500", "Last seen" }
-                        span { class: "text-gray-400 font-mono", "{last_seen}" }
+                        span { class: "text-gray-400 font-mono", "{device.last_seen}" }
                     }
-                    if let Some(ip) = &device.ip_address {
-                        div {
-                            class: "flex justify-between text-xs",
-                            span { class: "text-gray-500", "IP" }
-                            span { class: "text-gray-400 font-mono", "{ip}" }
-                        }
+                    div {
+                        class: "flex justify-between text-xs",
+                        span { class: "text-gray-500", "ID" }
+                        span { class: "text-gray-400 font-mono", "{device.device_id}" }
                     }
                 }
-                if !device.tags.is_empty() {
+                if !tags.is_empty() {
                     div {
                         class: "mt-3 flex flex-wrap gap-1.5",
-                        for tag in &device.tags {
+                        for tag in &tags {
                             span {
                                 class: "inline-block bg-surface-750 text-gray-400 text-[10px] px-2 py-0.5 rounded font-mono",
                                 "{tag}"
