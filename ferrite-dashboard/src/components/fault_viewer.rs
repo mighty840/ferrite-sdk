@@ -1,22 +1,23 @@
-use crate::api::types::{FaultEvent, FaultSeverity};
+use crate::api::types::FaultEvent;
 use dioxus::prelude::*;
 
 #[component]
 pub fn FaultViewer(fault: FaultEvent) -> Element {
-    let (severity_bg, severity_text, severity_border, severity_dot) = match fault.severity {
-        FaultSeverity::Critical => (
+    let type_name = fault.fault_type_name();
+    let (severity_bg, severity_text, severity_border, severity_dot) = match fault.fault_type {
+        0 => (
             "bg-red-500/5",
             "text-red-400",
             "border-red-500/20",
             "bg-red-500",
         ),
-        FaultSeverity::Warning => (
+        1 | 2 => (
             "bg-amber-500/5",
             "text-amber-400",
             "border-amber-500/20",
             "bg-amber-500",
         ),
-        FaultSeverity::Info => (
+        _ => (
             "bg-blue-500/5",
             "text-blue-400",
             "border-blue-500/20",
@@ -24,22 +25,9 @@ pub fn FaultViewer(fault: FaultEvent) -> Element {
         ),
     };
 
-    let timestamp = fault.timestamp.format("%Y-%m-%d %H:%M:%S").to_string();
-    let resolved_text = if fault.resolved {
-        let at = fault
-            .resolved_at
-            .map(|t| t.format("%H:%M:%S").to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-        format!("Resolved {}", at)
-    } else {
-        "Unresolved".to_string()
-    };
-
-    let resolved_color = if fault.resolved {
-        "text-emerald-400"
-    } else {
-        "text-red-400"
-    };
+    let pc_hex = format!("0x{:08X}", fault.pc);
+    let lr_hex = format!("0x{:08X}", fault.lr);
+    let symbol = fault.symbol.as_deref().unwrap_or("unknown");
 
     rsx! {
         div {
@@ -48,9 +36,7 @@ pub fn FaultViewer(fault: FaultEvent) -> Element {
                 class: "flex items-start space-x-4",
                 div {
                     class: "flex-shrink-0 mt-1",
-                    div {
-                        class: "h-2.5 w-2.5 rounded-full {severity_dot}"
-                    }
+                    div { class: "h-2.5 w-2.5 rounded-full {severity_dot}" }
                 }
                 div {
                     class: "flex-1 min-w-0",
@@ -60,38 +46,27 @@ pub fn FaultViewer(fault: FaultEvent) -> Element {
                             class: "flex items-center space-x-2",
                             h3 {
                                 class: "text-sm font-mono font-semibold text-gray-100",
-                                "{fault.code}"
+                                "{type_name}"
                             }
                             span {
                                 class: "text-[10px] font-semibold {severity_text} uppercase tracking-wider",
-                                "{fault.severity}"
+                                "PC {pc_hex}"
                             }
                         }
                         span {
                             class: "text-[10px] text-gray-600 font-mono",
-                            "{timestamp}"
+                            "{fault.created_at}"
                         }
                     }
                     p {
-                        class: "mt-1.5 text-sm text-gray-400",
-                        "{fault.message}"
+                        class: "mt-1.5 text-sm text-gray-400 font-mono",
+                        "Symbol: {symbol} | LR: {lr_hex}"
                     }
                     div {
-                        class: "mt-3 flex items-center justify-between",
-                        div {
-                            class: "flex items-center space-x-4 text-xs text-gray-500",
-                            span {
-                                class: "font-mono",
-                                "{fault.device_name}"
-                            }
-                            span {
-                                class: "text-gray-600",
-                                "{fault.device_id}"
-                            }
-                        }
+                        class: "mt-3 flex items-center space-x-4 text-xs text-gray-500",
                         span {
-                            class: "text-[10px] font-medium font-mono {resolved_color}",
-                            "{resolved_text}"
+                            class: "font-mono",
+                            "{fault.device_id}"
                         }
                     }
                 }

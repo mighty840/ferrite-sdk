@@ -4,6 +4,7 @@ pub mod devices;
 pub mod faults;
 pub mod login;
 pub mod metrics;
+pub mod register;
 pub mod settings;
 
 pub use dashboard::DashboardPage;
@@ -12,4 +13,5 @@ pub use devices::DevicesPage;
 pub use faults::FaultsPage;
 pub use login::LoginPage;
 pub use metrics::MetricsPage;
+pub use register::RegisterPage;
 pub use settings::SettingsPage;

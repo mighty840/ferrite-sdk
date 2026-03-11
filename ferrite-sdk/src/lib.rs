@@ -2,6 +2,7 @@
 
 pub mod chunks;
 pub mod config;
+pub mod device_key;
 pub mod fault;
 pub mod memory;
 pub mod metrics;
@@ -41,6 +42,7 @@ impl core::fmt::Display for SdkError {
 }
 
 // Re-export key types at crate root
+pub use device_key::{clear_device_key, device_key, provision_device_key};
 pub use fault::RamRegion;
 pub use metrics::ticks;
 pub use reboot_reason::RebootReason;

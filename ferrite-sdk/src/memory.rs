@@ -1,3 +1,4 @@
+use crate::device_key::DeviceKeyRecord;
 use crate::fault::FaultRecord;
 use crate::reboot_reason::RebootReasonRecord;
 
@@ -29,6 +30,7 @@ pub struct RetainedBlock {
     pub fault_record: FaultRecord,
     pub metrics_dirty: bool,
     pub _pad: [u8; 3],
+    pub device_key: DeviceKeyRecord,
 }
 
 // Compile-time size check
@@ -47,6 +49,7 @@ impl RetainedBlock {
             fault_record: FaultRecord::zeroed(),
             metrics_dirty: false,
             _pad: [0; 3],
+            device_key: DeviceKeyRecord::zeroed(),
         }
     }
 }

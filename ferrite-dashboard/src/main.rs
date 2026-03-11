@@ -18,6 +18,8 @@ pub enum Route {
         Dashboard {},
         #[route("/devices")]
         Devices {},
+        #[route("/devices/register")]
+        Register {},
         #[route("/devices/:id")]
         DeviceDetail { id: String },
         #[route("/faults")]
@@ -85,6 +87,12 @@ fn Dashboard() -> Element {
 #[component]
 fn Devices() -> Element {
     rsx! { DevicesPage {} }
+}
+
+/// Register device page route handler.
+#[component]
+fn Register() -> Element {
+    rsx! { RegisterPage {} }
 }
 
 /// Device detail page route handler.

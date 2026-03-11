@@ -1,0 +1,21 @@
+[package]
+name = "ferrite-provision"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool for ferrite device provisioning and registration"
+
+[[bin]]
+name = "ferrite-provision"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serialport = "4"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+sha2 = "0.10"
+chrono = "0.4"
+anyhow = "1"
+base64 = "0.22"

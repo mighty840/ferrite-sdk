@@ -174,13 +174,15 @@ impl ChunkEncoder {
         free_stack_bytes: u32,
         metrics_count: u32,
         frames_lost: u32,
+        device_key: u32,
         mut emit: F,
     ) {
-        let mut payload = [0u8; 20];
+        let mut payload = [0u8; 24];
         payload[0..8].copy_from_slice(&uptime_ticks.to_le_bytes());
         payload[8..12].copy_from_slice(&free_stack_bytes.to_le_bytes());
         payload[12..16].copy_from_slice(&metrics_count.to_le_bytes());
         payload[16..20].copy_from_slice(&frames_lost.to_le_bytes());
+        payload[20..24].copy_from_slice(&device_key.to_le_bytes());
 
         let mut out = [0u8; 256];
         let n = self.encode(ChunkType::Heartbeat, &payload, true, &mut out);
@@ -267,7 +269,7 @@ mod tests {
         let mut encoder = ChunkEncoder::new();
         let mut chunks = std::vec::Vec::new();
 
-        encoder.encode_heartbeat(12345, 1024, 5, 0, |chunk| {
+        encoder.encode_heartbeat(12345, 1024, 5, 0, 0, |chunk| {
             chunks.push(std::vec::Vec::from(chunk));
         });
 
