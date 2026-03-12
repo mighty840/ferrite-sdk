@@ -107,8 +107,7 @@ impl ChunkFramer {
 
             // Validate CRC
             let crc_offset = HEADER_SIZE + payload_len;
-            let stored_crc =
-                u16::from_le_bytes([self.buf[crc_offset], self.buf[crc_offset + 1]]);
+            let stored_crc = u16::from_le_bytes([self.buf[crc_offset], self.buf[crc_offset + 1]]);
             let computed_crc = crc16_ccitt(&self.buf[..crc_offset]);
 
             if stored_crc != computed_crc {

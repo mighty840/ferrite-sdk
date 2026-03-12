@@ -45,9 +45,9 @@ impl ChunkBuffer {
 
     /// Retrieve the oldest N buffered chunks (id, data).
     pub fn peek(&self, limit: usize) -> Result<Vec<(i64, Vec<u8>)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, chunk_data FROM buffered_chunks ORDER BY id ASC LIMIT ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, chunk_data FROM buffered_chunks ORDER BY id ASC LIMIT ?1")?;
         let rows = stmt.query_map([limit as i64], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?))
         })?;
@@ -67,19 +67,16 @@ impl ChunkBuffer {
 
     /// Number of chunks currently buffered.
     pub fn count(&self) -> Result<usize> {
-        let count: i64 = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM buffered_chunks", [], |row| {
-                row.get(0)
-            })?;
+        let count: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM buffered_chunks", [], |row| row.get(0))?;
         Ok(count as usize)
     }
 
     /// Delete all buffered chunks.
     #[allow(dead_code)]
     pub fn clear(&self) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM buffered_chunks", [])?;
+        self.conn.execute("DELETE FROM buffered_chunks", [])?;
         Ok(())
     }
 }

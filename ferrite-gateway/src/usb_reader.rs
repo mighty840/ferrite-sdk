@@ -16,7 +16,10 @@ mod inner {
         baud_rate: u32,
         tx: mpsc::Sender<DecodedChunk>,
     ) -> Result<()> {
-        info!("Opening USB serial port {} at {} baud", port_name, baud_rate);
+        info!(
+            "Opening USB serial port {} at {} baud",
+            port_name, baud_rate
+        );
 
         let port = serialport::new(&port_name, baud_rate)
             .timeout(Duration::from_millis(100))

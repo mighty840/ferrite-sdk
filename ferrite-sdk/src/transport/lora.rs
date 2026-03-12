@@ -28,7 +28,7 @@ impl Default for LoraConfig {
         Self {
             frequency: 915_000_000, // US ISM band
             spreading_factor: 7,
-            bandwidth: 0,  // 125kHz
+            bandwidth: 0,   // 125kHz
             coding_rate: 1, // 4/5
             tx_power: 14,
         }

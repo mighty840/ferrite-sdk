@@ -13,12 +13,10 @@ mod inner {
     use crate::framing::{ChunkFramer, DecodedChunk};
 
     /// Ferrite BLE service UUID (custom 128-bit).
-    pub const FERRITE_SERVICE_UUID: Uuid =
-        Uuid::from_u128(0xFE771E00_0001_4000_8000_00805F9B34FB);
+    pub const FERRITE_SERVICE_UUID: Uuid = Uuid::from_u128(0xFE771E00_0001_4000_8000_00805F9B34FB);
 
     /// Ferrite chunk characteristic UUID (notifications from device).
-    pub const CHUNK_CHAR_UUID: Uuid =
-        Uuid::from_u128(0xFE771E00_0002_4000_8000_00805F9B34FB);
+    pub const CHUNK_CHAR_UUID: Uuid = Uuid::from_u128(0xFE771E00_0002_4000_8000_00805F9B34FB);
 
     /// Scan for ferrite BLE devices and receive chunk notifications.
     pub async fn ble_scanner_task(tx: mpsc::Sender<DecodedChunk>) -> Result<()> {

@@ -90,7 +90,10 @@ impl Forwarder {
             }
         }
 
-        anyhow::bail!("Failed to forward chunk after {} attempts", self.max_retries)
+        anyhow::bail!(
+            "Failed to forward chunk after {} attempts",
+            self.max_retries
+        )
     }
 
     /// Forward a batch of raw chunks concatenated in a single HTTP body.
@@ -105,9 +108,7 @@ impl Forwarder {
 
     /// Check if the server is reachable.
     pub async fn health_check(&self) -> bool {
-        let url = self
-            .ingest_url
-            .replace("/ingest/chunks", "/health");
+        let url = self.ingest_url.replace("/ingest/chunks", "/health");
         matches!(
             self.client.get(&url).send().await,
             Ok(resp) if resp.status().is_success()

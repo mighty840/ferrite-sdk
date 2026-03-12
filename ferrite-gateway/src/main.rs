@@ -19,7 +19,10 @@ use forwarder::Forwarder;
 use framing::DecodedChunk;
 
 #[derive(Parser)]
-#[command(name = "ferrite-gateway", about = "Edge gateway for ferrite IoT devices")]
+#[command(
+    name = "ferrite-gateway",
+    about = "Edge gateway for ferrite IoT devices"
+)]
 struct Cli {
     /// Server URL (overrides FERRITE_SERVER_URL env var)
     #[arg(long)]
