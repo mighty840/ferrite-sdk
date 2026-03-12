@@ -1,0 +1,28 @@
+[package]
+name = "ferrite-gateway"
+version = "0.1.0"
+edition = "2021"
+description = "Edge gateway daemon — bridges BLE/USB/LoRa devices to ferrite-server"
+license = "MIT"
+
+[features]
+default = ["usb", "ble"]
+usb = ["dep:serialport"]
+ble = ["dep:btleplug"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", features = ["json"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serialport = { version = "4", optional = true }
+btleplug = { version = "0.11", optional = true }
+anyhow = "1"
+base64 = "0.22"
+uuid = "1"
+futures = "0.3"
