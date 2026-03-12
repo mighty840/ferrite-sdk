@@ -89,7 +89,11 @@ pub fn MetricChart(metrics: Vec<MetricRow>, metric_key: String) -> Element {
         let y = padding_y + chart_h - ((val - min_val) / range * chart_h);
         if idx == 0 {
             line_path.push_str(&format!("M{x:.1},{y:.1}"));
-            area_path.push_str(&format!("M{:.1},{:.1} L{x:.1},{y:.1}", padding_x, padding_y + chart_h));
+            area_path.push_str(&format!(
+                "M{:.1},{:.1} L{x:.1},{y:.1}",
+                padding_x,
+                padding_y + chart_h
+            ));
         } else {
             line_path.push_str(&format!(" L{x:.1},{y:.1}"));
             area_path.push_str(&format!(" L{x:.1},{y:.1}"));
@@ -97,11 +101,7 @@ pub fn MetricChart(metrics: Vec<MetricRow>, metric_key: String) -> Element {
     }
     // Close area path
     let last_x = padding_x + (n.saturating_sub(1)) as f64 * x_step;
-    area_path.push_str(&format!(
-        " L{:.1},{:.1} Z",
-        last_x,
-        padding_y + chart_h
-    ));
+    area_path.push_str(&format!(" L{:.1},{:.1} Z", last_x, padding_y + chart_h));
 
     // Latest value for display
     let latest_val = values.last().copied().unwrap_or(0.0);
@@ -117,8 +117,14 @@ pub fn MetricChart(metrics: Vec<MetricRow>, metric_key: String) -> Element {
     let mid_label = format_compact((min_val + max_val) / 2.0);
 
     // Time labels (first and last created_at)
-    let first_time = filtered.first().map(|m| short_time(&m.created_at)).unwrap_or_default();
-    let last_time = filtered.last().map(|m| short_time(&m.created_at)).unwrap_or_default();
+    let first_time = filtered
+        .first()
+        .map(|m| short_time(&m.created_at))
+        .unwrap_or_default();
+    let last_time = filtered
+        .last()
+        .map(|m| short_time(&m.created_at))
+        .unwrap_or_default();
 
     let svg_width = format!("{width}");
     let svg_height = format!("{height}");
