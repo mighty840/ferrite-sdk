@@ -1146,13 +1146,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/devices/register", post(register_device))
         .route("/devices/register/bulk", post(register_devices_bulk))
         .route(
-            "/devices/{key}",
+            "/devices/:key",
             get(get_device_handler)
                 .put(update_device_handler)
                 .delete(delete_device_handler),
         )
-        .route("/devices/{id}/faults", get(list_device_faults))
-        .route("/devices/{id}/metrics", get(list_device_metrics))
+        .route("/devices/:id/faults", get(list_device_faults))
+        .route("/devices/:id/metrics", get(list_device_metrics))
         .route("/faults", get(list_all_faults))
         .route("/metrics", get(list_all_metrics))
         .layer(axum::middleware::from_fn_with_state(
