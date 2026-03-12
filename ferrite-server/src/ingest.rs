@@ -3,7 +3,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -506,6 +506,18 @@ async fn ingest_chunks(
 
     let store = state.store.lock().await;
 
+    // Wrap all DB writes in a transaction for atomicity.
+    if let Err(e) = store.begin_transaction() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(IngestResponse {
+                ok: false,
+                chunks_received: 0,
+                errors: vec![format!("failed to begin transaction: {e}")],
+            }),
+        );
+    }
+
     // Process DeviceInfo chunks first to establish device context.
     for chunk in &chunks {
         if chunk.chunk_type == ChunkType::DeviceInfo {
@@ -643,6 +655,23 @@ async fn ingest_chunks(
         }
     }
 
+    // Commit the transaction (or rollback on total failure).
+    if errors.is_empty() {
+        if let Err(e) = store.commit_transaction() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(IngestResponse {
+                    ok: false,
+                    chunks_received: num_chunks,
+                    errors: vec![format!("failed to commit transaction: {e}")],
+                }),
+            );
+        }
+    } else {
+        // Partial success — still commit so we don't lose good data.
+        let _ = store.commit_transaction();
+    }
+
     let status = if errors.is_empty() {
         StatusCode::OK
     } else {
@@ -736,9 +765,16 @@ async fn list_devices(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 async fn list_device_faults(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<ListParams>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
-    match store.list_faults_for_device(&device_id) {
+    match store.list_faults_for_device_paginated(
+        &device_id,
+        params.limit(),
+        params.offset(),
+        params.since.as_deref(),
+        params.until.as_deref(),
+    ) {
         Ok(faults) => (
             StatusCode::OK,
             Json(serde_json::json!({ "faults": faults })),
@@ -753,9 +789,16 @@ async fn list_device_faults(
 async fn list_device_metrics(
     State(state): State<Arc<AppState>>,
     Path(device_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<ListParams>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
-    match store.list_metrics_for_device(&device_id) {
+    match store.list_metrics_for_device_paginated(
+        &device_id,
+        params.limit(),
+        params.offset(),
+        params.since.as_deref(),
+        params.until.as_deref(),
+    ) {
         Ok(metrics) => (
             StatusCode::OK,
             Json(serde_json::json!({ "metrics": metrics })),
@@ -841,6 +884,14 @@ async fn register_devices_bulk(
     let mut registered = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
+    // Wrap bulk registration in a transaction for atomicity.
+    if let Err(e) = store.begin_transaction() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("failed to begin transaction: {e}") })),
+        );
+    }
+
     for req in &devices {
         let Some(key) = parse_device_key_hex(&req.device_key) else {
             errors.push(format!("invalid device_key: {}", req.device_key));
@@ -860,6 +911,9 @@ async fn register_devices_bulk(
             Err(e) => errors.push(format!("{}: {}", req.device_key, e)),
         }
     }
+
+    // Commit regardless of partial errors (valid registrations should persist).
+    let _ = store.commit_transaction();
 
     let status = if errors.is_empty() {
         StatusCode::OK
@@ -915,6 +969,34 @@ async fn update_device_handler(
     }
 }
 
+/// GET /devices/{key}
+async fn get_device_handler(
+    State(state): State<Arc<AppState>>,
+    Path(key_str): Path<String>,
+) -> impl IntoResponse {
+    let Some(key) = parse_device_key_hex(&key_str) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "invalid device_key hex" })),
+        );
+    };
+    let store = state.store.lock().await;
+    match store.get_device_by_key(key) {
+        Ok(Some(device)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "device": device })),
+        ),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "device not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
 /// DELETE /devices/{key}
 async fn delete_device_handler(
     State(state): State<Arc<AppState>>,
@@ -940,9 +1022,39 @@ async fn delete_device_handler(
     }
 }
 
-async fn list_all_faults(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+/// Pagination and time-range query parameters shared by list endpoints.
+#[derive(Debug, Deserialize)]
+struct ListParams {
+    /// Maximum number of results (default 100, max 1000).
+    limit: Option<usize>,
+    /// Offset for pagination (default 0).
+    offset: Option<usize>,
+    /// ISO 8601 start time filter (inclusive).
+    since: Option<String>,
+    /// ISO 8601 end time filter (exclusive).
+    until: Option<String>,
+}
+
+impl ListParams {
+    fn limit(&self) -> usize {
+        self.limit.unwrap_or(100).min(1000)
+    }
+    fn offset(&self) -> usize {
+        self.offset.unwrap_or(0)
+    }
+}
+
+async fn list_all_faults(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<ListParams>,
+) -> impl IntoResponse {
     let store = state.store.lock().await;
-    match store.list_all_faults(100) {
+    match store.list_all_faults_paginated(
+        params.limit(),
+        params.offset(),
+        params.since.as_deref(),
+        params.until.as_deref(),
+    ) {
         Ok(faults) => (
             StatusCode::OK,
             Json(serde_json::json!({ "faults": faults })),
@@ -954,9 +1066,17 @@ async fn list_all_faults(State(state): State<Arc<AppState>>) -> impl IntoRespons
     }
 }
 
-async fn list_all_metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn list_all_metrics(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<ListParams>,
+) -> impl IntoResponse {
     let store = state.store.lock().await;
-    match store.list_all_metrics(200) {
+    match store.list_all_metrics_paginated(
+        params.limit(),
+        params.offset(),
+        params.since.as_deref(),
+        params.until.as_deref(),
+    ) {
         Ok(metrics) => (
             StatusCode::OK,
             Json(serde_json::json!({ "metrics": metrics })),
@@ -968,6 +1088,11 @@ async fn list_all_metrics(State(state): State<Arc<AppState>>) -> impl IntoRespon
     }
 }
 
+/// GET /health
+async fn health() -> impl IntoResponse {
+    Json(serde_json::json!({ "status": "ok" }))
+}
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -977,15 +1102,15 @@ async fn auth_mode(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    let allow_origin: AllowOrigin = match std::env::var("CORS_ORIGIN") {
-        Ok(origin) if !origin.is_empty() => {
+    let allow_origin: AllowOrigin = match &state.config.cors_origin {
+        Some(origin) => {
             tracing::info!("CORS: allowing origin {}", origin);
             origin
                 .parse::<http::HeaderValue>()
                 .expect("invalid CORS_ORIGIN value")
                 .into()
         }
-        _ => {
+        None => {
             tracing::warn!(
                 "CORS_ORIGIN not set, allowing all origins (not recommended for production)"
             );
@@ -1010,6 +1135,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         ]));
 
     Router::new()
+        .route("/health", get(health))
         .route("/auth/mode", get(auth_mode))
         .route("/ingest/chunks", post(ingest_chunks))
         .route(
@@ -1020,11 +1146,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/devices/register", post(register_device))
         .route("/devices/register/bulk", post(register_devices_bulk))
         .route(
-            "/devices/{key}",
-            put(update_device_handler).delete(delete_device_handler),
+            "/devices/:key",
+            get(get_device_handler)
+                .put(update_device_handler)
+                .delete(delete_device_handler),
         )
-        .route("/devices/{id}/faults", get(list_device_faults))
-        .route("/devices/{id}/metrics", get(list_device_metrics))
+        .route("/devices/:id/faults", get(list_device_faults))
+        .route("/devices/:id/metrics", get(list_device_metrics))
         .route("/faults", get(list_all_faults))
         .route("/metrics", get(list_all_metrics))
         .layer(axum::middleware::from_fn_with_state(

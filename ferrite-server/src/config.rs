@@ -97,6 +97,8 @@ pub struct AuthConfig {
     pub mode: AuthMode,
     /// Optional API key for device ingest endpoints.
     pub ingest_api_key: Option<String>,
+    /// Optional CORS allowed origin.
+    pub cors_origin: Option<String>,
 }
 
 impl AuthConfig {
@@ -131,6 +133,7 @@ impl AuthConfig {
         Self {
             mode,
             ingest_api_key: optional_env("INGEST_API_KEY"),
+            cors_origin: optional_env("CORS_ORIGIN"),
         }
     }
 }
@@ -197,6 +200,7 @@ mod tests {
                 password: "admin".into(),
             }),
             ingest_api_key: None,
+            cors_origin: None,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -213,6 +217,7 @@ mod tests {
                 client_secret: None,
             }),
             ingest_api_key: None,
+            cors_origin: None,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");

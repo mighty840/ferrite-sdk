@@ -8,19 +8,14 @@ use dioxus::prelude::*;
 pub fn DeviceDetailPage(id: String) -> Element {
     let mut active_tab = use_signal(|| "faults".to_string());
     let auth_state = use_context::<Signal<AuthState>>();
+    let poll_tick = crate::hooks::use_poll_tick();
     let device_id = id.clone();
 
     let devices_resource = use_resource(move || {
         let did = device_id.clone();
         async move {
-            let api_url = web_sys::window()
-                .and_then(|w| w.location().origin().ok())
-                .unwrap_or_else(|| "http://localhost:4000".into());
-            let mut client = crate::api::ApiClient::new(&api_url);
-            if let AuthState::Authenticated { ref token, .. } = auth_state() {
-                client.set_token(token.clone());
-            }
-            // Fetch device list and find ours
+            let _tick = poll_tick();
+            let client = crate::api::client::authenticated_client(&auth_state());
             let devices = client.list_devices().await?;
             devices
                 .into_iter()
@@ -33,13 +28,8 @@ pub fn DeviceDetailPage(id: String) -> Element {
     let faults_resource = use_resource(move || {
         let did = faults_id.clone();
         async move {
-            let api_url = web_sys::window()
-                .and_then(|w| w.location().origin().ok())
-                .unwrap_or_else(|| "http://localhost:4000".into());
-            let mut client = crate::api::ApiClient::new(&api_url);
-            if let AuthState::Authenticated { ref token, .. } = auth_state() {
-                client.set_token(token.clone());
-            }
+            let _tick = poll_tick();
+            let client = crate::api::client::authenticated_client(&auth_state());
             client.list_device_faults(&did).await
         }
     });
@@ -48,13 +38,8 @@ pub fn DeviceDetailPage(id: String) -> Element {
     let metrics_resource = use_resource(move || {
         let did = metrics_id.clone();
         async move {
-            let api_url = web_sys::window()
-                .and_then(|w| w.location().origin().ok())
-                .unwrap_or_else(|| "http://localhost:4000".into());
-            let mut client = crate::api::ApiClient::new(&api_url);
-            if let AuthState::Authenticated { ref token, .. } = auth_state() {
-                client.set_token(token.clone());
-            }
+            let _tick = poll_tick();
+            let client = crate::api::client::authenticated_client(&auth_state());
             client.list_device_metrics(&did).await
         }
     });

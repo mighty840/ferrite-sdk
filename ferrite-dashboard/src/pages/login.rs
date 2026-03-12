@@ -139,14 +139,11 @@ fn BasicLogin(auth_state: Signal<AuthState>) -> Element {
 
                                 let token = AuthToken::Basic(b64.clone());
 
-                                // Use same-origin; dx serve proxies to ferrite-server in dev
-                                let api_url = web_sys::window()
-                                    .and_then(|w| w.location().origin().ok())
-                                    .unwrap_or_else(|| "http://localhost:4000".into());
+                                let base = crate::api::client::api_url();
 
                                 let client = reqwest::Client::new();
                                 let resp = client
-                                    .get(format!("{}/devices", api_url))
+                                    .get(format!("{}/devices", base))
                                     .header("Authorization", format!("Basic {}", b64))
                                     .send()
                                     .await;
