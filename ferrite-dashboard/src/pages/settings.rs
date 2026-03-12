@@ -1,14 +1,48 @@
+use crate::auth::AuthState;
 use dioxus::prelude::*;
+
+fn get_local_storage() -> Option<web_sys::Storage> {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok())
+        .flatten()
+}
+
+fn load_setting(key: &str, default: &str) -> String {
+    get_local_storage()
+        .and_then(|s| s.get_item(key).ok())
+        .flatten()
+        .unwrap_or_else(|| default.to_string())
+}
+
+fn save_setting(key: &str, value: &str) {
+    if let Some(storage) = get_local_storage() {
+        let _ = storage.set_item(key, value);
+    }
+}
 
 #[component]
 pub fn SettingsPage() -> Element {
-    let mut api_url = use_signal(|| "http://localhost:8080".to_string());
-    let mut oidc_authority = use_signal(|| "https://auth.example.com".to_string());
-    let mut oidc_client_id = use_signal(|| "ferrite-dashboard".to_string());
-    let mut refresh_interval = use_signal(|| "5".to_string());
-    let mut dark_mode = use_signal(|| true);
-    let mut notifications = use_signal(|| true);
+    let auth_state = use_context::<Signal<AuthState>>();
+
+    let mut refresh_interval = use_signal(|| load_setting("ferrite_refresh_interval", "5"));
+    let mut dark_mode = use_signal(|| load_setting("ferrite_dark_mode", "true") == "true");
+    let mut notifications = use_signal(|| load_setting("ferrite_notifications", "true") == "true");
     let mut saved = use_signal(|| false);
+
+    // Derive server info from auth state
+    let (auth_mode_label, auth_detail) = match auth_state() {
+        AuthState::Authenticated { .. } | AuthState::Loading => ("Detected".into(), "—".into()),
+        AuthState::Unauthenticated { ref auth_mode } => {
+            let mode = auth_mode.mode.clone();
+            let detail = match mode.as_str() {
+                "keycloak" => auth_mode.authority.clone().unwrap_or_else(|| "—".into()),
+                _ => "Built-in credentials".into(),
+            };
+            (mode, detail)
+        }
+    };
+
+    let api_url = crate::api::client::api_url();
 
     rsx! {
         div {
@@ -35,28 +69,40 @@ pub fn SettingsPage() -> Element {
                 }
             }
 
-            // API Configuration
+            // Server Info (read-only)
             div {
                 class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
                 div {
                     class: "px-5 py-4 border-b border-surface-700",
                     h2 {
                         class: "text-sm font-medium text-gray-200",
-                        "API Configuration"
+                        "Server"
                     }
                     p {
                         class: "text-xs text-gray-500 mt-0.5",
-                        "Connection to the ferrite backend"
+                        "Discovered from the ferrite backend"
+                    }
+                }
+                div {
+                    class: "px-5 py-4 space-y-3",
+                    ReadOnlyField { label: "API URL", value: api_url }
+                    ReadOnlyField { label: "Auth Mode", value: auth_mode_label }
+                    ReadOnlyField { label: "Auth Detail", value: auth_detail }
+                }
+            }
+
+            // Preferences
+            div {
+                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
+                div {
+                    class: "px-5 py-4 border-b border-surface-700",
+                    h2 {
+                        class: "text-sm font-medium text-gray-200",
+                        "Preferences"
                     }
                 }
                 div {
                     class: "px-5 py-4 space-y-4",
-                    SettingsField {
-                        label: "API Base URL",
-                        help: "The base URL of the ferrite REST API server",
-                        value: api_url(),
-                        on_change: move |e: Event<FormData>| api_url.set(e.value()),
-                    }
                     div {
                         label {
                             class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
@@ -77,52 +123,6 @@ pub fn SettingsPage() -> Element {
                             "Polling interval for data refresh"
                         }
                     }
-                }
-            }
-
-            // Authentication
-            div {
-                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
-                div {
-                    class: "px-5 py-4 border-b border-surface-700",
-                    h2 {
-                        class: "text-sm font-medium text-gray-200",
-                        "Authentication"
-                    }
-                    p {
-                        class: "text-xs text-gray-500 mt-0.5",
-                        "OpenID Connect settings"
-                    }
-                }
-                div {
-                    class: "px-5 py-4 space-y-4",
-                    SettingsField {
-                        label: "OIDC Authority",
-                        help: "The OIDC provider authority URL",
-                        value: oidc_authority(),
-                        on_change: move |e: Event<FormData>| oidc_authority.set(e.value()),
-                    }
-                    SettingsField {
-                        label: "Client ID",
-                        help: "The OIDC client identifier",
-                        value: oidc_client_id(),
-                        on_change: move |e: Event<FormData>| oidc_client_id.set(e.value()),
-                    }
-                }
-            }
-
-            // Preferences
-            div {
-                class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
-                div {
-                    class: "px-5 py-4 border-b border-surface-700",
-                    h2 {
-                        class: "text-sm font-medium text-gray-200",
-                        "Preferences"
-                    }
-                }
-                div {
-                    class: "px-5 py-4 space-y-4",
                     ToggleSetting {
                         label: "Dark Mode",
                         description: "Use dark theme for the dashboard",
@@ -143,6 +143,9 @@ pub fn SettingsPage() -> Element {
                 button {
                     class: "px-6 py-2.5 bg-ferrite-600 text-white rounded-lg hover:bg-ferrite-500 focus:ring-2 focus:ring-ferrite-500/50 text-sm font-medium transition-all duration-150",
                     onclick: move |_| {
+                        save_setting("ferrite_refresh_interval", &refresh_interval());
+                        save_setting("ferrite_dark_mode", if dark_mode() { "true" } else { "false" });
+                        save_setting("ferrite_notifications", if notifications() { "true" } else { "false" });
                         saved.set(true);
                     },
                     "Save Settings"
@@ -153,27 +156,17 @@ pub fn SettingsPage() -> Element {
 }
 
 #[component]
-fn SettingsField(
-    label: &'static str,
-    help: &'static str,
-    value: String,
-    on_change: EventHandler<Event<FormData>>,
-) -> Element {
+fn ReadOnlyField(label: &'static str, value: String) -> Element {
     rsx! {
         div {
-            label {
-                class: "block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wider",
+            class: "flex items-center justify-between",
+            span {
+                class: "text-xs font-medium text-gray-500 uppercase tracking-wider",
                 "{label}"
             }
-            input {
-                class: "w-full px-3 py-2.5 bg-surface-800 border border-surface-650 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all font-mono",
-                r#type: "text",
-                value: "{value}",
-                oninput: move |e| on_change.call(e),
-            }
-            p {
-                class: "mt-1 text-[10px] text-gray-600 font-mono",
-                "{help}"
+            span {
+                class: "text-sm text-gray-300 font-mono",
+                "{value}"
             }
         }
     }

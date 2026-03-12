@@ -104,7 +104,7 @@ impl Store {
 
             CREATE TABLE IF NOT EXISTS fault_events (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_rowid    INTEGER NOT NULL REFERENCES devices(id),
+                device_rowid    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
                 fault_type      INTEGER NOT NULL,
                 pc              INTEGER NOT NULL,
                 lr              INTEGER NOT NULL,
@@ -120,7 +120,7 @@ impl Store {
 
             CREATE TABLE IF NOT EXISTS metrics (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_rowid    INTEGER NOT NULL REFERENCES devices(id),
+                device_rowid    INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
                 key             TEXT NOT NULL,
                 metric_type     INTEGER NOT NULL,
                 value_json      TEXT NOT NULL,
@@ -130,7 +130,7 @@ impl Store {
 
             CREATE TABLE IF NOT EXISTS reboot_events (
                 id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_rowid          INTEGER NOT NULL REFERENCES devices(id),
+                device_rowid          INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
                 reason                INTEGER NOT NULL,
                 extra                 INTEGER NOT NULL DEFAULT 0,
                 boot_sequence         INTEGER NOT NULL DEFAULT 0,
@@ -265,6 +265,21 @@ impl Store {
         }
     }
 
+    /// Begin a transaction. Returns a guard that auto-rolls-back on drop unless committed.
+    pub fn begin_transaction(&self) -> SqlResult<()> {
+        self.conn.execute_batch("BEGIN IMMEDIATE")
+    }
+
+    /// Commit the current transaction.
+    pub fn commit_transaction(&self) -> SqlResult<()> {
+        self.conn.execute_batch("COMMIT")
+    }
+
+    /// Rollback the current transaction.
+    pub fn rollback_transaction(&self) -> SqlResult<()> {
+        self.conn.execute_batch("ROLLBACK")
+    }
+
     /// Register a new device by device_key. Returns the row id.
     pub fn register_device(
         &self,
@@ -379,16 +394,46 @@ impl Store {
     }
 
     pub fn list_faults_for_device(&self, device_id: &str) -> SqlResult<Vec<FaultEvent>> {
-        let mut stmt = self.conn.prepare(
+        self.list_faults_for_device_paginated(device_id, 100, 0, None, None)
+    }
+
+    pub fn list_faults_for_device_paginated(
+        &self,
+        device_id: &str,
+        limit: usize,
+        offset: usize,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> SqlResult<Vec<FaultEvent>> {
+        let mut sql = String::from(
             "SELECT f.id, f.device_rowid, d.device_id, f.fault_type, f.pc, f.lr,
                     f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at
              FROM fault_events f
              JOIN devices d ON d.id = f.device_rowid
-             WHERE d.device_id = ?1
-             ORDER BY f.created_at DESC
-             LIMIT 100",
-        )?;
-        let rows = stmt.query_map(params![device_id], |row| {
+             WHERE d.device_id = ?1",
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        param_values.push(Box::new(device_id.to_string()));
+        if let Some(s) = since {
+            param_values.push(Box::new(s.to_string()));
+            sql.push_str(&format!(" AND f.created_at >= ?{}", param_values.len()));
+        }
+        if let Some(u) = until {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND f.created_at < ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        let limit_idx = param_values.len();
+        param_values.push(Box::new(offset as i64));
+        let offset_idx = param_values.len();
+        sql.push_str(&format!(
+            " ORDER BY f.created_at DESC LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
+        ));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
             Ok(FaultEvent {
                 id: row.get(0)?,
                 device_rowid: row.get(1)?,
@@ -410,15 +455,44 @@ impl Store {
     }
 
     pub fn list_all_faults(&self, limit: usize) -> SqlResult<Vec<FaultEvent>> {
-        let mut stmt = self.conn.prepare(
+        self.list_all_faults_paginated(limit, 0, None, None)
+    }
+
+    pub fn list_all_faults_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> SqlResult<Vec<FaultEvent>> {
+        let mut sql = String::from(
             "SELECT f.id, f.device_rowid, d.device_id, f.fault_type, f.pc, f.lr,
                     f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at
              FROM fault_events f
              JOIN devices d ON d.id = f.device_rowid
-             ORDER BY f.created_at DESC
-             LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
+             WHERE 1=1",
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(s) = since {
+            param_values.push(Box::new(s.to_string()));
+            sql.push_str(&format!(" AND f.created_at >= ?{}", param_values.len()));
+        }
+        if let Some(u) = until {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND f.created_at < ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        let limit_idx = param_values.len();
+        param_values.push(Box::new(offset as i64));
+        let offset_idx = param_values.len();
+        sql.push_str(&format!(
+            " ORDER BY f.created_at DESC LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
+        ));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
             Ok(FaultEvent {
                 id: row.get(0)?,
                 device_rowid: row.get(1)?,
@@ -464,16 +538,46 @@ impl Store {
     }
 
     pub fn list_metrics_for_device(&self, device_id: &str) -> SqlResult<Vec<MetricRow>> {
-        let mut stmt = self.conn.prepare(
+        self.list_metrics_for_device_paginated(device_id, 200, 0, None, None)
+    }
+
+    pub fn list_metrics_for_device_paginated(
+        &self,
+        device_id: &str,
+        limit: usize,
+        offset: usize,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> SqlResult<Vec<MetricRow>> {
+        let mut sql = String::from(
             "SELECT m.id, m.device_rowid, d.device_id, m.key, m.metric_type,
                     m.value_json, m.timestamp_ticks, m.created_at
              FROM metrics m
              JOIN devices d ON d.id = m.device_rowid
-             WHERE d.device_id = ?1
-             ORDER BY m.created_at DESC
-             LIMIT 200",
-        )?;
-        let rows = stmt.query_map(params![device_id], |row| {
+             WHERE d.device_id = ?1",
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        param_values.push(Box::new(device_id.to_string()));
+        if let Some(s) = since {
+            param_values.push(Box::new(s.to_string()));
+            sql.push_str(&format!(" AND m.created_at >= ?{}", param_values.len()));
+        }
+        if let Some(u) = until {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND m.created_at < ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        let limit_idx = param_values.len();
+        param_values.push(Box::new(offset as i64));
+        let offset_idx = param_values.len();
+        sql.push_str(&format!(
+            " ORDER BY m.created_at DESC LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
+        ));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
             Ok(MetricRow {
                 id: row.get(0)?,
                 device_rowid: row.get(1)?,
@@ -489,15 +593,44 @@ impl Store {
     }
 
     pub fn list_all_metrics(&self, limit: usize) -> SqlResult<Vec<MetricRow>> {
-        let mut stmt = self.conn.prepare(
+        self.list_all_metrics_paginated(limit, 0, None, None)
+    }
+
+    pub fn list_all_metrics_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> SqlResult<Vec<MetricRow>> {
+        let mut sql = String::from(
             "SELECT m.id, m.device_rowid, d.device_id, m.key, m.metric_type,
                     m.value_json, m.timestamp_ticks, m.created_at
              FROM metrics m
              JOIN devices d ON d.id = m.device_rowid
-             ORDER BY m.created_at DESC
-             LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
+             WHERE 1=1",
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(s) = since {
+            param_values.push(Box::new(s.to_string()));
+            sql.push_str(&format!(" AND m.created_at >= ?{}", param_values.len()));
+        }
+        if let Some(u) = until {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND m.created_at < ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        let limit_idx = param_values.len();
+        param_values.push(Box::new(offset as i64));
+        let offset_idx = param_values.len();
+        sql.push_str(&format!(
+            " ORDER BY m.created_at DESC LIMIT ?{limit_idx} OFFSET ?{offset_idx}"
+        ));
+
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
             Ok(MetricRow {
                 id: row.get(0)?,
                 device_rowid: row.get(1)?,

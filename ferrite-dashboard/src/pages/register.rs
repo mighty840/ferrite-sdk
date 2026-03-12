@@ -26,13 +26,7 @@ pub fn RegisterPage() -> Element {
         status_msg.set(None);
 
         spawn(async move {
-            let api_url = web_sys::window()
-                .and_then(|w| w.location().origin().ok())
-                .unwrap_or_else(|| "http://localhost:4000".into());
-            let mut client = crate::api::ApiClient::new(&api_url);
-            if let AuthState::Authenticated { ref token, .. } = auth {
-                client.set_token(token.clone());
-            }
+            let client = crate::api::client::authenticated_client(&auth);
             let name_opt = if name.is_empty() { None } else { Some(name) };
             let tags_opt = if tags.is_empty() { None } else { Some(tags) };
 

@@ -1,6 +1,7 @@
 pub mod api;
 pub mod auth;
 pub mod components;
+pub mod hooks;
 pub mod pages;
 
 use dioxus::prelude::*;
@@ -199,12 +200,7 @@ fn App() -> Element {
             }
 
             // No stored session — discover auth mode from server
-            // Use same-origin; dx serve proxies API requests to ferrite-server in dev
-            let api_url = web_sys::window()
-                .and_then(|w| w.location().origin().ok())
-                .unwrap_or_else(|| "http://localhost:4000".into());
-
-            let client = api::ApiClient::new(&api_url);
+            let client = api::ApiClient::new(&api::client::api_url());
             match client.get_auth_mode().await {
                 Ok(mode_info) => {
                     auth.set(AuthState::Unauthenticated {

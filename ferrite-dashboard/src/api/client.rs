@@ -1,11 +1,27 @@
 use super::types::*;
-use crate::auth::{AuthModeInfo, AuthToken};
+use crate::auth::{AuthModeInfo, AuthState, AuthToken};
 use serde::{Deserialize, Serialize};
 
 /// HTTP client for communicating with the ferrite backend API.
 pub struct ApiClient {
     base_url: String,
     token: Option<AuthToken>,
+}
+
+/// Resolve the API base URL from the browser's origin (same-origin for proxied dev).
+pub fn api_url() -> String {
+    web_sys::window()
+        .and_then(|w| w.location().origin().ok())
+        .unwrap_or_else(|| "http://localhost:4000".into())
+}
+
+/// Create an ApiClient configured with the current auth token (if authenticated).
+pub fn authenticated_client(auth_state: &AuthState) -> ApiClient {
+    let mut client = ApiClient::new(&api_url());
+    if let AuthState::Authenticated { ref token, .. } = auth_state {
+        client.set_token(token.clone());
+    }
+    client
 }
 
 #[derive(Deserialize)]

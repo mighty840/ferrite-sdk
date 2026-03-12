@@ -2,6 +2,8 @@
 
 use axum::http::header;
 use base64::Engine;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::config::{AuthConfig, AuthMode, BasicAuthConfig, KeycloakConfig};
 
@@ -56,17 +58,130 @@ pub fn validate_basic_auth(
 }
 
 // ---------------------------------------------------------------------------
+// JWKS cache for local JWT validation
+// ---------------------------------------------------------------------------
+
+/// Cached JWKS key set with TTL-based refresh.
+struct JwksCache {
+    keys: Vec<jsonwebtoken::jwk::Jwk>,
+    fetched_at: Instant,
+}
+
+/// Global JWKS cache — refreshed every 5 minutes.
+static JWKS_CACHE: Mutex<Option<JwksCache>> = Mutex::new(None);
+const JWKS_TTL_SECS: u64 = 300;
+
+/// Fetch (or return cached) JWKS keys from the Keycloak certs endpoint.
+async fn get_jwks_keys(config: &KeycloakConfig) -> Result<Vec<jsonwebtoken::jwk::Jwk>, String> {
+    // Check cache first
+    {
+        let cache = JWKS_CACHE.lock().unwrap();
+        if let Some(ref c) = *cache {
+            if c.fetched_at.elapsed().as_secs() < JWKS_TTL_SECS {
+                return Ok(c.keys.clone());
+            }
+        }
+    }
+
+    // Fetch fresh JWKS
+    let url = config.jwks_endpoint();
+    tracing::debug!("Fetching JWKS from {}", url);
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("JWKS fetch failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("JWKS fetch failed: HTTP {}", resp.status()));
+    }
+
+    let jwks: jsonwebtoken::jwk::JwkSet = resp
+        .json()
+        .await
+        .map_err(|e| format!("JWKS parse failed: {e}"))?;
+
+    let keys = jwks.keys;
+
+    // Update cache
+    {
+        let mut cache = JWKS_CACHE.lock().unwrap();
+        *cache = Some(JwksCache {
+            keys: keys.clone(),
+            fetched_at: Instant::now(),
+        });
+    }
+
+    Ok(keys)
+}
+
+/// JWT claims we extract from Keycloak tokens.
+#[derive(Debug, serde::Deserialize)]
+struct KeycloakClaims {
+    sub: Option<String>,
+    email: Option<String>,
+    preferred_username: Option<String>,
+    name: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // Keycloak JWT validation
 // ---------------------------------------------------------------------------
 
-/// Validate a Keycloak Bearer token by calling the userinfo endpoint.
-///
-/// This is the simplest approach — lets Keycloak do the validation.
-/// For production, consider local JWKS-based validation with caching.
+/// Validate a Keycloak Bearer token using local JWKS verification.
+/// Falls back to the userinfo endpoint if JWKS validation fails.
 pub async fn validate_keycloak_token(
     token: &str,
     config: &KeycloakConfig,
 ) -> Result<UserClaims, String> {
+    // Try local JWKS-based validation first
+    if let Ok(keys) = get_jwks_keys(config).await {
+        // Decode the JWT header to find the key ID
+        let header =
+            jsonwebtoken::decode_header(token).map_err(|e| format!("invalid JWT header: {e}"))?;
+
+        let kid = header.kid.as_deref();
+
+        // Find matching key
+        for jwk in &keys {
+            if let Some(ref jwk_kid) = jwk.common.key_id {
+                if kid.is_some() && kid != Some(jwk_kid.as_str()) {
+                    continue;
+                }
+            }
+
+            let decoding_key = match jsonwebtoken::DecodingKey::from_jwk(jwk) {
+                Ok(k) => k,
+                Err(_) => continue,
+            };
+
+            let mut validation = jsonwebtoken::Validation::new(header.alg);
+            // Keycloak issuer is {url}/realms/{realm}
+            let issuer = format!("{}/realms/{}", config.url, config.realm);
+            validation.set_issuer(&[&issuer]);
+            // Don't validate audience — Keycloak tokens may have different audiences
+            validation.validate_aud = false;
+
+            match jsonwebtoken::decode::<KeycloakClaims>(token, &decoding_key, &validation) {
+                Ok(data) => {
+                    return Ok(UserClaims {
+                        sub: data.claims.sub.unwrap_or_else(|| "unknown".into()),
+                        email: data.claims.email,
+                        name: data.claims.preferred_username.or(data.claims.name),
+                    });
+                }
+                Err(e) => {
+                    tracing::debug!("JWKS validation failed for key: {e}");
+                    continue;
+                }
+            }
+        }
+        // All keys failed — fall through to userinfo
+        tracing::debug!("No JWKS key matched, falling back to userinfo");
+    }
+
+    // Fallback: validate via userinfo endpoint
     let client = reqwest::Client::new();
     let resp = client
         .get(config.userinfo_endpoint())

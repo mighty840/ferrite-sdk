@@ -7,26 +7,17 @@ use dioxus::prelude::*;
 #[component]
 pub fn DashboardPage() -> Element {
     let auth_state = use_context::<Signal<AuthState>>();
+    let poll_tick = crate::hooks::use_poll_tick();
 
     let devices_resource = use_resource(move || async move {
-        let api_url = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .unwrap_or_else(|| "http://localhost:4000".into());
-        let mut client = crate::api::ApiClient::new(&api_url);
-        if let AuthState::Authenticated { ref token, .. } = auth_state() {
-            client.set_token(token.clone());
-        }
+        let _tick = poll_tick();
+        let client = crate::api::client::authenticated_client(&auth_state());
         client.list_devices().await
     });
 
     let faults_resource = use_resource(move || async move {
-        let api_url = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .unwrap_or_else(|| "http://localhost:4000".into());
-        let mut client = crate::api::ApiClient::new(&api_url);
-        if let AuthState::Authenticated { ref token, .. } = auth_state() {
-            client.set_token(token.clone());
-        }
+        let _tick = poll_tick();
+        let client = crate::api::client::authenticated_client(&auth_state());
         client.list_faults().await
     });
 
