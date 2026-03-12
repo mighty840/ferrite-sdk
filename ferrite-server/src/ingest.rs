@@ -7,9 +7,11 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 
+use crate::sse::SsePayload;
 use crate::AppState;
 
 /// Maximum allowed ELF upload size (50 MB).
@@ -47,6 +49,7 @@ pub enum ChunkType {
     TraceFragment = 0x04,
     RebootReason = 0x05,
     DeviceInfo = 0x06,
+    OtaRequest = 0x07,
 }
 
 impl ChunkType {
@@ -58,10 +61,14 @@ impl ChunkType {
             0x04 => Some(Self::TraceFragment),
             0x05 => Some(Self::RebootReason),
             0x06 => Some(Self::DeviceInfo),
+            0x07 => Some(Self::OtaRequest),
             _ => None,
         }
     }
 }
+
+/// Flag bit indicating the chunk payload is encrypted (AES-128-CCM).
+const FLAG_ENCRYPTED: u8 = 0x04;
 
 const MAGIC: u8 = 0xEC;
 const VERSION: u8 = 1;
@@ -146,6 +153,42 @@ fn decode_chunk(bytes: &[u8]) -> Result<(DecodedChunk, usize), DecodeError> {
         },
         total,
     ))
+}
+
+/// Decrypt an encrypted chunk payload using AES-128-CCM.
+/// Returns the decrypted plaintext, or None on failure.
+fn decrypt_chunk_payload(key: &[u8; 16], encrypted: &[u8]) -> Option<Vec<u8>> {
+    use aes::Aes128;
+    use ccm::aead::generic_array::GenericArray;
+    use ccm::aead::AeadInPlace;
+    use ccm::aead::KeyInit;
+    use ccm::consts::{U13, U8};
+    use ccm::Ccm;
+
+    type Aes128Ccm = Ccm<Aes128, U8, U13>;
+
+    const NONCE_SIZE: usize = 13;
+    const TAG_SIZE: usize = 8;
+
+    if encrypted.len() < NONCE_SIZE + TAG_SIZE {
+        return None;
+    }
+
+    let cipher = Aes128Ccm::new(GenericArray::from_slice(key));
+    let nonce = &encrypted[..NONCE_SIZE];
+    let ciphertext_len = encrypted.len() - NONCE_SIZE - TAG_SIZE;
+    let ciphertext = &encrypted[NONCE_SIZE..NONCE_SIZE + ciphertext_len];
+    let tag = &encrypted[NONCE_SIZE + ciphertext_len..];
+
+    let mut plaintext = ciphertext.to_vec();
+    let nonce_ga = GenericArray::from_slice(nonce);
+    let tag_ga = GenericArray::from_slice(tag);
+
+    cipher
+        .decrypt_in_place_detached(nonce_ga, &[], &mut plaintext, tag_ga)
+        .ok()?;
+
+    Some(plaintext)
 }
 
 /// Decode all chunks from a byte stream. Stops at the first decode error
@@ -440,6 +483,30 @@ fn parse_reboot_reason_payload(payload: &[u8]) -> Option<ParsedRebootReason> {
     })
 }
 
+struct ParsedOtaRequest {
+    build_id: u64,
+    max_chunk_size: u16,
+    ota_capable: bool,
+}
+
+fn parse_ota_request_payload(payload: &[u8]) -> Option<ParsedOtaRequest> {
+    if payload.len() < 14 {
+        return None;
+    }
+    let build_id = u64::from_le_bytes([
+        payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
+        payload[7],
+    ]);
+    let max_chunk_size = u16::from_le_bytes([payload[8], payload[9]]);
+    let ota_capable = payload[10] != 0;
+
+    Some(ParsedOtaRequest {
+        build_id,
+        max_chunk_size,
+        ota_capable,
+    })
+}
+
 struct ParsedHeartbeat {
     uptime_ticks: u64,
     free_stack_bytes: u32,
@@ -490,9 +557,39 @@ async fn ingest_chunks(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let chunks = decode_all_chunks(&body);
+    let mut chunks = decode_all_chunks(&body);
     let num_chunks = chunks.len();
     let mut errors: Vec<String> = Vec::new();
+
+    // Decrypt encrypted chunks if key is configured
+    if let Some(ref key) = state.config.chunk_encryption_key {
+        for chunk in &mut chunks {
+            if chunk.flags & FLAG_ENCRYPTED != 0 {
+                match decrypt_chunk_payload(key, &chunk.payload) {
+                    Some(plaintext) => {
+                        chunk.payload = plaintext;
+                        chunk.flags &= !FLAG_ENCRYPTED; // clear encrypted flag
+                    }
+                    None => {
+                        errors.push(format!(
+                            "failed to decrypt chunk seq={} type={:?}",
+                            chunk.sequence_id, chunk.chunk_type
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Prometheus counters
+    state
+        .counters
+        .ingest_requests
+        .fetch_add(1, Ordering::Relaxed);
+    state
+        .counters
+        .ingest_chunks
+        .fetch_add(num_chunks as u64, Ordering::Relaxed);
 
     // Determine device context: first try to find a DeviceInfo chunk, else use header.
     let fallback_device_id = headers
@@ -589,6 +686,20 @@ async fn ingest_chunks(
                         symbol.as_deref(),
                     ) {
                         errors.push(format!("db error inserting fault: {e}"));
+                    } else {
+                        let _ = state.event_tx.send(SsePayload::fault(
+                            &current_device_id,
+                            fault.fault_type,
+                            fault.pc,
+                        ));
+                        // Send fault alert webhook (#28)
+                        crate::alerting::send_fault_alert(
+                            &state,
+                            &current_device_id,
+                            fault.fault_type,
+                            fault.pc,
+                            symbol.as_deref(),
+                        );
                     }
                 } else {
                     errors.push("failed to parse fault payload".to_string());
@@ -605,6 +716,12 @@ async fn ingest_chunks(
                         entry.timestamp_ticks,
                     ) {
                         errors.push(format!("db error inserting metric '{}': {e}", entry.key));
+                    } else {
+                        let _ = state.event_tx.send(SsePayload::metric(
+                            &current_device_id,
+                            &entry.key,
+                            &entry.value_json,
+                        ));
                     }
                 }
             }
@@ -618,6 +735,10 @@ async fn ingest_chunks(
                         reboot.uptime_before_reboot,
                     ) {
                         errors.push(format!("db error inserting reboot: {e}"));
+                    } else {
+                        let _ = state
+                            .event_tx
+                            .send(SsePayload::reboot(&current_device_id, reboot.reason));
                     }
                 } else {
                     errors.push("failed to parse reboot reason payload".to_string());
@@ -640,6 +761,9 @@ async fn ingest_chunks(
                     }
                     // Touch the device to update last_seen.
                     let _ = store.touch_device(&current_device_id);
+                    let _ = state
+                        .event_tx
+                        .send(SsePayload::heartbeat(&current_device_id, hb.uptime_ticks));
                 }
             }
             ChunkType::TraceFragment => {
@@ -651,6 +775,36 @@ async fn ingest_chunks(
                     last = chunk.is_last(),
                     "trace fragment received"
                 );
+            }
+            ChunkType::OtaRequest => {
+                if let Some(ota) = parse_ota_request_payload(&chunk.payload) {
+                    tracing::info!(
+                        device = %current_device_id,
+                        build_id = ota.build_id,
+                        max_chunk_size = ota.max_chunk_size,
+                        ota_capable = ota.ota_capable,
+                        "OTA request received"
+                    );
+                    // Check if there's an OTA target for this device
+                    if let Ok(Some(target)) = store.get_ota_target_for_device(&current_device_id) {
+                        if target.target_build_id as u64 != ota.build_id {
+                            tracing::info!(
+                                device = %current_device_id,
+                                current_build = ota.build_id,
+                                target_build = target.target_build_id,
+                                target_version = %target.target_version,
+                                "OTA update available for device"
+                            );
+                            let _ = state.event_tx.send(SsePayload::ota_available(
+                                &current_device_id,
+                                &target.target_version,
+                                target.target_build_id,
+                            ));
+                        }
+                    }
+                } else {
+                    errors.push("failed to parse OTA request payload".to_string());
+                }
             }
         }
     }
@@ -1134,7 +1288,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             http::HeaderName::from_static("x-api-key"),
         ]));
 
-    Router::new()
+    let mut app = Router::new()
         .route("/health", get(health))
         .route("/auth/mode", get(auth_mode))
         .route("/ingest/chunks", post(ingest_chunks))
@@ -1155,12 +1309,81 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/devices/:id/metrics", get(list_device_metrics))
         .route("/faults", get(list_all_faults))
         .route("/metrics", get(list_all_metrics))
+        // SSE live event stream (#26)
+        .route("/events/stream", get(crate::sse::event_stream))
+        // Device groups (#27)
+        .route(
+            "/groups",
+            get(crate::groups::list_groups).post(crate::groups::create_group),
+        )
+        .route(
+            "/groups/:id",
+            get(crate::groups::get_group)
+                .put(crate::groups::update_group)
+                .delete(crate::groups::delete_group),
+        )
+        .route(
+            "/groups/:id/devices",
+            get(crate::groups::list_group_devices),
+        )
+        .route(
+            "/groups/:id/devices/:device_id",
+            post(crate::groups::add_device_to_group)
+                .delete(crate::groups::remove_device_from_group),
+        )
+        // Prometheus metrics (#33)
+        .route(
+            "/metrics/prometheus",
+            get(crate::prometheus::prometheus_metrics),
+        )
+        // OTA firmware targets (#31)
+        .route(
+            "/ota/targets",
+            get(crate::ota::list_ota_targets).post(crate::ota::set_ota_target),
+        )
+        .route(
+            "/ota/targets/:device_id",
+            get(crate::ota::get_ota_target).delete(crate::ota::delete_ota_target),
+        )
+        // Admin: backup & retention (#40, #29)
+        .route("/admin/backup", get(crate::backup::backup_database))
+        .route("/admin/retention", get(crate::backup::retention_info))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::auth_middleware::require_auth,
         ))
-        .layer(cors)
-        .with_state(state)
+        .layer(cors);
+
+    // Rate limiting layer (#34) — inject limiter into extensions
+    if let Some(ref limiter) = state.rate_limiter {
+        let limiter = limiter.clone();
+        app = app.layer(axum::middleware::from_fn(
+            move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                let limiter = limiter.clone();
+                async move {
+                    let path = req.uri().path().to_string();
+                    if path.starts_with("/ingest") || path.starts_with("/auth") {
+                        let ip = req
+                            .extensions()
+                            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                            .map(|ci| ci.0.ip())
+                            .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+                        if !limiter.try_acquire(ip).await {
+                            return (
+                                StatusCode::TOO_MANY_REQUESTS,
+                                [("retry-after", "1")],
+                                "Rate limit exceeded",
+                            )
+                                .into_response();
+                        }
+                    }
+                    next.run(req).await
+                }
+            },
+        ));
+    }
+
+    app.with_state(state)
 }
 
 // ---------------------------------------------------------------------------

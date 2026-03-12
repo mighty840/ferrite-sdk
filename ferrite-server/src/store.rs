@@ -51,6 +51,27 @@ pub struct MetricRow {
     pub created_at: String,
 }
 
+/// A device group.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceGroup {
+    pub id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub device_count: i64,
+    pub created_at: String,
+}
+
+/// An OTA firmware target for a device.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtaTarget {
+    pub id: i64,
+    pub device_id: String,
+    pub target_version: String,
+    pub target_build_id: i64,
+    pub firmware_url: Option<String>,
+    pub created_at: String,
+}
+
 /// A stored reboot event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RebootEvent {
@@ -141,6 +162,29 @@ impl Store {
             CREATE INDEX IF NOT EXISTS idx_fault_device ON fault_events(device_rowid);
             CREATE INDEX IF NOT EXISTS idx_metrics_device ON metrics(device_rowid);
             CREATE INDEX IF NOT EXISTS idx_reboot_device ON reboot_events(device_rowid);
+
+            CREATE TABLE IF NOT EXISTS device_groups (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS ota_targets (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id       TEXT NOT NULL UNIQUE,
+                target_version  TEXT NOT NULL,
+                target_build_id INTEGER NOT NULL DEFAULT 0,
+                firmware_url    TEXT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS device_group_members (
+                group_id    INTEGER NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+                device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                added_at    TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (group_id, device_id)
+            );
             ",
         )?;
         Ok(())
@@ -720,6 +764,319 @@ impl Store {
             |row| row.get(0),
         )
     }
+
+    /// Update device status by row id.
+    pub fn update_device_status(&self, device_id: i64, status: &str) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE devices SET status = ?2 WHERE id = ?1",
+            params![device_id, status],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Get datetime('now', modifier) from SQLite. Used for time comparisons.
+    pub fn datetime_now_offset(&self, modifier: &str) -> SqlResult<String> {
+        self.conn.query_row(
+            &format!("SELECT datetime('now', '{}')", modifier.replace('\'', "")),
+            [],
+            |row| row.get(0),
+        )
+    }
+
+    // ---- Global counts (for Prometheus) ----
+
+    pub fn count_all_faults(&self) -> SqlResult<i64> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM fault_events", [], |row| row.get(0))
+    }
+
+    pub fn count_all_metrics(&self) -> SqlResult<i64> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM metrics", [], |row| row.get(0))
+    }
+
+    pub fn count_all_reboots(&self) -> SqlResult<i64> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM reboot_events", [], |row| row.get(0))
+    }
+
+    pub fn count_all_groups(&self) -> SqlResult<i64> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM device_groups", [], |row| row.get(0))
+    }
+
+    // ---- OTA targets ----
+
+    /// Set (upsert) an OTA firmware target for a device.
+    pub fn set_ota_target(
+        &self,
+        device_id: &str,
+        target_version: &str,
+        target_build_id: i64,
+        firmware_url: Option<&str>,
+    ) -> SqlResult<OtaTarget> {
+        self.conn.execute(
+            "INSERT INTO ota_targets (device_id, target_version, target_build_id, firmware_url)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(device_id) DO UPDATE SET
+                target_version = excluded.target_version,
+                target_build_id = excluded.target_build_id,
+                firmware_url = COALESCE(excluded.firmware_url, ota_targets.firmware_url),
+                created_at = datetime('now')",
+            params![device_id, target_version, target_build_id, firmware_url],
+        )?;
+        self.get_ota_target_for_device(device_id)?
+            .ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    /// Get the OTA target for a specific device.
+    pub fn get_ota_target_for_device(&self, device_id: &str) -> SqlResult<Option<OtaTarget>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, device_id, target_version, target_build_id, firmware_url, created_at
+             FROM ota_targets WHERE device_id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![device_id], |row| {
+            Ok(OtaTarget {
+                id: row.get(0)?,
+                device_id: row.get(1)?,
+                target_version: row.get(2)?,
+                target_build_id: row.get(3)?,
+                firmware_url: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    /// List all OTA targets.
+    pub fn list_ota_targets(&self) -> SqlResult<Vec<OtaTarget>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, device_id, target_version, target_build_id, firmware_url, created_at
+             FROM ota_targets ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(OtaTarget {
+                id: row.get(0)?,
+                device_id: row.get(1)?,
+                target_version: row.get(2)?,
+                target_build_id: row.get(3)?,
+                firmware_url: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Delete an OTA target for a device.
+    pub fn delete_ota_target(&self, device_id: &str) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "DELETE FROM ota_targets WHERE device_id = ?1",
+            params![device_id],
+        )?;
+        Ok(changed > 0)
+    }
+
+    // ---- Data retention purge ----
+
+    /// Delete metrics older than the given SQLite date modifier (e.g. "-90 days").
+    pub fn purge_old_metrics(&self, age_modifier: &str) -> SqlResult<usize> {
+        self.conn.execute(
+            &format!(
+                "DELETE FROM metrics WHERE created_at < datetime('now', '{}')",
+                age_modifier.replace('\'', "")
+            ),
+            [],
+        )
+    }
+
+    /// Delete fault events older than the given SQLite date modifier.
+    pub fn purge_old_faults(&self, age_modifier: &str) -> SqlResult<usize> {
+        self.conn.execute(
+            &format!(
+                "DELETE FROM fault_events WHERE created_at < datetime('now', '{}')",
+                age_modifier.replace('\'', "")
+            ),
+            [],
+        )
+    }
+
+    /// Delete reboot events older than the given SQLite date modifier.
+    pub fn purge_old_reboots(&self, age_modifier: &str) -> SqlResult<usize> {
+        self.conn.execute(
+            &format!(
+                "DELETE FROM reboot_events WHERE created_at < datetime('now', '{}')",
+                age_modifier.replace('\'', "")
+            ),
+            [],
+        )
+    }
+
+    // ---- Device groups ----
+
+    pub fn create_group(&self, name: &str, description: Option<&str>) -> SqlResult<DeviceGroup> {
+        self.conn.execute(
+            "INSERT INTO device_groups (name, description) VALUES (?1, ?2)",
+            params![name, description],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.get_group(id)?
+            .ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    pub fn list_groups(&self) -> SqlResult<Vec<DeviceGroup>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.name, g.description,
+                    (SELECT COUNT(*) FROM device_group_members m WHERE m.group_id = g.id),
+                    g.created_at
+             FROM device_groups g
+             ORDER BY g.name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(DeviceGroup {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                device_count: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_group(&self, group_id: i64) -> SqlResult<Option<DeviceGroup>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT g.id, g.name, g.description,
+                    (SELECT COUNT(*) FROM device_group_members m WHERE m.group_id = g.id),
+                    g.created_at
+             FROM device_groups g
+             WHERE g.id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![group_id], |row| {
+            Ok(DeviceGroup {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                device_count: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn update_group(
+        &self,
+        group_id: i64,
+        name: Option<&str>,
+        description: Option<&str>,
+    ) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE device_groups SET
+                name = COALESCE(?2, name),
+                description = COALESCE(?3, description)
+             WHERE id = ?1",
+            params![group_id, name, description],
+        )?;
+        Ok(changed > 0)
+    }
+
+    pub fn delete_group(&self, group_id: i64) -> SqlResult<bool> {
+        let changed = self
+            .conn
+            .execute("DELETE FROM device_groups WHERE id = ?1", params![group_id])?;
+        Ok(changed > 0)
+    }
+
+    pub fn list_group_devices(&self, group_id: i64) -> SqlResult<Vec<Device>> {
+        let sql =
+            "SELECT d.id, d.device_id, d.firmware_version, d.build_id, d.first_seen, d.last_seen,
+                    d.device_key, d.name, d.status, d.tags, d.provisioned_by, d.provisioned_at
+             FROM devices d
+             JOIN device_group_members m ON m.device_id = d.id
+             WHERE m.group_id = ?1
+             ORDER BY d.last_seen DESC";
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params![group_id], Self::device_from_row)?;
+        rows.collect()
+    }
+
+    pub fn add_device_to_group(&self, group_id: i64, device_id: &str) -> SqlResult<bool> {
+        // Resolve device_id string to row id.
+        let dev_rowid: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT id FROM devices WHERE device_id = ?1",
+                params![device_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let Some(dev_rowid) = dev_rowid else {
+            return Ok(false);
+        };
+
+        // Check group exists.
+        let group_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM device_groups WHERE id = ?1",
+                params![group_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)?;
+
+        if !group_exists {
+            return Ok(false);
+        }
+
+        self.conn.execute(
+            "INSERT INTO device_group_members (group_id, device_id) VALUES (?1, ?2)",
+            params![group_id, dev_rowid],
+        )?;
+        Ok(true)
+    }
+
+    pub fn remove_device_from_group(&self, group_id: i64, device_id: &str) -> SqlResult<bool> {
+        let dev_rowid: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT id FROM devices WHERE device_id = ?1",
+                params![device_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let Some(dev_rowid) = dev_rowid else {
+            return Ok(false);
+        };
+
+        let changed = self.conn.execute(
+            "DELETE FROM device_group_members WHERE group_id = ?1 AND device_id = ?2",
+            params![group_id, dev_rowid],
+        )?;
+        Ok(changed > 0)
+    }
+
+    // ---- Backup ----
+
+    /// Create a backup of the database and return it as bytes.
+    pub fn backup_to_bytes(&self) -> SqlResult<Vec<u8>> {
+        let tmp = std::env::temp_dir().join(format!("ferrite-backup-{}.db", std::process::id()));
+        {
+            let mut dest = Connection::open(&tmp)?;
+            let backup = rusqlite::backup::Backup::new(&self.conn, &mut dest)?;
+            backup.run_to_completion(100, std::time::Duration::from_millis(10), None)?;
+        }
+        let output = std::fs::read(&tmp)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        let _ = std::fs::remove_file(&tmp);
+        Ok(output)
+    }
 }
 
 #[cfg(test)]
@@ -876,5 +1233,176 @@ mod tests {
     fn get_nonexistent_device_returns_none() {
         let store = Store::open_in_memory().unwrap();
         assert!(store.get_device_by_id("nope").unwrap().is_none());
+    }
+
+    // ---- Device groups tests ----
+
+    #[test]
+    fn create_and_list_groups() {
+        let store = Store::open_in_memory().unwrap();
+        let group = store.create_group("fleet-a", Some("Main fleet")).unwrap();
+        assert_eq!(group.name, "fleet-a");
+        assert_eq!(group.description, Some("Main fleet".into()));
+        assert_eq!(group.device_count, 0);
+
+        let groups = store.list_groups().unwrap();
+        assert_eq!(groups.len(), 1);
+    }
+
+    #[test]
+    fn update_and_delete_group() {
+        let store = Store::open_in_memory().unwrap();
+        let group = store.create_group("fleet-b", None).unwrap();
+
+        assert!(store
+            .update_group(group.id, Some("fleet-b-renamed"), Some("desc"))
+            .unwrap());
+        let updated = store.get_group(group.id).unwrap().unwrap();
+        assert_eq!(updated.name, "fleet-b-renamed");
+
+        assert!(store.delete_group(group.id).unwrap());
+        assert!(store.get_group(group.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn group_membership() {
+        let store = Store::open_in_memory().unwrap();
+        let group = store.create_group("fleet-c", None).unwrap();
+        store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+        store.upsert_device("dev-002", "1.0.0", 1).unwrap();
+
+        // Add devices
+        assert!(store.add_device_to_group(group.id, "dev-001").unwrap());
+        assert!(store.add_device_to_group(group.id, "dev-002").unwrap());
+
+        let members = store.list_group_devices(group.id).unwrap();
+        assert_eq!(members.len(), 2);
+
+        // Check device count
+        let g = store.get_group(group.id).unwrap().unwrap();
+        assert_eq!(g.device_count, 2);
+
+        // Remove one
+        assert!(store.remove_device_from_group(group.id, "dev-001").unwrap());
+        let members = store.list_group_devices(group.id).unwrap();
+        assert_eq!(members.len(), 1);
+    }
+
+    #[test]
+    fn add_nonexistent_device_to_group_returns_false() {
+        let store = Store::open_in_memory().unwrap();
+        let group = store.create_group("fleet-d", None).unwrap();
+        assert!(!store.add_device_to_group(group.id, "nonexistent").unwrap());
+    }
+
+    // ---- Global count tests ----
+
+    #[test]
+    fn global_counts() {
+        let store = Store::open_in_memory().unwrap();
+        assert_eq!(store.count_all_faults().unwrap(), 0);
+        assert_eq!(store.count_all_metrics().unwrap(), 0);
+        assert_eq!(store.count_all_reboots().unwrap(), 0);
+        assert_eq!(store.count_all_groups().unwrap(), 0);
+
+        let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+        store
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .unwrap();
+        store.insert_metric(dev, "k", 0, "{}", 0).unwrap();
+        store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
+        store.create_group("g1", None).unwrap();
+
+        assert_eq!(store.count_all_faults().unwrap(), 1);
+        assert_eq!(store.count_all_metrics().unwrap(), 1);
+        assert_eq!(store.count_all_reboots().unwrap(), 1);
+        assert_eq!(store.count_all_groups().unwrap(), 1);
+    }
+
+    // ---- Retention purge tests ----
+
+    #[test]
+    fn purge_old_data() {
+        let store = Store::open_in_memory().unwrap();
+        let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+
+        // Insert some data
+        store.insert_metric(dev, "old", 0, "{}", 0).unwrap();
+        store
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .unwrap();
+        store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
+
+        assert_eq!(store.count_all_metrics().unwrap(), 1);
+        assert_eq!(store.count_all_faults().unwrap(), 1);
+        assert_eq!(store.count_all_reboots().unwrap(), 1);
+
+        // Purge with "+1 day" — means cutoff is tomorrow, so everything is "older" than that
+        let metrics_purged = store.purge_old_metrics("+1 day").unwrap();
+        let faults_purged = store.purge_old_faults("+1 day").unwrap();
+        let reboots_purged = store.purge_old_reboots("+1 day").unwrap();
+
+        assert_eq!(metrics_purged, 1);
+        assert_eq!(faults_purged, 1);
+        assert_eq!(reboots_purged, 1);
+        assert_eq!(store.count_all_metrics().unwrap(), 0);
+        assert_eq!(store.count_all_faults().unwrap(), 0);
+        assert_eq!(store.count_all_reboots().unwrap(), 0);
+    }
+
+    // ---- Backup test ----
+
+    #[test]
+    fn backup_to_bytes_produces_valid_sqlite() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+
+        let bytes = store.backup_to_bytes().unwrap();
+        assert!(!bytes.is_empty());
+        // SQLite files start with "SQLite format 3\0"
+        assert!(bytes.starts_with(b"SQLite format 3\0"));
+    }
+
+    #[test]
+    fn ota_target_crud() {
+        let store = Store::open_in_memory().unwrap();
+
+        // No target initially
+        let target = store.get_ota_target_for_device("dev-001").unwrap();
+        assert!(target.is_none());
+
+        // Set a target
+        let t = store
+            .set_ota_target("dev-001", "2.0.0", 42, Some("https://example.com/fw.bin"))
+            .unwrap();
+        assert_eq!(t.device_id, "dev-001");
+        assert_eq!(t.target_version, "2.0.0");
+        assert_eq!(t.target_build_id, 42);
+        assert_eq!(
+            t.firmware_url.as_deref(),
+            Some("https://example.com/fw.bin")
+        );
+
+        // List targets
+        let targets = store.list_ota_targets().unwrap();
+        assert_eq!(targets.len(), 1);
+
+        // Upsert updates existing
+        let t2 = store.set_ota_target("dev-001", "2.1.0", 43, None).unwrap();
+        assert_eq!(t2.target_version, "2.1.0");
+        assert_eq!(t2.target_build_id, 43);
+        // firmware_url preserved via COALESCE
+        assert_eq!(
+            t2.firmware_url.as_deref(),
+            Some("https://example.com/fw.bin")
+        );
+
+        // Still only 1 target
+        assert_eq!(store.list_ota_targets().unwrap().len(), 1);
+
+        // Delete
+        assert!(store.delete_ota_target("dev-001").unwrap());
+        assert!(!store.delete_ota_target("dev-001").unwrap()); // already gone
+        assert!(store.list_ota_targets().unwrap().is_empty());
     }
 }

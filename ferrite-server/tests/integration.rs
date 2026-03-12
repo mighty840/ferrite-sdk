@@ -31,6 +31,11 @@ const AUTH_ENV_KEYS: &[&str] = &[
     "BASIC_AUTH_PASS",
     "INGEST_API_KEY",
     "CORS_ORIGIN",
+    "RETENTION_DAYS",
+    "RATE_LIMIT_RPS",
+    "ALERT_WEBHOOK_URL",
+    "ALERT_OFFLINE_MINUTES",
+    "CHUNK_ENCRYPTION_KEY",
 ];
 
 /// Spawn a ferrite-server on a random port with additional env vars set.
@@ -68,11 +73,15 @@ async fn spawn_server_with_env(env_overrides: Vec<(&str, &str)>) -> String {
         let store = ferrite_server::store::Store::open(&db_path).unwrap();
         let symbolicator = ferrite_server::symbolicate::Symbolicator::new(None, elf_dir.clone());
 
+        let (event_tx, _) = tokio::sync::broadcast::channel(256);
         let state = Arc::new(ferrite_server::AppState {
             store: Mutex::new(store),
             symbolicator: Mutex::new(symbolicator),
             elf_dir,
             config,
+            event_tx,
+            counters: ferrite_server::prometheus::RequestCounters::new(),
+            rate_limiter: None,
         });
 
         let app = ferrite_server::ingest::router(state);
@@ -328,6 +337,183 @@ async fn cors_preflight_returns_correct_headers() {
 }
 
 // =========================================================================
+// Health endpoint
+// =========================================================================
+
+#[tokio::test]
+async fn health_is_public() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/health"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// =========================================================================
+// Prometheus metrics endpoint (#33)
+// =========================================================================
+
+#[tokio::test]
+async fn prometheus_metrics_is_public() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/metrics/prometheus"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("ferrite_devices_total"));
+    assert!(body.contains("ferrite_faults_total"));
+    assert!(body.contains("ferrite_ingest_requests_total"));
+}
+
+// =========================================================================
+// SSE endpoint (#26)
+// =========================================================================
+
+#[tokio::test]
+async fn sse_endpoint_is_public() {
+    let base = spawn_server().await;
+    // Just verify the endpoint accepts connections (returns 200 with SSE content type)
+    let resp = Client::new()
+        .get(format!("{base}/events/stream"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    assert!(content_type.contains("text/event-stream"));
+}
+
+// =========================================================================
+// Device groups (#27)
+// =========================================================================
+
+#[tokio::test]
+async fn groups_crud() {
+    let base = spawn_server().await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+
+    // Create group
+    let resp = client
+        .post(format!("{base}/groups"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "name": "fleet-a", "description": "Test fleet" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let group_id = body["group"]["id"].as_i64().unwrap();
+    assert_eq!(body["group"]["name"], "fleet-a");
+
+    // List groups
+    let resp = client
+        .get(format!("{base}/groups"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["groups"].as_array().unwrap().len(), 1);
+
+    // Get single group
+    let resp = client
+        .get(format!("{base}/groups/{group_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Update group
+    let resp = client
+        .put(format!("{base}/groups/{group_id}"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({ "name": "fleet-b" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["group"]["name"], "fleet-b");
+
+    // Delete group
+    let resp = client
+        .delete(format!("{base}/groups/{group_id}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn groups_require_auth() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/groups"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+// =========================================================================
+// Admin endpoints (#40, #29)
+// =========================================================================
+
+#[tokio::test]
+async fn admin_backup_requires_auth() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/admin/backup"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn admin_backup_returns_sqlite() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/admin/backup"))
+        .header("Authorization", basic_auth_header())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.bytes().await.unwrap();
+    assert!(bytes.starts_with(b"SQLite format 3\0"));
+}
+
+#[tokio::test]
+async fn admin_retention_info() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .get(format!("{base}/admin/retention"))
+        .header("Authorization", basic_auth_header())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["retention_days"].is_number());
+    assert!(body["enabled"].is_boolean());
+}
+
+// =========================================================================
 // Keycloak integration tests (requires running Keycloak)
 // =========================================================================
 
@@ -470,4 +656,85 @@ async fn keycloak_elf_upload_with_bearer_token() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// =========================================================================
+// OTA target tests (#31)
+// =========================================================================
+
+#[tokio::test]
+async fn ota_targets_crud() {
+    let base = spawn_server().await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+
+    // Initially empty
+    let resp = client
+        .get(format!("{base}/ota/targets"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["targets"].as_array().unwrap().is_empty());
+
+    // Create a target
+    let resp = client
+        .post(format!("{base}/ota/targets"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "device_id": "dev-001",
+            "target_version": "2.0.0",
+            "target_build_id": 42,
+            "firmware_url": "https://example.com/fw.bin"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["target"]["target_version"], "2.0.0");
+
+    // Get specific target
+    let resp = client
+        .get(format!("{base}/ota/targets/dev-001"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(body["target"]["target_build_id"], 42);
+
+    // Delete target
+    let resp = client
+        .delete(format!("{base}/ota/targets/dev-001"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Should be 404 now
+    let resp = client
+        .get(format!("{base}/ota/targets/dev-001"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn ota_targets_require_auth() {
+    let base = spawn_server().await;
+    let client = Client::new();
+
+    let resp = client
+        .get(format!("{base}/ota/targets"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }

@@ -1,6 +1,6 @@
 use crate::api::types::*;
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading};
+use crate::components::{ErrorDisplay, Loading, MetricChart};
 use crate::Route;
 use dioxus::prelude::*;
 
@@ -189,35 +189,60 @@ pub fn DeviceDetailPage(id: String) -> Element {
                                 }
                             }
                         },
-                        "metrics" => rsx! {
-                            if metrics.is_empty() {
-                                div {
-                                    class: "bg-surface-900 rounded-xl border border-surface-700 p-8 text-center text-sm text-gray-500",
-                                    "No metrics recorded for this device"
-                                }
-                            } else {
-                                div {
-                                    class: "bg-surface-900 rounded-xl border border-surface-700 overflow-hidden",
-                                    table {
-                                        class: "w-full text-sm",
-                                        thead {
-                                            class: "bg-surface-850 border-b border-surface-700",
-                                            tr {
-                                                th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Key" }
-                                                th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Value" }
-                                                th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Ticks" }
-                                                th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Time" }
+                        "metrics" => {
+                            // Group metrics by key for charts
+                            let mut keys: Vec<String> = metrics.iter().map(|m| m.key.clone()).collect();
+                            keys.sort();
+                            keys.dedup();
+
+                            rsx! {
+                                if metrics.is_empty() {
+                                    div {
+                                        class: "bg-surface-900 rounded-xl border border-surface-700 p-8 text-center text-sm text-gray-500",
+                                        "No metrics recorded for this device"
+                                    }
+                                } else {
+                                    // Charts per metric key
+                                    div {
+                                        class: "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6",
+                                        for key in &keys {
+                                            MetricChart {
+                                                metrics: metrics.clone(),
+                                                metric_key: key.clone(),
                                             }
                                         }
-                                        tbody {
-                                            class: "divide-y divide-surface-750",
-                                            for m in metrics.iter().take(50) {
+                                    }
+                                    // Raw data table
+                                    div {
+                                        class: "bg-surface-900 rounded-xl border border-surface-700 overflow-hidden",
+                                        div {
+                                            class: "px-4 py-3 border-b border-surface-700",
+                                            h3 {
+                                                class: "text-xs font-semibold text-gray-500 uppercase tracking-wider",
+                                                "Raw Data"
+                                            }
+                                        }
+                                        table {
+                                            class: "w-full text-sm",
+                                            thead {
+                                                class: "bg-surface-850 border-b border-surface-700",
                                                 tr {
-                                                    class: "hover:bg-surface-850 transition-colors",
-                                                    td { class: "px-4 py-3 text-gray-200 font-mono", "{m.key}" }
-                                                    td { class: "px-4 py-3 text-gray-300 font-mono text-xs", "{m.value_json}" }
-                                                    td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{m.timestamp_ticks}" }
-                                                    td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{m.created_at}" }
+                                                    th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Key" }
+                                                    th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Value" }
+                                                    th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Ticks" }
+                                                    th { class: "px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Time" }
+                                                }
+                                            }
+                                            tbody {
+                                                class: "divide-y divide-surface-750",
+                                                for m in metrics.iter().take(50) {
+                                                    tr {
+                                                        class: "hover:bg-surface-850 transition-colors",
+                                                        td { class: "px-4 py-3 text-gray-200 font-mono", "{m.key}" }
+                                                        td { class: "px-4 py-3 text-gray-300 font-mono text-xs", "{m.value_json}" }
+                                                        td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{m.timestamp_ticks}" }
+                                                        td { class: "px-4 py-3 text-gray-500 font-mono text-xs", "{m.created_at}" }
+                                                    }
                                                 }
                                             }
                                         }
