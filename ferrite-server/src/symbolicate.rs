@@ -169,7 +169,9 @@ fn run_addr2line(
     loop {
         match child.try_wait().map_err(SymbolicateError::IoError)? {
             Some(_status) => {
-                let output = child.wait_with_output().map_err(SymbolicateError::IoError)?;
+                let output = child
+                    .wait_with_output()
+                    .map_err(SymbolicateError::IoError)?;
 
                 if !output.status.success() {
                     return Ok(None);

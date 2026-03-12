@@ -1,3 +1,4 @@
+use axum::http;
 use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
@@ -7,7 +8,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use axum::http;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 
 use crate::AppState;
@@ -980,7 +980,10 @@ pub fn router(state: Arc<AppState>) -> Router {
     let allow_origin: AllowOrigin = match std::env::var("CORS_ORIGIN") {
         Ok(origin) if !origin.is_empty() => {
             tracing::info!("CORS: allowing origin {}", origin);
-            origin.parse::<http::HeaderValue>().expect("invalid CORS_ORIGIN value").into()
+            origin
+                .parse::<http::HeaderValue>()
+                .expect("invalid CORS_ORIGIN value")
+                .into()
         }
         _ => {
             tracing::warn!(
