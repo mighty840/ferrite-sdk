@@ -1,6 +1,7 @@
 //! Axum middleware for authentication.
 //!
-//! - `/ingest/*` routes: optionally checked with `X-API-Key` if configured
+//! - `/ingest/chunks` routes: optionally checked with `X-API-Key` if configured
+//! - `/ingest/elf` routes: always require authentication (user auth or API key)
 //! - `/auth/*` routes: never checked (auth discovery + login endpoints)
 //! - All other routes (`/devices`, etc.): require user auth
 
@@ -32,8 +33,38 @@ pub async fn require_auth(
         return next.run(req).await;
     }
 
-    // Ingest endpoints: check API key only if configured
+    // Ingest endpoints
     if path.starts_with("/ingest") {
+        // /ingest/elf always requires authentication (API key or user auth)
+        if path.starts_with("/ingest/elf") {
+            // Try API key first
+            if let Some(required_key) = &state.config.ingest_api_key {
+                let api_key = auth::extract_api_key_header(req.headers());
+                if auth::validate_ingest_api_key(api_key, required_key).is_ok() {
+                    return next.run(req).await;
+                }
+            }
+            // Fall back to user auth
+            let auth_header = auth::extract_auth_header(req.headers());
+            return match auth::validate_request(auth_header, state.config).await {
+                Ok(claims) => {
+                    let mut req = req;
+                    req.extensions_mut().insert(claims);
+                    next.run(req).await
+                }
+                Err(_) => (
+                    StatusCode::UNAUTHORIZED,
+                    [(
+                        header::WWW_AUTHENTICATE,
+                        auth::AuthError::www_authenticate_header(state.config),
+                    )],
+                    "Authentication required for ELF upload",
+                )
+                    .into_response(),
+            };
+        }
+
+        // /ingest/chunks and other ingest routes: check API key only if configured
         if let Some(required_key) = &state.config.ingest_api_key {
             let api_key = auth::extract_api_key_header(req.headers());
             if auth::validate_ingest_api_key(api_key, required_key).is_err() {

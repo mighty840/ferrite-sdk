@@ -1,5 +1,6 @@
+use axum::http;
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post, put},
@@ -7,9 +8,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 
 use crate::AppState;
+
+/// Maximum allowed ELF upload size (50 MB).
+const MAX_ELF_SIZE: usize = 50 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // CRC-16/CCITT-FALSE (reimplemented for std, matching ferrite-sdk's encoder)
@@ -533,7 +537,17 @@ async fn ingest_chunks(
         }
     }
 
-    let dev_rid = device_rowid.unwrap();
+    let Some(dev_rid) = device_rowid else {
+        errors.push("device_rowid not set (no DeviceInfo chunk?)".into());
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(IngestResponse {
+                ok: false,
+                chunks_received: 0,
+                errors,
+            }),
+        );
+    };
 
     // Process remaining chunk types.
     for chunk in &chunks {
@@ -653,6 +667,20 @@ async fn ingest_elf(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    if body.len() > MAX_ELF_SIZE {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!(
+                    "ELF file too large: {} bytes exceeds {} byte limit",
+                    body.len(),
+                    MAX_ELF_SIZE
+                ),
+            })),
+        );
+    }
+
     let version = headers
         .get("X-Firmware-Version")
         .and_then(|v| v.to_str().ok())
@@ -783,13 +811,20 @@ async fn register_device(
         req.tags.as_deref(),
         req.provisioned_by.as_deref(),
     ) {
-        Ok(_) => {
-            let device = store.get_device_by_key(key).unwrap();
-            (
+        Ok(_) => match store.get_device_by_key(key) {
+            Ok(Some(device)) => (
                 StatusCode::OK,
                 Json(serde_json::json!({ "device": device })),
-            )
-        }
+            ),
+            Ok(None) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "device not found after registration" })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("db error: {e}") })),
+            ),
+        },
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -855,13 +890,20 @@ async fn update_device_handler(
     };
     let store = state.store.lock().await;
     match store.update_device(key, req.name.as_deref(), req.tags.as_deref()) {
-        Ok(true) => {
-            let device = store.get_device_by_key(key).unwrap();
-            (
+        Ok(true) => match store.get_device_by_key(key) {
+            Ok(Some(device)) => (
                 StatusCode::OK,
                 Json(serde_json::json!({ "device": device })),
-            )
-        }
+            ),
+            Ok(None) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "device not found after update" })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("db error: {e}") })),
+            ),
+        },
         Ok(false) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "device not found" })),
@@ -935,15 +977,45 @@ async fn auth_mode(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
+    let allow_origin: AllowOrigin = match std::env::var("CORS_ORIGIN") {
+        Ok(origin) if !origin.is_empty() => {
+            tracing::info!("CORS: allowing origin {}", origin);
+            origin
+                .parse::<http::HeaderValue>()
+                .expect("invalid CORS_ORIGIN value")
+                .into()
+        }
+        _ => {
+            tracing::warn!(
+                "CORS_ORIGIN not set, allowing all origins (not recommended for production)"
+            );
+            Any.into()
+        }
+    };
+
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(allow_origin)
+        .allow_methods(AllowMethods::from([
+            http::Method::GET,
+            http::Method::POST,
+            http::Method::PUT,
+            http::Method::DELETE,
+            http::Method::OPTIONS,
+        ]))
+        .allow_headers(AllowHeaders::from([
+            http::header::AUTHORIZATION,
+            http::header::CONTENT_TYPE,
+            http::HeaderName::from_static("x-device-id"),
+            http::HeaderName::from_static("x-api-key"),
+        ]));
 
     Router::new()
         .route("/auth/mode", get(auth_mode))
         .route("/ingest/chunks", post(ingest_chunks))
-        .route("/ingest/elf", post(ingest_elf))
+        .route(
+            "/ingest/elf",
+            post(ingest_elf).layer(DefaultBodyLimit::max(MAX_ELF_SIZE)),
+        )
         .route("/devices", get(list_devices))
         .route("/devices/register", post(register_device))
         .route("/devices/register/bulk", post(register_devices_bulk))

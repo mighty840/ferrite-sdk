@@ -29,6 +29,8 @@ pub enum Route {
         #[route("/settings")]
         Settings {},
     #[end_layout]
+    #[route("/callback?:code&:state")]
+    Callback { code: String, state: String },
     #[route("/:..route")]
     NotFound { route: Vec<String> },
 }
@@ -117,6 +119,12 @@ fn Metrics() -> Element {
 #[component]
 fn Settings() -> Element {
     rsx! { SettingsPage {} }
+}
+
+/// OIDC callback route handler.
+#[component]
+fn Callback(code: String, state: String) -> Element {
+    rsx! { CallbackPage { code, state } }
 }
 
 /// 404 not found page.

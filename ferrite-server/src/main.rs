@@ -1,10 +1,4 @@
-mod auth;
-mod auth_middleware;
-mod config;
-mod ingest;
 mod report;
-mod store;
-mod symbolicate;
 
 use clap::{Parser, Subcommand};
 use std::net::SocketAddr;
@@ -12,9 +6,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use config::AuthConfig;
-use store::Store;
-use symbolicate::Symbolicator;
+use ferrite_server::config::AuthConfig;
+use ferrite_server::store::Store;
+use ferrite_server::symbolicate::Symbolicator;
+use ferrite_server::AppState;
 
 #[derive(Parser)]
 #[command(
@@ -54,13 +49,6 @@ enum Command {
     Metrics,
 }
 
-pub struct AppState {
-    pub store: Mutex<Store>,
-    pub symbolicator: Mutex<Symbolicator>,
-    pub elf_dir: PathBuf,
-    pub config: &'static AuthConfig,
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
@@ -86,10 +74,14 @@ async fn main() -> anyhow::Result<()> {
         config,
     });
 
+    if config.ingest_api_key.is_none() {
+        tracing::warn!("INGEST_API_KEY is not set — ingest endpoints are publicly accessible");
+    }
+
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => {
             tracing::info!("Starting ferrite-server on {}", cli.http);
-            let app = ingest::router(state);
+            let app = ferrite_server::ingest::router(state);
             let listener = tokio::net::TcpListener::bind(cli.http).await?;
             axum::serve(listener, app).await?;
         }

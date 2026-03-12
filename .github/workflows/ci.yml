@@ -34,8 +34,71 @@ jobs:
       - name: Test – ferrite-sdk (no default features)
         run: cargo test -p ferrite-sdk --no-default-features
 
-      - name: Test – ferrite-server
-        run: cargo test -p ferrite-server
+      - name: Test – ferrite-server (unit)
+        run: cargo test -p ferrite-server --lib
+
+      - name: Test – ferrite-server (integration)
+        run: cargo test -p ferrite-server --test integration -- --test-threads=1
+
+  test-keycloak:
+    name: Keycloak integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Start Keycloak
+        run: |
+          docker run -d --name keycloak \
+            -p 8080:8080 \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -v "${{ github.workspace }}/docker/keycloak/ferrite-realm.json:/opt/keycloak/data/import/ferrite-realm.json:ro" \
+            quay.io/keycloak/keycloak:26.0 \
+            start-dev --import-realm
+
+          # Wait for Keycloak to be ready
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/realms/master > /dev/null 2>&1; then
+              echo "Keycloak is ready after ~${i}s"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Keycloak failed to start"
+              docker logs keycloak
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Verify realm was imported
+          curl -sf http://localhost:8080/realms/ferrite | jq .realm
+
+          # Verify token flow works
+          curl -sf -X POST \
+            "http://localhost:8080/realms/ferrite/protocol/openid-connect/token" \
+            -d "grant_type=password&client_id=ferrite-dashboard&username=testuser&password=testpass&scope=openid" \
+            | jq -r '.access_token' | head -c 30
+          echo "... (token ok)"
+
+      - name: Test – ferrite-server (Keycloak integration)
+        env:
+          KEYCLOAK_URL: http://localhost:8080
+          KEYCLOAK_REALM: ferrite
+          KEYCLOAK_CLIENT_ID: ferrite-dashboard
+          FERRITE_TEST_KEYCLOAK_URL: http://localhost:8080
+        run: >
+          cargo test -p ferrite-server --test integration
+          --features keycloak-tests
+          -- --test-threads=1
+
+      - name: Stop Keycloak
+        if: always()
+        run: docker stop keycloak && docker rm keycloak
 
   build-embedded:
     name: "Build ${{ matrix.example }}"
