@@ -88,6 +88,87 @@ pub struct BasicAuthConfig {
 }
 
 // ---------------------------------------------------------------------------
+// User roles
+// ---------------------------------------------------------------------------
+
+/// Role-based access control levels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserRole {
+    /// Read-only dashboard access.
+    Viewer = 0,
+    /// Can register/provision devices but not delete or change settings.
+    Provisioner = 1,
+    /// Full access.
+    Admin = 2,
+}
+
+impl UserRole {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "admin" => Self::Admin,
+            "provisioner" => Self::Provisioner,
+            _ => Self::Viewer,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Admin => "admin",
+            Self::Provisioner => "provisioner",
+            Self::Viewer => "viewer",
+        }
+    }
+
+    /// Check if this role can perform write operations (create/update).
+    pub fn can_write(&self) -> bool {
+        *self >= Self::Provisioner
+    }
+
+    /// Check if this role can perform destructive operations (delete, settings).
+    pub fn can_admin(&self) -> bool {
+        *self == Self::Admin
+    }
+}
+
+/// Additional user accounts for basic auth mode.
+/// Format: `BASIC_AUTH_USERS=user1:pass1:admin,user2:pass2:viewer`
+#[derive(Debug, Clone)]
+pub struct BasicAuthUser {
+    pub username: String,
+    pub password: String,
+    pub role: UserRole,
+}
+
+/// Parse the BASIC_AUTH_USERS env var into a list of user accounts.
+pub fn parse_basic_auth_users() -> Vec<BasicAuthUser> {
+    let mut users = Vec::new();
+
+    // Always include the primary admin user
+    // (handled separately in validate_basic_auth)
+
+    if let Ok(val) = std::env::var("BASIC_AUTH_USERS") {
+        for entry in val.split(',') {
+            let parts: Vec<&str> = entry.trim().split(':').collect();
+            if parts.len() >= 2 {
+                let role = if parts.len() >= 3 {
+                    UserRole::parse(parts[2])
+                } else {
+                    UserRole::Viewer
+                };
+                users.push(BasicAuthUser {
+                    username: parts[0].to_string(),
+                    password: parts[1].to_string(),
+                    role,
+                });
+            }
+        }
+    }
+
+    users
+}
+
+// ---------------------------------------------------------------------------
 // AuthConfig
 // ---------------------------------------------------------------------------
 
@@ -110,6 +191,8 @@ pub struct AuthConfig {
     /// 16-byte hex-encoded AES-128 key for chunk encryption (32 hex chars).
     /// If set, the server will decrypt chunks with the encrypted flag.
     pub chunk_encryption_key: Option<[u8; 16]>,
+    /// Additional basic auth users with roles.
+    pub additional_users: Vec<BasicAuthUser>,
 }
 
 impl AuthConfig {
@@ -167,6 +250,7 @@ impl AuthConfig {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(10),
             chunk_encryption_key,
+            additional_users: parse_basic_auth_users(),
         }
     }
 }
@@ -239,6 +323,7 @@ mod tests {
             alert_webhook_url: None,
             alert_offline_minutes: 10,
             chunk_encryption_key: None,
+            additional_users: vec![],
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -261,6 +346,7 @@ mod tests {
             alert_webhook_url: None,
             alert_offline_minutes: 10,
             chunk_encryption_key: None,
+            additional_users: vec![],
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");

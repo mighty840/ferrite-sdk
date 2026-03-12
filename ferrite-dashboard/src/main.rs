@@ -27,6 +27,10 @@ pub enum Route {
         Faults {},
         #[route("/metrics")]
         Metrics {},
+        #[route("/fleet")]
+        Fleet {},
+        #[route("/compare")]
+        Compare {},
         #[route("/settings")]
         Settings {},
     #[end_layout]
@@ -114,6 +118,18 @@ fn Faults() -> Element {
 #[component]
 fn Metrics() -> Element {
     rsx! { MetricsPage {} }
+}
+
+/// Fleet overview page route handler.
+#[component]
+fn Fleet() -> Element {
+    rsx! { FleetPage {} }
+}
+
+/// Device comparison page route handler.
+#[component]
+fn Compare() -> Element {
+    rsx! { ComparePage {} }
 }
 
 /// Settings page route handler.

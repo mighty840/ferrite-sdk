@@ -1,5 +1,5 @@
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading, MetricChart};
+use crate::components::{ErrorDisplay, ExportButtons, Loading, MetricChart, metrics_to_csv};
 use dioxus::prelude::*;
 
 #[component]
@@ -37,7 +37,25 @@ pub fn MetricsPage() -> Element {
                         }
                     }
 
-                    // Quick stats
+                    // Quick stats + export
+                    div {
+                        class: "flex items-center justify-between mb-4",
+                        div {
+                            class: "flex items-center space-x-4",
+                            span {
+                                class: "text-sm text-gray-400 font-mono",
+                                "{total} data points, {keys.len()} keys"
+                            }
+                        }
+                        if !metrics.is_empty() {
+                            ExportButtons {
+                                csv_data: metrics_to_csv(metrics),
+                                json_data: serde_json::to_string_pretty(metrics).unwrap_or_default(),
+                                filename_base: "ferrite-metrics".to_string(),
+                            }
+                        }
+                    }
+
                     div {
                         class: "grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8",
                         QuickStat { label: "Total Data Points", value: total.to_string() }

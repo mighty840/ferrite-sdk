@@ -36,6 +36,7 @@ const AUTH_ENV_KEYS: &[&str] = &[
     "ALERT_WEBHOOK_URL",
     "ALERT_OFFLINE_MINUTES",
     "CHUNK_ENCRYPTION_KEY",
+    "BASIC_AUTH_USERS",
 ];
 
 /// Spawn a ferrite-server on a random port with additional env vars set.

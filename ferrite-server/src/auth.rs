@@ -5,7 +5,7 @@ use base64::Engine;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use crate::config::{AuthConfig, AuthMode, BasicAuthConfig, KeycloakConfig};
+use crate::config::{AuthConfig, AuthMode, BasicAuthConfig, KeycloakConfig, UserRole};
 
 // ---------------------------------------------------------------------------
 // Authenticated user identity
@@ -19,6 +19,7 @@ pub struct UserClaims {
     pub sub: String,
     pub email: Option<String>,
     pub name: Option<String>,
+    pub role: UserRole,
 }
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,7 @@ pub struct UserClaims {
 pub fn validate_basic_auth(
     auth_header: &str,
     config: &BasicAuthConfig,
+    additional_users: &[crate::config::BasicAuthUser],
 ) -> Result<UserClaims, &'static str> {
     let encoded = auth_header
         .strip_prefix("Basic ")
@@ -46,15 +48,29 @@ pub fn validate_basic_auth(
         .split_once(':')
         .ok_or("missing ':' in credentials")?;
 
+    // Primary admin user
     if user == config.username && pass == config.password {
-        Ok(UserClaims {
+        return Ok(UserClaims {
             sub: user.to_string(),
             email: None,
             name: Some(user.to_string()),
-        })
-    } else {
-        Err("invalid credentials")
+            role: UserRole::Admin,
+        });
     }
+
+    // Check additional users
+    for u in additional_users {
+        if user == u.username && pass == u.password {
+            return Ok(UserClaims {
+                sub: user.to_string(),
+                email: None,
+                name: Some(user.to_string()),
+                role: u.role,
+            });
+        }
+    }
+
+    Err("invalid credentials")
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +139,26 @@ struct KeycloakClaims {
     email: Option<String>,
     preferred_username: Option<String>,
     name: Option<String>,
+    /// Keycloak realm roles (from "realm_access.roles" claim).
+    realm_access: Option<RealmAccess>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RealmAccess {
+    roles: Vec<String>,
+}
+
+/// Extract the highest ferrite role from Keycloak realm roles.
+fn extract_keycloak_role(claims: &KeycloakClaims) -> UserRole {
+    if let Some(ref access) = claims.realm_access {
+        if access.roles.iter().any(|r| r == "ferrite-admin") {
+            return UserRole::Admin;
+        }
+        if access.roles.iter().any(|r| r == "ferrite-provisioner") {
+            return UserRole::Provisioner;
+        }
+    }
+    UserRole::Viewer
 }
 
 // ---------------------------------------------------------------------------
@@ -165,10 +201,12 @@ pub async fn validate_keycloak_token(
 
             match jsonwebtoken::decode::<KeycloakClaims>(token, &decoding_key, &validation) {
                 Ok(data) => {
+                    let role = extract_keycloak_role(&data.claims);
                     return Ok(UserClaims {
                         sub: data.claims.sub.unwrap_or_else(|| "unknown".into()),
                         email: data.claims.email,
                         name: data.claims.preferred_username.or(data.claims.name),
+                        role,
                     });
                 }
                 Err(e) => {
@@ -199,6 +237,20 @@ pub async fn validate_keycloak_token(
         .await
         .map_err(|e| format!("failed to parse userinfo: {}", e))?;
 
+    // Extract role from userinfo (Keycloak may include realm_access)
+    let role = info["realm_access"]["roles"]
+        .as_array()
+        .map(|roles| {
+            if roles.iter().any(|r| r.as_str() == Some("ferrite-admin")) {
+                UserRole::Admin
+            } else if roles.iter().any(|r| r.as_str() == Some("ferrite-provisioner")) {
+                UserRole::Provisioner
+            } else {
+                UserRole::Viewer
+            }
+        })
+        .unwrap_or(UserRole::Viewer);
+
     Ok(UserClaims {
         sub: info["sub"].as_str().unwrap_or("unknown").to_string(),
         email: info["email"].as_str().map(String::from),
@@ -206,6 +258,7 @@ pub async fn validate_keycloak_token(
             .as_str()
             .or(info["name"].as_str())
             .map(String::from),
+        role,
     })
 }
 
@@ -222,7 +275,8 @@ pub async fn validate_request(
 
     match &config.mode {
         AuthMode::Basic(basic) => {
-            validate_basic_auth(header_val, basic).map_err(|_| AuthError::Invalid)
+            validate_basic_auth(header_val, basic, &config.additional_users)
+                .map_err(|_| AuthError::Invalid)
         }
         AuthMode::Keycloak(_kc) => {
             let token = header_val
@@ -287,9 +341,11 @@ mod tests {
             password: "secret".into(),
         };
         // "admin:secret" base64 = "YWRtaW46c2VjcmV0"
-        let result = validate_basic_auth("Basic YWRtaW46c2VjcmV0", &config);
+        let result = validate_basic_auth("Basic YWRtaW46c2VjcmV0", &config, &[]);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().sub, "admin");
+        let claims = result.unwrap();
+        assert_eq!(claims.sub, "admin");
+        assert_eq!(claims.role, UserRole::Admin);
     }
 
     #[test]
@@ -299,7 +355,7 @@ mod tests {
             password: "secret".into(),
         };
         // "admin:wrong" base64 = "YWRtaW46d3Jvbmc="
-        let result = validate_basic_auth("Basic YWRtaW46d3Jvbmc=", &config);
+        let result = validate_basic_auth("Basic YWRtaW46d3Jvbmc=", &config, &[]);
         assert!(result.is_err());
     }
 
@@ -309,7 +365,38 @@ mod tests {
             username: "admin".into(),
             password: "secret".into(),
         };
-        let result = validate_basic_auth("Bearer some-token", &config);
+        let result = validate_basic_auth("Bearer some-token", &config, &[]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn basic_auth_additional_users() {
+        use crate::config::BasicAuthUser;
+        let config = BasicAuthConfig {
+            username: "admin".into(),
+            password: "admin".into(),
+        };
+        let users = vec![
+            BasicAuthUser {
+                username: "viewer1".into(),
+                password: "pass1".into(),
+                role: UserRole::Viewer,
+            },
+            BasicAuthUser {
+                username: "prov1".into(),
+                password: "pass2".into(),
+                role: UserRole::Provisioner,
+            },
+        ];
+        // "viewer1:pass1" base64 = "dmlld2VyMTpwYXNzMQ=="
+        let result = validate_basic_auth("Basic dmlld2VyMTpwYXNzMQ==", &config, &users);
+        assert!(result.is_ok());
+        let claims = result.unwrap();
+        assert_eq!(claims.role, UserRole::Viewer);
+
+        // "prov1:pass2" base64 = "cHJvdjE6cGFzczI="
+        let result = validate_basic_auth("Basic cHJvdjE6cGFzczI=", &config, &users);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().role, UserRole::Provisioner);
     }
 }

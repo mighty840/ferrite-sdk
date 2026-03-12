@@ -1,6 +1,6 @@
 use crate::api::types::*;
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading};
+use crate::components::{ErrorDisplay, ExportButtons, Loading, faults_to_csv};
 use dioxus::prelude::*;
 
 #[component]
@@ -80,9 +80,19 @@ pub fn FaultsPage() -> Element {
                         }
                     }
 
-                    p {
-                        class: "text-[10px] text-gray-600 mb-4 font-mono uppercase tracking-wider",
-                        "{count} fault(s)"
+                    div {
+                        class: "flex items-center justify-between mb-4",
+                        p {
+                            class: "text-[10px] text-gray-600 font-mono uppercase tracking-wider",
+                            "{count} fault(s)"
+                        }
+                        if !faults.is_empty() {
+                            ExportButtons {
+                                csv_data: faults_to_csv(faults),
+                                json_data: serde_json::to_string_pretty(faults).unwrap_or_default(),
+                                filename_base: "ferrite-faults".to_string(),
+                            }
+                        }
                     }
 
                     if faults.is_empty() {

@@ -87,6 +87,38 @@ pub async fn require_auth(
     let auth_header = auth::extract_auth_header(req.headers());
     match auth::validate_request(auth_header, state.config).await {
         Ok(claims) => {
+            // Role-based access control
+            let method = req.method().clone();
+            let is_write = method == Method::POST || method == Method::PUT || method == Method::PATCH;
+            let is_delete = method == Method::DELETE;
+            let is_admin_path = path.starts_with("/admin")
+                || path.starts_with("/groups")
+                || path.starts_with("/ota");
+
+            if is_delete && !claims.role.can_admin() {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: admin role required for delete operations",
+                )
+                    .into_response();
+            }
+
+            if is_write && is_admin_path && !claims.role.can_admin() {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: admin role required",
+                )
+                    .into_response();
+            }
+
+            if is_write && !claims.role.can_write() {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: provisioner or admin role required",
+                )
+                    .into_response();
+            }
+
             let mut req = req;
             req.extensions_mut().insert(claims);
             next.run(req).await
