@@ -43,22 +43,6 @@ jobs:
   test-keycloak:
     name: Keycloak integration tests
     runs-on: ubuntu-latest
-    services:
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0
-        env:
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-        ports:
-          - 8080:8080
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -sf http://localhost:9000/health/ready || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 30
-          --health-start-period 60s
     steps:
       - uses: actions/checkout@v4
 
@@ -66,35 +50,33 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Import Keycloak realm
+      - name: Start Keycloak
         run: |
-          # Wait for Keycloak to be fully ready (realms endpoint)
-          for i in $(seq 1 30); do
+          docker run -d --name keycloak \
+            -p 8080:8080 \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -v "${{ github.workspace }}/docker/keycloak/ferrite-realm.json:/opt/keycloak/data/import/ferrite-realm.json:ro" \
+            quay.io/keycloak/keycloak:26.0 \
+            start-dev --import-realm
+
+          # Wait for Keycloak to be ready
+          for i in $(seq 1 60); do
             if curl -sf http://localhost:8080/realms/master > /dev/null 2>&1; then
-              echo "Keycloak is ready"
+              echo "Keycloak is ready after ~${i}s"
               break
             fi
-            echo "Waiting for Keycloak... ($i/30)"
-            sleep 2
+            if [ "$i" -eq 60 ]; then
+              echo "Keycloak failed to start"
+              docker logs keycloak
+              exit 1
+            fi
+            sleep 1
           done
 
-          # Get admin token
-          ADMIN_TOKEN=$(curl -sf -X POST \
-            "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-            -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
-            | jq -r '.access_token')
-
-          # Import realm
-          curl -sf -X POST \
-            "http://localhost:8080/admin/realms" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @docker/keycloak/ferrite-realm.json
-
-          echo "Realm imported successfully"
-
-          # Verify realm exists
-          curl -sf "http://localhost:8080/realms/ferrite" | jq .realm
+          # Verify realm was imported
+          curl -sf http://localhost:8080/realms/ferrite | jq .realm
 
           # Verify token flow works
           curl -sf -X POST \
@@ -113,6 +95,10 @@ jobs:
           cargo test -p ferrite-server --test integration
           --features keycloak-tests
           -- --test-threads=1
+
+      - name: Stop Keycloak
+        if: always()
+        run: docker stop keycloak && docker rm keycloak
 
   build-embedded:
     name: "Build ${{ matrix.example }}"
