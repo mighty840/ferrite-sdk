@@ -89,7 +89,8 @@ pub async fn require_auth(
         Ok(claims) => {
             // Role-based access control
             let method = req.method().clone();
-            let is_write = method == Method::POST || method == Method::PUT || method == Method::PATCH;
+            let is_write =
+                method == Method::POST || method == Method::PUT || method == Method::PATCH;
             let is_delete = method == Method::DELETE;
             let is_admin_path = path.starts_with("/admin")
                 || path.starts_with("/groups")

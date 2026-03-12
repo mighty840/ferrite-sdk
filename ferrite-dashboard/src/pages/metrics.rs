@@ -1,5 +1,5 @@
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, ExportButtons, Loading, MetricChart, metrics_to_csv};
+use crate::components::{metrics_to_csv, ErrorDisplay, ExportButtons, Loading, MetricChart};
 use dioxus::prelude::*;
 
 #[component]

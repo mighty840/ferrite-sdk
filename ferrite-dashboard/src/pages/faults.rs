@@ -1,6 +1,6 @@
 use crate::api::types::*;
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, ExportButtons, Loading, faults_to_csv};
+use crate::components::{faults_to_csv, ErrorDisplay, ExportButtons, Loading};
 use dioxus::prelude::*;
 
 #[component]

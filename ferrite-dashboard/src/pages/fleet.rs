@@ -20,13 +20,23 @@ pub fn FleetPage() -> Element {
         Some(Err(e)) => rsx! { ErrorDisplay { message: e.to_string() } },
         Some(Ok(devices)) => {
             let total = devices.len();
-            let online = devices.iter().filter(|d| d.status_str() == "online").count();
-            let offline = devices.iter().filter(|d| d.status_str() == "offline").count();
-            let provisioned = devices.iter().filter(|d| d.status_str() == "provisioned").count();
+            let online = devices
+                .iter()
+                .filter(|d| d.status_str() == "online")
+                .count();
+            let offline = devices
+                .iter()
+                .filter(|d| d.status_str() == "offline")
+                .count();
+            let provisioned = devices
+                .iter()
+                .filter(|d| d.status_str() == "provisioned")
+                .count();
             let other = total - online - offline - provisioned;
 
             // Group by tags
-            let mut tag_groups: std::collections::BTreeMap<String, Vec<&Device>> = std::collections::BTreeMap::new();
+            let mut tag_groups: std::collections::BTreeMap<String, Vec<&Device>> =
+                std::collections::BTreeMap::new();
             let mut untagged = Vec::new();
             for device in devices.iter() {
                 let tags = device.tags_list();

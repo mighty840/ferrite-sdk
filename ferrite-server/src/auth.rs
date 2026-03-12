@@ -243,7 +243,10 @@ pub async fn validate_keycloak_token(
         .map(|roles| {
             if roles.iter().any(|r| r.as_str() == Some("ferrite-admin")) {
                 UserRole::Admin
-            } else if roles.iter().any(|r| r.as_str() == Some("ferrite-provisioner")) {
+            } else if roles
+                .iter()
+                .any(|r| r.as_str() == Some("ferrite-provisioner"))
+            {
                 UserRole::Provisioner
             } else {
                 UserRole::Viewer
@@ -274,10 +277,8 @@ pub async fn validate_request(
     let header_val = auth_header.ok_or(AuthError::Missing)?;
 
     match &config.mode {
-        AuthMode::Basic(basic) => {
-            validate_basic_auth(header_val, basic, &config.additional_users)
-                .map_err(|_| AuthError::Invalid)
-        }
+        AuthMode::Basic(basic) => validate_basic_auth(header_val, basic, &config.additional_users)
+            .map_err(|_| AuthError::Invalid),
         AuthMode::Keycloak(_kc) => {
             let token = header_val
                 .strip_prefix("Bearer ")

@@ -16,7 +16,10 @@ fn download_file(filename: &str, content: &str, mime: &str) {
             URL.revokeObjectURL(url);
         }})();
         "#,
-        content = content.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${"),
+        content = content
+            .replace('\\', "\\\\")
+            .replace('`', "\\`")
+            .replace("${", "\\${"),
         mime = mime,
         filename = filename,
     );
@@ -25,11 +28,7 @@ fn download_file(filename: &str, content: &str, mime: &str) {
 
 /// Export button pair (CSV + JSON) for any serializable data.
 #[component]
-pub fn ExportButtons(
-    csv_data: String,
-    json_data: String,
-    filename_base: String,
-) -> Element {
+pub fn ExportButtons(csv_data: String, json_data: String, filename_base: String) -> Element {
     let csv_filename = format!("{filename_base}.csv");
     let json_filename = format!("{filename_base}.json");
 
