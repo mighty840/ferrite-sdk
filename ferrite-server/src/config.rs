@@ -99,6 +99,17 @@ pub struct AuthConfig {
     pub ingest_api_key: Option<String>,
     /// Optional CORS allowed origin.
     pub cors_origin: Option<String>,
+    /// Data retention period in days (0 = disabled). Default: 90.
+    pub retention_days: Option<u64>,
+    /// Rate limit (requests per second per IP). 0 = disabled.
+    pub rate_limit_rps: Option<f64>,
+    /// Webhook URL for alerting (fault, device offline).
+    pub alert_webhook_url: Option<String>,
+    /// Minutes before a device is considered offline (default: 10).
+    pub alert_offline_minutes: u64,
+    /// 16-byte hex-encoded AES-128 key for chunk encryption (32 hex chars).
+    /// If set, the server will decrypt chunks with the encrypted flag.
+    pub chunk_encryption_key: Option<[u8; 16]>,
 }
 
 impl AuthConfig {
@@ -130,10 +141,32 @@ impl AuthConfig {
             }
         };
 
+        let chunk_encryption_key = optional_env("CHUNK_ENCRYPTION_KEY").and_then(|hex_str| {
+            let bytes = hex::decode(&hex_str).ok()?;
+            if bytes.len() == 16 {
+                let mut key = [0u8; 16];
+                key.copy_from_slice(&bytes);
+                Some(key)
+            } else {
+                tracing::warn!(
+                    "CHUNK_ENCRYPTION_KEY must be 32 hex chars (16 bytes), got {} chars",
+                    hex_str.len()
+                );
+                None
+            }
+        });
+
         Self {
             mode,
             ingest_api_key: optional_env("INGEST_API_KEY"),
             cors_origin: optional_env("CORS_ORIGIN"),
+            retention_days: optional_env("RETENTION_DAYS").and_then(|v| v.parse().ok()),
+            rate_limit_rps: optional_env("RATE_LIMIT_RPS").and_then(|v| v.parse().ok()),
+            alert_webhook_url: optional_env("ALERT_WEBHOOK_URL"),
+            alert_offline_minutes: optional_env("ALERT_OFFLINE_MINUTES")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+            chunk_encryption_key,
         }
     }
 }
@@ -201,6 +234,11 @@ mod tests {
             }),
             ingest_api_key: None,
             cors_origin: None,
+            retention_days: None,
+            rate_limit_rps: None,
+            alert_webhook_url: None,
+            alert_offline_minutes: 10,
+            chunk_encryption_key: None,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -218,6 +256,11 @@ mod tests {
             }),
             ingest_api_key: None,
             cors_origin: None,
+            retention_days: None,
+            rate_limit_rps: None,
+            alert_webhook_url: None,
+            alert_offline_minutes: 10,
+            chunk_encryption_key: None,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");

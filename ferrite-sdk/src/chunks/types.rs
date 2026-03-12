@@ -8,6 +8,7 @@ pub enum ChunkType {
     TraceFragment = 0x04,
     RebootReason = 0x05,
     DeviceInfo = 0x06,
+    OtaRequest = 0x07,
 }
 
 impl ChunkType {
@@ -19,6 +20,7 @@ impl ChunkType {
             0x04 => Some(Self::TraceFragment),
             0x05 => Some(Self::RebootReason),
             0x06 => Some(Self::DeviceInfo),
+            0x07 => Some(Self::OtaRequest),
             _ => None,
         }
     }
@@ -41,12 +43,23 @@ impl ChunkHeader {
     /// Size of the header in bytes on the wire.
     pub const WIRE_SIZE: usize = 8;
 
+    /// Flag bit: this is the last chunk in a sequence.
+    pub const FLAG_LAST: u8 = 0x01;
+    /// Flag bit: this chunk is a fragment of a larger payload.
+    pub const FLAG_FRAGMENT: u8 = 0x02;
+    /// Flag bit: the payload is encrypted (AES-128-CCM).
+    pub const FLAG_ENCRYPTED: u8 = 0x04;
+
     pub fn is_last(&self) -> bool {
-        self.flags & 0x01 != 0
+        self.flags & Self::FLAG_LAST != 0
     }
 
     pub fn is_fragment(&self) -> bool {
-        self.flags & 0x02 != 0
+        self.flags & Self::FLAG_FRAGMENT != 0
+    }
+
+    pub fn is_encrypted(&self) -> bool {
+        self.flags & Self::FLAG_ENCRYPTED != 0
     }
 }
 

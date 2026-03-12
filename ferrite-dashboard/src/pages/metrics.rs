@@ -1,5 +1,5 @@
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading};
+use crate::components::{ErrorDisplay, Loading, MetricChart};
 use dioxus::prelude::*;
 
 #[component]
@@ -53,6 +53,16 @@ pub fn MetricsPage() -> Element {
                             }
                         }
                     } else {
+                        // Charts per metric key
+                        div {
+                            class: "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8",
+                            for key in &keys {
+                                MetricChart {
+                                    metrics: metrics.clone(),
+                                    metric_key: key.clone(),
+                                }
+                            }
+                        }
                         // Metric table
                         div {
                             class: "bg-surface-900 rounded-xl border border-surface-700 overflow-hidden",

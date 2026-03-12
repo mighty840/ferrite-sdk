@@ -209,6 +209,33 @@ impl ChunkEncoder {
         emit(&out[..n]);
     }
 
+    /// Encode an OTA request chunk.
+    ///
+    /// The device sends this to signal it supports OTA and report its current
+    /// firmware identity so the server can decide whether an update is needed.
+    ///
+    /// Payload layout (14 bytes):
+    ///   [0..8]  build_id      (u64 LE)
+    ///   [8..10] max_chunk_size (u16 LE) — largest chunk the device can receive
+    ///   [10]    ota_capable    (u8, 1 = yes)
+    ///   [11]    reserved
+    ///   [12..14] reserved
+    pub fn encode_ota_request<F: FnMut(&[u8])>(
+        &mut self,
+        build_id: u64,
+        max_chunk_size: u16,
+        mut emit: F,
+    ) {
+        let mut payload = [0u8; 14];
+        payload[0..8].copy_from_slice(&build_id.to_le_bytes());
+        payload[8..10].copy_from_slice(&max_chunk_size.to_le_bytes());
+        payload[10] = 1; // ota_capable = true
+
+        let mut out = [0u8; 256];
+        let n = self.encode(ChunkType::OtaRequest, &payload, true, &mut out);
+        emit(&out[..n]);
+    }
+
     /// Encode a device info chunk.
     pub fn encode_device_info<F: FnMut(&[u8])>(
         &mut self,
@@ -380,6 +407,30 @@ mod tests {
         let decoded = ChunkDecoder::decode(&chunks[0]).unwrap();
         assert_eq!(decoded.chunk_type, ChunkType::Metrics);
         assert_eq!(decoded.payload[0], 1); // entry count
+    }
+
+    #[test]
+    fn encode_decode_ota_request_roundtrip() {
+        let mut encoder = ChunkEncoder::new();
+        let mut chunks = std::vec::Vec::new();
+
+        encoder.encode_ota_request(0xDEADBEEF, 256, |chunk| {
+            chunks.push(std::vec::Vec::from(chunk));
+        });
+
+        assert_eq!(chunks.len(), 1);
+        let decoded = ChunkDecoder::decode(&chunks[0]).unwrap();
+        assert_eq!(decoded.chunk_type, ChunkType::OtaRequest);
+        assert!(decoded.is_last);
+
+        // Verify payload contents
+        let p = &decoded.payload;
+        assert_eq!(p.len(), 14);
+        let build_id = u64::from_le_bytes([p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]]);
+        assert_eq!(build_id, 0xDEADBEEF);
+        let max_chunk = u16::from_le_bytes([p[8], p[9]]);
+        assert_eq!(max_chunk, 256);
+        assert_eq!(p[10], 1); // ota_capable
     }
 
     #[test]

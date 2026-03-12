@@ -28,8 +28,12 @@ pub async fn require_auth(
 
     let path = req.uri().path().to_string();
 
-    // Auth discovery and health endpoints are always public
-    if path == "/auth/mode" || path == "/health" {
+    // Auth discovery, health, Prometheus, and SSE endpoints are always public
+    if path == "/auth/mode"
+        || path == "/health"
+        || path == "/metrics/prometheus"
+        || path == "/events/stream"
+    {
         return next.run(req).await;
     }
 

@@ -11,6 +11,7 @@ cortex-m = ["dep:cortex-m", "dep:cortex-m-rt"]
 defmt = ["dep:defmt"]
 embassy = ["dep:embassy-time", "dep:embassy-sync"]
 postcard-encoding = ["dep:postcard", "dep:serde"]
+encryption = ["dep:aes", "dep:ccm"]
 
 [dependencies]
 heapless = { workspace = true }
@@ -23,6 +24,8 @@ embassy-time = { workspace = true, optional = true }
 embassy-sync = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+aes = { version = "0.8", optional = true, default-features = false }
+ccm = { version = "0.5", optional = true, default-features = false }
 
 [dev-dependencies]
 critical-section = { workspace = true, features = ["std"] }

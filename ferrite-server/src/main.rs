@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use ferrite_server::config::AuthConfig;
+use ferrite_server::prometheus::RequestCounters;
+use ferrite_server::rate_limit::RateLimiter;
 use ferrite_server::store::Store;
 use ferrite_server::symbolicate::Symbolicator;
 use ferrite_server::AppState;
@@ -47,6 +49,12 @@ enum Command {
     Faults,
     /// List recent metrics
     Metrics,
+    /// Export a database backup
+    Backup {
+        /// Output file path
+        #[arg(long, default_value = "./ferrite-backup.db")]
+        output: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -67,11 +75,28 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::open(&cli.db)?;
     let symbolicator = Symbolicator::new(cli.addr2line.clone(), cli.elf_dir.clone());
 
+    // SSE broadcast channel (capacity 256 — lagged receivers drop old events)
+    let (event_tx, _) = tokio::sync::broadcast::channel(256);
+
+    // Rate limiter (if configured)
+    let rate_limiter = config.rate_limit_rps.and_then(|rps| {
+        if rps > 0.0 {
+            let burst = (rps * 10.0).max(10.0); // 10s burst window
+            tracing::info!("Rate limiting: {rps} req/s per IP (burst: {burst})");
+            Some(Arc::new(RateLimiter::new(rps, burst)))
+        } else {
+            None
+        }
+    });
+
     let state = Arc::new(AppState {
         store: Mutex::new(store),
         symbolicator: Mutex::new(symbolicator),
         elf_dir: cli.elf_dir.clone(),
         config,
+        event_tx,
+        counters: RequestCounters::new(),
+        rate_limiter: rate_limiter.clone(),
     });
 
     if config.ingest_api_key.is_none() {
@@ -80,6 +105,17 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => {
+            // Start background retention purge task (#29)
+            ferrite_server::retention::spawn_retention_task(state.clone());
+
+            // Start alerting offline-check task (#28)
+            ferrite_server::alerting::spawn_offline_check_task(state.clone());
+
+            // Start rate limiter cleanup task (#34)
+            if let Some(ref limiter) = rate_limiter {
+                ferrite_server::rate_limit::spawn_cleanup_task(limiter.clone());
+            }
+
             tracing::info!("Starting ferrite-server on {}", cli.http);
             let app = ferrite_server::ingest::router(state);
             let listener = tokio::net::TcpListener::bind(cli.http).await?;
@@ -96,6 +132,13 @@ async fn main() -> anyhow::Result<()> {
         Command::Metrics => {
             let st = state.store.lock().await;
             report::print_metrics(&st)?;
+        }
+        Command::Backup { output } => {
+            tracing::info!("Creating database backup at {}", output.display());
+            let st = state.store.lock().await;
+            let bytes = st.backup_to_bytes()?;
+            std::fs::write(&output, bytes)?;
+            tracing::info!("Backup complete: {}", output.display());
         }
     }
 
