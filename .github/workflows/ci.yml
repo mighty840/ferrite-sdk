@@ -34,8 +34,85 @@ jobs:
       - name: Test – ferrite-sdk (no default features)
         run: cargo test -p ferrite-sdk --no-default-features
 
-      - name: Test – ferrite-server
-        run: cargo test -p ferrite-server
+      - name: Test – ferrite-server (unit)
+        run: cargo test -p ferrite-server --lib
+
+      - name: Test – ferrite-server (integration)
+        run: cargo test -p ferrite-server --test integration -- --test-threads=1
+
+  test-keycloak:
+    name: Keycloak integration tests
+    runs-on: ubuntu-latest
+    services:
+      keycloak:
+        image: quay.io/keycloak/keycloak:26.0
+        env:
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: admin
+          KC_HEALTH_ENABLED: "true"
+        ports:
+          - 8080:8080
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -sf http://localhost:9000/health/ready || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 60s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Import Keycloak realm
+        run: |
+          # Wait for Keycloak to be fully ready (realms endpoint)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/realms/master > /dev/null 2>&1; then
+              echo "Keycloak is ready"
+              break
+            fi
+            echo "Waiting for Keycloak... ($i/30)"
+            sleep 2
+          done
+
+          # Get admin token
+          ADMIN_TOKEN=$(curl -sf -X POST \
+            "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+            | jq -r '.access_token')
+
+          # Import realm
+          curl -sf -X POST \
+            "http://localhost:8080/admin/realms" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @docker/keycloak/ferrite-realm.json
+
+          echo "Realm imported successfully"
+
+          # Verify realm exists
+          curl -sf "http://localhost:8080/realms/ferrite" | jq .realm
+
+          # Verify token flow works
+          curl -sf -X POST \
+            "http://localhost:8080/realms/ferrite/protocol/openid-connect/token" \
+            -d "grant_type=password&client_id=ferrite-dashboard&username=testuser&password=testpass&scope=openid" \
+            | jq -r '.access_token' | head -c 30
+          echo "... (token ok)"
+
+      - name: Test – ferrite-server (Keycloak integration)
+        env:
+          KEYCLOAK_URL: http://localhost:8080
+          KEYCLOAK_REALM: ferrite
+          KEYCLOAK_CLIENT_ID: ferrite-dashboard
+          FERRITE_TEST_KEYCLOAK_URL: http://localhost:8080
+        run: >
+          cargo test -p ferrite-server --test integration
+          --features keycloak-tests
+          -- --test-threads=1
 
   build-embedded:
     name: "Build ${{ matrix.example }}"

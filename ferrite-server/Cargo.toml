@@ -4,9 +4,16 @@ version = "0.1.0"
 edition = "2021"
 description = "Companion ingestion server for ferrite-sdk"
 
+[lib]
+name = "ferrite_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ferrite-server"
 path = "src/main.rs"
+
+[features]
+keycloak-tests = []
 
 [dependencies]
 axum = "0.7"
@@ -24,3 +31,6 @@ hex = "0.4"
 base64 = "0.22"
 reqwest = { version = "0.12", features = ["json"] }
 dotenvy = "0.15"
+
+[dev-dependencies]
+tempfile = "3"

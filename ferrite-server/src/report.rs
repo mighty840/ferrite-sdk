@@ -1,4 +1,4 @@
-use crate::store::Store;
+use ferrite_server::store::Store;
 
 /// Print a summary report of all devices and their event counts.
 pub fn print_report(store: &Store) -> anyhow::Result<()> {
