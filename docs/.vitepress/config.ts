@@ -14,7 +14,8 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/introduction' },
-      { text: 'Integrations', link: '/integrations/' },
+      { text: 'Server', link: '/server/' },
+      { text: 'Dashboard', link: '/dashboard/' },
       { text: 'Reference', link: '/reference/' },
       { text: 'Changelog', link: 'https://github.com/mighty840/ferrite-sdk/releases' },
     ],
@@ -28,6 +29,13 @@ export default defineConfig({
             { text: 'Quickstart', link: '/guide/quickstart' },
             { text: 'Core Concepts', link: '/guide/concepts' },
             { text: 'Architecture', link: '/guide/architecture' },
+          ],
+        },
+        {
+          text: 'Advanced',
+          items: [
+            { text: 'Transport Layer', link: '/guide/transports' },
+            { text: 'Security & Encryption', link: '/guide/security' },
           ],
         },
       ],
@@ -84,6 +92,14 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/dashboard/' },
             { text: 'SSO / Keycloak', link: '/dashboard/sso' },
+          ],
+        },
+      ],
+      '/gateway/': [
+        {
+          text: 'Edge Gateway',
+          items: [
+            { text: 'Overview', link: '/gateway/' },
           ],
         },
       ],

@@ -1,25 +1,32 @@
 # SSO / Keycloak Setup
 
-For production deployments, you can protect the ferrite dashboard and server API with single sign-on (SSO) using Keycloak.
+The ferrite platform supports single sign-on via Keycloak OIDC. The server handles JWT validation natively -- no reverse proxy auth is needed.
 
 ## Overview
 
-The setup involves:
+1. Run a Keycloak instance
+2. Create a realm, client, and roles
+3. Set environment variables on the ferrite-server
+4. The dashboard auto-detects OIDC mode and shows an SSO login button
 
-1. Running a Keycloak instance
-2. Creating a realm and client for the ferrite dashboard
-3. Configuring a reverse proxy (e.g., nginx or Caddy) to validate tokens
-4. Updating the dashboard to redirect to Keycloak for login
+## Server configuration
+
+Set these environment variables (in `.env` or your deployment config):
+
+```bash
+KEYCLOAK_URL=https://keycloak.example.com
+KEYCLOAK_REALM=ferrite
+KEYCLOAK_CLIENT_ID=ferrite-dashboard
+```
+
+The server auto-detects Keycloak mode when all three variables are set. Without them, it falls back to Basic auth.
 
 ## Keycloak configuration
 
 ### Create a realm
 
-1. Log in to the Keycloak admin console (e.g., `http://keycloak:8080/admin`)
+1. Log in to the Keycloak admin console
 2. Create a new realm called `ferrite`
-3. Under the realm settings, configure:
-   - Display name: "ferrite Device Platform"
-   - Login theme: your preference
 
 ### Create a client
 
@@ -31,70 +38,43 @@ The setup involves:
    - Valid redirect URIs: `https://dashboard.example.com/*`
    - Web origins: `https://dashboard.example.com`
    - Client authentication: Off (public client for SPA)
-3. Note the client ID for use in the dashboard configuration.
+
+### Create roles
+
+Create these **realm roles** for role-based access control:
+
+| Role | Permissions |
+|---|---|
+| `ferrite-admin` | Full access: read, write, delete, admin paths |
+| `ferrite-provisioner` | Read + create/update devices and groups |
+| *(no role)* | Viewer: read-only access |
+
+Assign roles to users in the Keycloak admin console.
 
 ### Create users
 
-Create users in the `ferrite` realm and assign them roles as needed. For a simple setup, a single `viewer` role is sufficient.
+Create users in the `ferrite` realm and assign them the appropriate roles.
 
-## Reverse proxy configuration
+## How it works
 
-### Caddy example
-
-```caddyfile
-dashboard.example.com {
-    reverse_proxy localhost:8080
-}
-
-api.example.com {
-    # Validate JWT tokens from Keycloak
-    @authenticated {
-        header Authorization Bearer*
-    }
-
-    handle @authenticated {
-        reverse_proxy localhost:4000
-    }
-
-    handle {
-        respond "Unauthorized" 401
-    }
-}
-```
-
-### nginx example
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name api.example.com;
-
-    location / {
-        # Validate JWT using lua-resty-openidc or oauth2-proxy
-        auth_request /auth;
-        proxy_pass http://127.0.0.1:4000;
-    }
-}
-```
-
-For a more robust setup, consider using [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) as an authentication middleware between the reverse proxy and the ferrite-server.
-
-## Dashboard OIDC configuration
-
-The dashboard uses the standard OpenID Connect authorization code flow with PKCE. Configure the following values in the dashboard settings:
-
-| Setting | Value |
-|---|---|
-| OIDC Authority | `https://keycloak.example.com/realms/ferrite` |
-| Client ID | `ferrite-dashboard` |
-| Redirect URI | `https://dashboard.example.com/callback` |
-| Scope | `openid profile` |
+1. The dashboard calls `GET /auth/mode` on startup and detects `keycloak` mode
+2. User clicks "Sign in with SSO" -- the dashboard redirects to Keycloak's authorization endpoint with PKCE
+3. After authentication, Keycloak redirects back with an authorization code
+4. The dashboard exchanges the code for tokens via the Keycloak token endpoint
+5. The access token (JWT) is stored in `sessionStorage` and sent as `Authorization: Bearer <token>` on every API call
+6. The server validates the JWT using cached JWKS keys (refreshed every 5 minutes), falling back to the userinfo endpoint if JWKS validation fails
+7. Roles are extracted from the `realm_access.roles` JWT claim
 
 ## Device authentication
 
-For device-to-server authentication (the chunk upload path), API keys or mTLS are more appropriate than OIDC. Consider:
+For device-to-server authentication (chunk upload), use API keys rather than OIDC:
 
-- **API keys**: Add an `X-API-Key` header to chunk uploads and validate it in the reverse proxy or a server middleware.
-- **mTLS**: Use client certificates for device authentication. Each device gets a unique certificate signed by your CA.
+```bash
+# Server-side
+INGEST_API_KEY=your-secret-device-key
 
-The ferrite-server itself does not currently implement authentication. Use a reverse proxy or API gateway for access control.
+# Device-side (in firmware or gateway config)
+X-API-Key: your-secret-device-key
+```
+
+The `/ingest/elf` endpoint additionally accepts user auth (Bearer or Basic) for manual ELF uploads.
