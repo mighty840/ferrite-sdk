@@ -1,0 +1,30 @@
+# Ferrite Fleet — udev rules for deterministic USB device naming
+#
+# Install:
+#   sudo cp 99-ferrite.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# After install, plugging in a recognized board creates a symlink like:
+#   /dev/ferrite-nucleo-l4 → /dev/ttyACM0
+#
+# This lets ferrite-gateway use stable device paths regardless of plug order.
+
+# STM32 Nucleo-L4A6ZG (ST-LINK VCP) — USB CDC for ferrite chunks
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", SYMLINK+="ferrite-nucleo-l4", MODE="0666"
+
+# STM32 Nucleo-H563ZI (ST-LINK VCP) — debug/console only (Ethernet for data)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374e", SYMLINK+="ferrite-nucleo-h5", MODE="0666"
+
+# STM32 NUCLEO-WL55JC1 (ST-LINK VCP) — debug/console only (LoRa for data)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", ATTRS{serial}=="*WL55*", SYMLINK+="ferrite-nucleo-wl", MODE="0666"
+
+# nRF5340-DK (J-Link VCP) — debug/console only (BLE for data)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1366", ATTRS{idProduct}=="1055", SYMLINK+="ferrite-nrf5340", MODE="0666"
+
+# Ferrite USB CDC device (custom VID/PID from firmware) — generic match
+# Uses pid.codes test VID 0x1209 / PID 0x0001 as set in embassy-stm32l4a6 example
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0001", SYMLINK+="ferrite-usb%n", MODE="0666"
+
+# ESP32-C3 (USB-JTAG-serial) — debug/console only (WiFi for data)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", ATTRS{idProduct}=="1001", SYMLINK+="ferrite-esp32c3", MODE="0666"

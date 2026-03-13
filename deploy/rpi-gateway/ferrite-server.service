@@ -1,0 +1,25 @@
+[Unit]
+Description=Ferrite Server — device telemetry ingestion and dashboard
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ferrite
+Group=ferrite
+WorkingDirectory=/opt/ferrite
+ExecStart=/opt/ferrite/bin/ferrite-server --http 0.0.0.0:4000 --db /opt/ferrite/data/ferrite.db --elf-dir /opt/ferrite/data/elfs
+EnvironmentFile=/opt/ferrite/env/server.env
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ferrite/data
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
