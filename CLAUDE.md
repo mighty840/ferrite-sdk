@@ -13,9 +13,19 @@ rustup target add thumbv7em-none-eabihf
 cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 ```
 
-## Flash examples (requires probe-rs)
+## Flash examples (requires probe-rs / espflash)
 ```bash
-cd examples/embassy-nrf52840
+# Cortex-M boards (probe-rs)
+cd examples/embassy-nrf52840    # nRF52840-DK
+cd examples/embassy-nrf5340     # nRF5340-DK (BLE transport)
+cd examples/embassy-stm32l4a6   # Nucleo-L4A6ZG (USB CDC transport)
+cd examples/embassy-stm32h563   # Nucleo-H563ZI (Ethernet/HTTP transport)
+cd examples/embassy-stm32wl55   # NUCLEO-WL55JC1 (LoRa transport)
+cd examples/rtic-stm32f4        # STM32F411 (RTIC, blocking)
+cargo run --release
+
+# RISC-V boards (espflash)
+cd examples/embassy-esp32c3     # ESP32-C3 (WiFi/HTTP transport)
 cargo run --release
 ```
 
@@ -56,6 +66,34 @@ The `dx serve` dev server proxies `/auth`, `/devices`, `/ingest`, `/health` to `
 - Server config uses `Box::leak(Box::new(config))` for `&'static` lifetime
 - Dashboard discovers auth mode at startup via `GET /auth/mode`
 - Auth middleware passes OPTIONS requests through for CORS preflight support
+
+## Transport map — ferrite-sdk
+```
+transport/uart.rs     → ChunkTransport (blocking, generic UART)
+transport/usb_cdc.rs  → AsyncChunkTransport (embassy-usb, feature: usb-cdc)
+transport/http.rs     → AsyncChunkTransport (reqwless, feature: http) — WiFi + Ethernet
+transport/lora.rs     → ChunkTransport (blocking SPI, feature: lora) — SX1262/SX1276
+ferrite-ble-nrf/      → AsyncChunkTransport (nrf-softdevice) — separate crate
+```
+
+## Deploy — RPi gateway (`deploy/rpi-gateway/`)
+```bash
+# Cross-compile for aarch64
+bash deploy/rpi-gateway/cross-build.sh
+
+# Deploy to RPi
+scp -r deploy/rpi-gateway/ pi@raspberrypi:~/ferrite-deploy/
+ssh pi@raspberrypi 'cd ~/ferrite-deploy && sudo bash setup.sh'
+```
+
+## Demo (`demo/`)
+```bash
+# Seed dashboard with 24h of demo data
+python3 demo/seed_data.py --server http://localhost:4000 --hours 24
+
+# Pre-flight check (run on RPi before demo)
+bash demo/preflight.sh http://localhost:4000
+```
 
 ## Module map — ferrite-sdk
 ```

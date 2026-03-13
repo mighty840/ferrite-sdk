@@ -1,0 +1,28 @@
+[Unit]
+Description=Ferrite Gateway — BLE/USB/LoRa edge bridge
+After=network.target ferrite-server.service bluetooth.target
+Wants=ferrite-server.service
+
+[Service]
+Type=simple
+User=ferrite
+Group=ferrite
+WorkingDirectory=/opt/ferrite
+ExecStart=/opt/ferrite/bin/ferrite-gateway --server http://127.0.0.1:4000 --usb-port /dev/ttyACM0 --ble
+EnvironmentFile=/opt/ferrite/env/gateway.env
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# USB and BLE access
+SupplementaryGroups=dialout bluetooth
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/ferrite/data
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
