@@ -1,18 +1,22 @@
 pub mod callback;
+pub mod compare;
 pub mod dashboard;
 pub mod device_detail;
 pub mod devices;
 pub mod faults;
+pub mod fleet;
 pub mod login;
 pub mod metrics;
 pub mod register;
 pub mod settings;
 
 pub use callback::CallbackPage;
+pub use compare::ComparePage;
 pub use dashboard::DashboardPage;
 pub use device_detail::DeviceDetailPage;
 pub use devices::DevicesPage;
 pub use faults::FaultsPage;
+pub use fleet::FleetPage;
 pub use login::LoginPage;
 pub use metrics::MetricsPage;
 pub use register::RegisterPage;

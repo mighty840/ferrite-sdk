@@ -18,6 +18,8 @@ pub mod defmt_sink;
 #[cfg(feature = "encryption")]
 pub mod encryption;
 
+pub mod compression;
+
 /// Error type for all public SDK APIs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SdkError {

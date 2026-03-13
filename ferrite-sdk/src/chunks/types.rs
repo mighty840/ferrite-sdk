@@ -49,6 +49,8 @@ impl ChunkHeader {
     pub const FLAG_FRAGMENT: u8 = 0x02;
     /// Flag bit: the payload is encrypted (AES-128-CCM).
     pub const FLAG_ENCRYPTED: u8 = 0x04;
+    /// Flag bit: the payload is compressed (RLE).
+    pub const FLAG_COMPRESSED: u8 = 0x08;
 
     pub fn is_last(&self) -> bool {
         self.flags & Self::FLAG_LAST != 0
@@ -60,6 +62,10 @@ impl ChunkHeader {
 
     pub fn is_encrypted(&self) -> bool {
         self.flags & Self::FLAG_ENCRYPTED != 0
+    }
+
+    pub fn is_compressed(&self) -> bool {
+        self.flags & Self::FLAG_COMPRESSED != 0
     }
 }
 
