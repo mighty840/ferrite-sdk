@@ -27,8 +27,15 @@ ferrite-sdk captures everything you need to debug embedded devices in the field:
 - **Metrics** — counters, gauges, histograms in a fixed-capacity ring buffer
 - **Trace logs** — defmt output captured and uploaded as binary fragments
 - **Transport agnostic** — UART, BLE, LoRa, USB CDC, HTTP — implement one trait
+- **Chunk encryption** — AES-128-CCM for untrusted transports
+- **RLE compression** — bandwidth-efficient chunk encoding for constrained links
+- **OTA negotiation** — firmware update coordination via chunk protocol
 
 Data survives reboots via retained RAM. The companion server stores, decodes, and symbolicates everything.
+
+The platform includes a full-stack observability pipeline: an edge **gateway** for BLE/USB/LoRa bridging, an **ingestion server** with alerting, Prometheus metrics, and role-based access control, and a **web dashboard** for real-time fleet monitoring.
+
+![Dashboard Overview](/docs/public/screenshots/dashboard-overview.png)
 
 ## Memory Footprint
 
@@ -89,12 +96,14 @@ All `thumbv7m-none-eabi`, `thumbv7em-none-eabi`, and `thumbv7em-none-eabihf` tar
 
 | Crate | Description |
 |-------|-------------|
-| [`ferrite-sdk`](ferrite-sdk/) | Core `no_std` SDK — crashes, metrics, trace, chunks |
+| [`ferrite-sdk`](ferrite-sdk/) | Core `no_std` SDK — crashes, metrics, trace, chunks, encryption, compression |
 | [`ferrite-embassy`](ferrite-embassy/) | Embassy async upload task |
 | [`ferrite-rtic`](ferrite-rtic/) | RTIC resource wrapper + blocking upload |
 | [`ferrite-ffi`](ferrite-ffi/) | C FFI static library for Zephyr/FreeRTOS |
-| [`ferrite-server`](ferrite-server/) | Companion HTTP server + CLI + SQLite |
-| [`ferrite-dashboard`](ferrite-dashboard/) | Dioxus WASM web dashboard |
+| [`ferrite-server`](ferrite-server/) | Ingestion server — auth, alerting, Prometheus, groups, OTA, rate limiting |
+| [`ferrite-dashboard`](ferrite-dashboard/) | Dioxus WASM dashboard — fleet view, metrics charts, fault diagnostics |
+| [`ferrite-gateway`](ferrite-gateway/) | Edge gateway — BLE/USB/LoRa chunk forwarding with offline buffering |
+| [`ferrite-ble-nrf`](ferrite-ble-nrf/) | nRF52840 BLE transport (SoftDevice, excluded from workspace) |
 
 ## Build
 
@@ -108,8 +117,14 @@ cargo test -p ferrite-server
 rustup target add thumbv7em-none-eabihf
 cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 
-# Run the server
-cargo run -p ferrite-server -- serve --port 8080
+# Run the server (uses .env for config, see .env.example)
+cargo run -p ferrite-server
+
+# Run the dashboard (proxies API to localhost:4000)
+cd ferrite-dashboard && dx serve
+
+# Build the edge gateway
+cargo build -p ferrite-gateway
 
 # Docs site
 cd docs && npm install && npm run dev
@@ -120,7 +135,12 @@ cd docs && npm install && npm run dev
 Full documentation is available at the [VitePress docs site](https://mighty840.github.io/ferrite-sdk/), covering:
 
 - [Architecture & design](docs/guide/architecture.md)
+- [Transport layer](docs/guide/transports.md) (UART, BLE, USB CDC, HTTP, LoRa)
+- [Security & encryption](docs/guide/security.md) (AES-128-CCM, RBAC, API keys)
 - [Binary chunk wire format](docs/reference/chunk-format.md)
+- [Server configuration](docs/server/configuration.md) (auth, alerting, retention, Prometheus)
+- [Dashboard guide](docs/dashboard/) (fleet view, metrics, faults, exports)
+- [Gateway setup](docs/gateway/) (BLE/USB/LoRa edge bridging)
 - [C FFI API reference](docs/reference/c-api.md)
 - [Integration guides](docs/integrations/) (Embassy, RTIC, bare-metal, Zephyr, FreeRTOS)
 - [Target platform setup](docs/targets/) (nRF52840, RP2040, STM32F4)

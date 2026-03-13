@@ -36,7 +36,9 @@ In practice, `MAX_PAYLOAD_SIZE` is 248 bytes, so the maximum total chunk size is
 |---|---|---|
 | 0 | `LAST` | Set on the final chunk of a multi-chunk sequence |
 | 1 | `FRAGMENT` | Reserved for fragmented payloads |
-| 2-7 | -- | Reserved, must be 0 |
+| 2 | `ENCRYPTED` | Payload is AES-128-CCM encrypted |
+| 3 | `COMPRESSED` | Payload is RLE compressed |
+| 4-7 | -- | Reserved, must be 0 |
 
 ### CRC-16/CCITT-FALSE
 
@@ -233,6 +235,47 @@ Offset  Size  Field
 ```
 
 **Total payload:** `2 + D + V + 8` bytes. Flags: `LAST = 1`.
+
+### 0x07 -- OtaRequest
+
+Sent by the server in response to a heartbeat when an OTA update is available for the device.
+
+```
+Offset  Size  Field
+------  ----  -----
+0       1     version_len         Length of the target version string (u8)
+1       V     target_version      UTF-8 version string (V = version_len)
+1+V     8     build_id            Target build ID (u64 LE)
+```
+
+**Total payload:** `1 + V + 8` bytes. Flags: `LAST = 1`.
+
+### Encrypted chunks
+
+When the `ENCRYPTED` flag (0x04) is set, the payload is wrapped as:
+
+```
+Offset  Size  Field
+------  ----  -----
+0       13    nonce               AES-128-CCM nonce
+13      M     ciphertext          Encrypted original payload (M = payload_len - 29)
+13+M    16    tag                 Authentication tag
+```
+
+The server decrypts the payload using the configured `CHUNK_ENCRYPTION_KEY` before processing.
+
+### Compressed chunks
+
+When the `COMPRESSED` flag (0x08) is set, the payload is RLE-encoded:
+
+```
+Offset  Size  Field
+------  ----  -----
+0       2     original_len        Original uncompressed length (u16 LE)
+2       N     rle_data            RLE-compressed data
+```
+
+**RLE encoding:** literal bytes are passed through. Runs of 3+ identical bytes are encoded as `0xFF <byte> <count>`. The marker byte `0xFF` itself is encoded as `0xFF 0xFF 0x01`.
 
 ## Session structure
 

@@ -26,11 +26,14 @@ Embedded devices deployed in the field are difficult to debug. When a sensor nod
 
 | Crate | Description |
 |---|---|
-| `ferrite-sdk` | Core `no_std` SDK -- metrics, faults, trace, chunks, transport |
+| `ferrite-sdk` | Core `no_std` SDK -- metrics, faults, trace, chunks, transport, encryption, compression |
 | `ferrite-embassy` | Embassy async task for periodic/triggered uploads |
 | `ferrite-rtic` | RTIC resource wrapper and blocking upload helper |
 | `ferrite-ffi` | C FFI static library (`libferrite_ffi.a`) |
-| `ferrite-server` | Companion CLI and HTTP ingestion server |
+| `ferrite-server` | Ingestion server with auth, alerting, groups, OTA, Prometheus, rate limiting |
+| `ferrite-dashboard` | Dioxus WASM dashboard -- fleet view, metrics charts, fault diagnostics, CSV/JSON export |
+| `ferrite-gateway` | Edge gateway -- BLE/USB/LoRa chunk forwarding with offline SQLite buffering |
+| `ferrite-ble-nrf` | nRF52840 BLE transport (SoftDevice, excluded from workspace) |
 
 ## Design principles
 
@@ -52,8 +55,19 @@ With default buffer sizes (32 metric entries, 512-byte trace buffer):
 
 These numbers scale with the const-generic buffer size parameters. A `MetricsBuffer<8>` with a `TraceBuffer<128>` can bring total RAM under 600 bytes.
 
+## Platform overview
+
+Beyond the core SDK, ferrite provides a full observability pipeline:
+
+- **[Transport layer](./transports)** -- UART, BLE, USB CDC, HTTP, and LoRa transports with optional AES-128-CCM encryption and RLE compression
+- **[Edge gateway](../gateway/)** -- bridges BLE/USB/LoRa devices to the server with offline buffering
+- **[Ingestion server](../server/)** -- Keycloak or Basic auth, RBAC (admin/provisioner/viewer), webhook alerting, Prometheus metrics, SSE live events, data retention policies, rate limiting, database backup
+- **[Web dashboard](../dashboard/)** -- real-time fleet monitoring, SVG metric charts, fault diagnostics with symbolication, fleet view with tag grouping, device comparison, CSV/JSON export
+
 ## Next steps
 
 - [Quickstart](./quickstart) -- get a working example in 10 minutes
 - [Core Concepts](./concepts) -- understand retained RAM, chunks, and transport
 - [Architecture](./architecture) -- module-level data flow diagram
+- [Transport Layer](./transports) -- UART, BLE, USB CDC, HTTP, LoRa
+- [Security](./security) -- encryption, authentication, RBAC
