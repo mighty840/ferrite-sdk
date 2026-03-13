@@ -1,0 +1,15 @@
+[package]
+name = "ferrite-ble-nrf"
+version = "0.1.0"
+edition = "2021"
+description = "BLE transport for ferrite-sdk on nRF52840 (nrf-softdevice)"
+license = "MIT"
+
+# This crate targets nRF52840 only — excluded from default workspace builds.
+# Build with: cargo build -p ferrite-ble-nrf --target thumbv7em-none-eabihf
+
+[dependencies]
+ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["embassy"] }
+# nrf-softdevice requires the target chip feature; users select one:
+#   nrf-softdevice = { version = "0.1", features = ["ble-peripheral", "ble-gatt-server", "s140", "nrf52840"] }
+# We declare it as optional so the crate compiles for doc/CI without the full BLE stack.
