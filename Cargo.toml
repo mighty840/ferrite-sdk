@@ -13,7 +13,13 @@ members = [
 exclude = [
   "examples/embassy-nrf52840",
   "examples/embassy-rp2040",
+  "examples/embassy-esp32c3",
+  "examples/embassy-stm32l4a6",
+  "examples/embassy-stm32wl55",
+  "examples/embassy-nrf5340",
+  "examples/embassy-stm32h563",
   "examples/rtic-stm32f4",
+  "examples/rtic-stm32wl55",
   "tests/qemu",
   "ferrite-ble-nrf",
 ]

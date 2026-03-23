@@ -1,0 +1,6 @@
+[target.armv7-unknown-linux-gnueabihf]
+pre-build = [
+    "dpkg --add-architecture armhf",
+    "apt-get update",
+    "apt-get install -y libudev-dev:armhf"
+]

@@ -11,7 +11,7 @@ mod usb_reader;
 use anyhow::Result;
 use clap::Parser;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use buffer::ChunkBuffer;
 use config::GatewayConfig;
@@ -28,10 +28,10 @@ struct Cli {
     #[arg(long)]
     server: Option<String>,
 
-    /// USB serial port path (e.g. /dev/ttyACM0)
+    /// USB serial port path(s) — can be specified multiple times
     #[cfg(feature = "usb")]
-    #[arg(long)]
-    usb_port: Option<String>,
+    #[arg(long = "usb-port")]
+    usb_ports: Vec<String>,
 
     /// USB baud rate
     #[cfg(feature = "usb")]
@@ -66,8 +66,8 @@ async fn main() -> Result<()> {
     }
     #[cfg(feature = "usb")]
     {
-        if let Some(port) = cli.usb_port {
-            config.usb_port = Some(port);
+        if !cli.usb_ports.is_empty() {
+            config.usb_ports = cli.usb_ports;
         }
         config.usb_baud = cli.usb_baud;
     }
@@ -94,15 +94,15 @@ async fn main() -> Result<()> {
     // Channel for all receivers to send decoded chunks
     let (chunk_tx, mut chunk_rx) = mpsc::channel::<DecodedChunk>(256);
 
-    // Start USB reader if configured
+    // Start USB readers — one task per configured port
     #[cfg(feature = "usb")]
-    if let Some(port) = &config.usb_port {
+    for port in &config.usb_ports {
         let port = port.clone();
         let baud = config.usb_baud;
         let tx = chunk_tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = usb_reader::usb_reader_task(port, baud, tx).await {
-                error!("USB reader failed: {}", e);
+            if let Err(e) = usb_reader::usb_reader_task(port.clone(), baud, tx).await {
+                error!("USB reader for {} failed: {}", port, e);
             }
         });
     }
@@ -128,18 +128,41 @@ async fn main() -> Result<()> {
     drain_buffer(&buffer, &forwarder).await;
 
     while let Some(chunk) = chunk_rx.recv().await {
-        match forwarder.forward_chunk(&chunk.raw).await {
+        // Batch chunks that arrive within a short window (same upload session).
+        // The server parses multiple concatenated chunks from one POST body,
+        // and uses the DeviceInfo chunk to associate all chunks with the right device.
+        let mut batch = chunk.raw.clone();
+        let batch_start = tokio::time::Instant::now();
+        loop {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(200),
+                chunk_rx.recv(),
+            )
+            .await
+            {
+                Ok(Some(next)) => {
+                    batch.extend_from_slice(&next.raw);
+                    // Cap batch time to avoid holding chunks too long
+                    if batch_start.elapsed() > std::time::Duration::from_secs(2) {
+                        break;
+                    }
+                }
+                _ => break, // Timeout or channel closed
+            }
+        }
+
+        debug!("Forwarding batch of {} bytes", batch.len());
+        match forwarder.forward_chunk(&batch).await {
             Ok(true) => {
                 // Successfully forwarded
             }
             Ok(false) => {
-                warn!("Server rejected chunk type=0x{:02X}", chunk.chunk_type);
+                warn!("Server rejected batch");
             }
             Err(_) => {
-                // Server unreachable — buffer the chunk
-                info!("Buffering chunk (server unreachable)");
-                if let Err(e) = buffer.enqueue(None, &chunk.raw) {
-                    error!("Failed to buffer chunk: {}", e);
+                info!("Buffering batch (server unreachable)");
+                if let Err(e) = buffer.enqueue(None, &batch) {
+                    error!("Failed to buffer batch: {}", e);
                 }
             }
         }

@@ -1,216 +1,199 @@
-//! Ferrite SDK example — Nucleo-L4A6ZG with USB CDC transport.
+//! Ferrite SDK — Nucleo-L4A6ZG with USB CDC transport.
 //!
-//! This firmware sends telemetry chunks over USB CDC (virtual serial) to the
-//! ferrite-gateway running on the connected Raspberry Pi. The gateway decodes
-//! the wire-format frames and forwards them to ferrite-server via HTTP.
-//!
-//! # Hardware
-//! - Board: Nucleo-L4A6ZG (Nucleo-144)
-//! - MCU: STM32L4A6ZGTx (Cortex-M4F, 80MHz)
-//! - Transport: USB OTG FS → CDC ACM → ferrite-gateway
-//! - Target: thumbv7em-none-eabihf
-//!
-//! # Architecture
-//! ```text
-//! [Nucleo-L4A6ZG]               [RPi Gateway]              [Server]
-//!   USB OTG FS ──USB CDC──▶  /dev/ttyACM0  ──HTTP──▶  /ingest/chunks
-//!   (PA11/PA12)               ferrite-gateway
-//! ```
-//!
-//! # Wiring
-//! - Connect Nucleo USB CN13 (USB OTG) to RPi USB port
-//! - The ST-LINK USB (CN1) is separate — used for flashing/debug only
-//!
-//! # Flash & monitor
-//! ```bash
-//! cargo run --release
-//! ```
+//! Uses MSI 48MHz for USB clock, HSI 16MHz PLL for 80MHz SYSCLK.
+//! Embassy executor with manual WFI loop (WFE has wake issues on this chip).
 
 #![no_std]
 #![no_main]
 
-use embassy_executor::Spawner;
 use embassy_stm32::gpio;
-use embassy_stm32::usb::{self, Driver};
+use embassy_stm32::usb_otg::{self, Driver};
 use embassy_stm32::{bind_interrupts, peripherals};
 use embassy_time::{Duration, Timer};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::UsbDevice;
-use ferrite_sdk::transport::UsbCdcTransport;
+use ferrite_sdk::transport::usb_cdc::UsbCdcTransport;
 use ferrite_sdk::{RamRegion, RebootReason, SdkConfig};
 use static_cell::StaticCell;
+use cortex_m_rt::entry;
 
 use defmt_rtt as _;
-use panic_probe as _;
 
-mod build_id {
-    pub fn get() -> u64 {
-        env!("FERRITE_BUILD_ID").parse().unwrap_or(0)
-    }
+// Use panic-halt instead of panic-probe — probe causes reset loop without debugger
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    loop { cortex_m::asm::nop(); }
 }
 
 const DEVICE_ID: &str = "stm32l4a6-fleet-01";
 
 bind_interrupts!(struct Irqs {
-    OTG_FS => usb::InterruptHandler<peripherals::USB_OTG_FS>;
+    OTG_FS => usb_otg::InterruptHandler<peripherals::USB_OTG_FS>;
 });
 
-// Static buffers for USB (must outlive the USB driver)
 static EP_OUT_BUF: StaticCell<[u8; 256]> = StaticCell::new();
 static CDC_STATE: StaticCell<State> = StaticCell::new();
+static EXECUTOR: StaticCell<embassy_executor::raw::Executor> = StaticCell::new();
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
+#[entry]
+fn main() -> ! {
     let mut config = embassy_stm32::Config::default();
-    // Configure clocks: HSE → PLL → 80MHz, USB needs 48MHz from PLLSAI1
     {
         use embassy_stm32::rcc::*;
-        config.rcc.hse = Some(Hse {
-            freq: embassy_stm32::time::Hertz(8_000_000),
-            mode: HseMode::Bypass, // Nucleo-144 uses ST-LINK MCO
-        });
-        config.rcc.pll = Some(Pll {
-            source: PllSource::HSE,
-            prediv: PllPreDiv::DIV1,
-            mul: PllMul::MUL20,
-            divp: None,
-            divq: Some(PllQDiv::DIV4), // 40MHz for USB? needs 48MHz
-            divr: Some(PllRDiv::DIV2), // 80MHz SYSCLK
-        });
-        config.rcc.sys = Sysclk::PLL1_R;
-        // 48MHz clock for USB from PLLSAI1
-        config.rcc.pllsai1 = Some(Pll {
-            source: PllSource::HSE,
-            prediv: PllPreDiv::DIV1,
-            mul: PllMul::MUL12,    // 8 * 12 = 96MHz
-            divp: None,
-            divq: Some(PllQDiv::DIV2), // 48MHz for USB
-            divr: None,
-        });
+        // HSI 16MHz sysclk — no USB clock yet (debug first)
+        config.rcc.hsi = true;
+        config.rcc.mux = ClockSrc::HSI;
     }
     let p = embassy_stm32::init(config);
 
-    // Initialize ferrite SDK
+    defmt::info!("Ferrite L4A6 — 80MHz sysclk, 48MHz USB");
+
+    let executor = EXECUTOR.init(embassy_executor::raw::Executor::new(cortex_m::asm::sev as *mut ()));
+
+    // Spawn all tasks
+    let spawner = executor.spawner();
+    unsafe {
+        spawner.spawn(main_task(p)).unwrap();
+    }
+
+    // Spin-poll the executor. WFI/WFE have wake issues on this chip
+    // without a debugger attached. Spin-polling uses more power but
+    // guarantees responsiveness.
+    loop {
+        unsafe { executor.poll() };
+    }
+}
+
+#[embassy_executor::task]
+async fn main_task(p: embassy_stm32::Peripherals) {
+    // Ferrite SDK init
     ferrite_sdk::init(SdkConfig {
         device_id: DEVICE_ID,
         firmware_version: env!("CARGO_PKG_VERSION"),
-        build_id: build_id::get(),
+        build_id: 0,
         ticks_fn: || embassy_time::Instant::now().as_ticks(),
         ram_regions: &[RamRegion {
             start: 0x20000000,
-            end: 0x20050000, // 320KB SRAM
+            end: 0x20050000,
         }],
     });
 
-    // Check for previous fault
-    if let Some(fault) = ferrite_sdk::fault::last_fault() {
-        defmt::error!(
-            "Recovered from fault: PC={:#010x} LR={:#010x}",
-            fault.frame.pc,
-            fault.frame.lr
-        );
-    }
-
-    // Record reboot reason from STM32L4 RCC_CSR
     let reason = read_stm32l4_reset_reason();
     ferrite_sdk::reboot_reason::record_reboot_reason(reason);
 
-    defmt::info!("Ferrite Nucleo-L4A6ZG USB CDC example started — device_id={}", DEVICE_ID);
+    if let Some(fault) = ferrite_sdk::fault::last_fault() {
+        defmt::error!("Recovered from fault: PC={:#010x} LR={:#010x}", fault.frame.pc, fault.frame.lr);
+    }
 
-    // ── USB CDC Setup ─────────────────────────────────────────────────
+    defmt::info!("SDK initialized — setting up USB CDC");
 
+    // USB CDC
     let ep_out_buf = EP_OUT_BUF.init([0u8; 256]);
+    let mut otg_config = usb_otg::Config::default();
+    otg_config.vbus_detection = false;
+    let driver = Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, ep_out_buf, otg_config);
 
-    let driver = Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, ep_out_buf);
-
-    let mut usb_config = embassy_usb::Config::new(0x1209, 0x0001); // pid.codes test VID/PID
+    let mut usb_config = embassy_usb::Config::new(0x1209, 0x0001);
     usb_config.manufacturer = Some("Ferrite");
     usb_config.product = Some("Ferrite Fleet Device");
     usb_config.serial_number = Some(DEVICE_ID);
 
+    static CONFIG_DESC: StaticCell<[u8; 256]> = StaticCell::new();
+    static BOS_DESC: StaticCell<[u8; 256]> = StaticCell::new();
+    static MSOS_DESC: StaticCell<[u8; 0]> = StaticCell::new();
+    static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
+
     let mut builder = embassy_usb::Builder::new(
         driver,
         usb_config,
-        &mut make_buf::<256>(),
-        &mut make_buf::<256>(),
-        &mut make_buf::<256>(),
-        &mut make_buf::<64>(),
+        CONFIG_DESC.init([0u8; 256]),
+        BOS_DESC.init([0u8; 256]),
+        MSOS_DESC.init([]),
+        CONTROL_BUF.init([0u8; 64]),
     );
 
     let cdc_state = CDC_STATE.init(State::new());
-    let cdc_class = CdcAcmClass::new(&mut builder, cdc_state, 64);
+    let class = CdcAcmClass::new(&mut builder, cdc_state, 64);
     let usb_device = builder.build();
 
-    // Split CDC class into transport
-    let transport = UsbCdcTransport::new(cdc_class);
+    let transport = UsbCdcTransport::new(class);
 
-    // Spawn USB device task (handles enumeration, control transfers)
-    spawner.spawn(usb_task(usb_device)).ok();
+    // Can't spawn from here (no spawner access), so run USB inline
+    // We'll use select to run USB + telemetry concurrently
+    let usb_fut = run_usb(usb_device);
+    let telemetry_fut = telemetry_loop(p.PB7, p.PB14);
+    let upload_fut = upload_loop(transport);
 
-    defmt::info!("USB CDC initialized — waiting for host connection (DTR)");
+    // Run all three concurrently (first to complete wins, but none should complete)
+    embassy_futures::join::join3(usb_fut, telemetry_fut, upload_fut).await;
+}
 
-    // Spawn upload task using the USB transport
-    spawner.spawn(upload_task(transport)).ok();
+async fn run_usb(mut device: UsbDevice<'static, Driver<'static, peripherals::USB_OTG_FS>>) {
+    defmt::info!("USB device task started");
+    device.run().await;
+}
 
-    // ── Main telemetry loop ───────────────────────────────────────────
-
-    // Nucleo-144 LEDs: LD1=PB0 (green), LD2=PB7 (blue), LD3=PB14 (red)
-    let mut led_green = gpio::Output::new(p.PB0, gpio::Level::Low, gpio::Speed::Low);
-    let mut led_blue = gpio::Output::new(p.PB7, gpio::Level::Low, gpio::Speed::Low);
+async fn telemetry_loop(
+    pb7: embassy_stm32::peripherals::PB7,
+    pb14: embassy_stm32::peripherals::PB14,
+) {
+    let mut led_blue = gpio::Output::new(pb7, gpio::Level::Low, gpio::Speed::Low);
+    let mut led_red = gpio::Output::new(pb14, gpio::Level::Low, gpio::Speed::Low);
     let mut counter: u32 = 0;
 
+    defmt::info!("Telemetry loop started");
+
     loop {
-        // Green LED heartbeat
-        led_green.set_high();
-        Timer::after_millis(100).await;
-        led_green.set_low();
-
+        led_red.toggle(); // heartbeat on red LED (PB14)
         counter += 1;
-        ferrite_sdk::metric_increment!("loop_count");
-        ferrite_sdk::metric_gauge!("uptime_seconds", counter);
+        let _ = ferrite_sdk::metric_increment!("loop_count");
+        let _ = ferrite_sdk::metric_gauge!("uptime_seconds", counter);
 
-        // Blue LED toggles every 10 iterations
         if counter % 10 == 0 {
             led_blue.toggle();
         }
 
-        defmt::trace!("loop {} — metrics queued", counter);
+        if counter % 30 == 0 {
+            defmt::info!("metrics: loop_count={}, uptime={}s", counter, counter);
+        }
+
         Timer::after(Duration::from_secs(1)).await;
     }
 }
 
-#[embassy_executor::task]
-async fn usb_task(mut device: UsbDevice<'static, Driver<'static, peripherals::USB_OTG_FS>>) {
-    device.run().await;
+async fn upload_loop(
+    mut transport: UsbCdcTransport<'static, Driver<'static, peripherals::USB_OTG_FS>>,
+) {
+    // Wait for USB connection + initial metrics
+    Timer::after(Duration::from_secs(10)).await;
+
+    loop {
+        defmt::info!("Upload starting...");
+        match ferrite_sdk::upload::UploadManager::upload_async(&mut transport).await {
+            Ok(stats) => {
+                defmt::info!("Upload OK: {} chunks, {} bytes", stats.chunks_sent, stats.bytes_sent);
+                let _ = ferrite_sdk::metric_increment!("upload_ok");
+            }
+            Err(e) => {
+                defmt::warn!("Upload failed: {:?}", defmt::Debug2Format(&e));
+                let _ = ferrite_sdk::metric_increment!("upload_fail");
+            }
+        }
+        Timer::after(Duration::from_secs(30)).await;
+    }
 }
 
-#[embassy_executor::task]
-async fn upload_task(transport: UsbCdcTransport<'static, Driver<'static, peripherals::USB_OTG_FS>>) {
-    // Upload every 30 seconds, or on-demand via trigger_upload_now()
-    ferrite_embassy::upload_task::upload_loop_with_trigger(
-        transport,
-        Duration::from_secs(30),
-    )
-    .await
-}
-
-/// Read STM32L4 reset reason from RCC_CSR register at 0x4002_1094.
 fn read_stm32l4_reset_reason() -> RebootReason {
     let rcc_csr = unsafe { core::ptr::read_volatile(0x4002_1094 as *const u32) };
-    // Clear flags by setting RMVF (bit 23)
     unsafe {
         let val = core::ptr::read_volatile(0x4002_1094 as *const u32);
         core::ptr::write_volatile(0x4002_1094 as *mut u32, val | (1 << 23));
     }
     match rcc_csr {
-        r if r & (1 << 29) != 0 => RebootReason::WatchdogTimeout, // IWDGRSTF
-        r if r & (1 << 30) != 0 => RebootReason::WatchdogTimeout, // WWDGRSTF
-        r if r & (1 << 28) != 0 => RebootReason::SoftwareReset,   // SFTRSTF
-        r if r & (1 << 26) != 0 => RebootReason::PinReset,        // PINRSTF
+        r if r & (1 << 29) != 0 => RebootReason::WatchdogTimeout,
+        r if r & (1 << 30) != 0 => RebootReason::WatchdogTimeout,
+        r if r & (1 << 28) != 0 => RebootReason::SoftwareReset,
+        r if r & (1 << 26) != 0 => RebootReason::PinReset,
         _ => RebootReason::PowerOnReset,
     }
-}
-
-fn make_buf<const N: usize>() -> [u8; N] {
-    [0u8; N]
 }

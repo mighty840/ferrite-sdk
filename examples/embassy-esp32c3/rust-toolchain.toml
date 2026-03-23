@@ -1,0 +1,8 @@
+# Pinned to nightly-2025-03-01 (~Rust 1.88) because:
+# - smoltcp 0.12 has non-exhaustive enum match errors on Rust 1.94+
+# - embassy-executor 0.7 uses nightly features
+# - esp-hal 0.23 MSRV is 1.84
+[toolchain]
+channel = "nightly-2025-04-15"
+components = ["rust-src"]
+targets = ["riscv32imc-unknown-none-elf"]

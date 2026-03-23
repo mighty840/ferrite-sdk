@@ -5,8 +5,8 @@
 //!
 //! Requires the `usb-cdc` feature flag.
 
-use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
-use embassy_usb::driver::Driver;
+use embassy_usb::class::cdc_acm::CdcAcmClass;
+use embassy_usb::driver::{Driver, EndpointError};
 
 /// USB CDC transport that sends chunks as raw bytes over the virtual serial port.
 ///
@@ -33,7 +33,7 @@ impl<'d, D: Driver<'d>> UsbCdcTransport<'d, D> {
 }
 
 impl<'d, D: Driver<'d>> crate::transport::AsyncChunkTransport for UsbCdcTransport<'d, D> {
-    type Error = embassy_usb::class::cdc_acm::Error;
+    type Error = EndpointError;
 
     async fn send_chunk(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
         // Wait for DTR before sending
