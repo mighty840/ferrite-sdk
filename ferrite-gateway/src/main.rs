@@ -6,6 +6,7 @@ mod buffer;
 mod config;
 mod forwarder;
 mod framing;
+mod http_ingest;
 mod usb_reader;
 
 use anyhow::Result;
@@ -42,6 +43,10 @@ struct Cli {
     #[cfg(feature = "ble")]
     #[arg(long)]
     ble: bool,
+
+    /// HTTP ingest port for Ethernet/WiFi devices (0 = disabled)
+    #[arg(long, default_value = "4001")]
+    http_ingest_port: u16,
 
     /// Buffer database path
     #[arg(long, default_value = "ferrite-gateway.db")]
@@ -114,6 +119,17 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             if let Err(e) = ble_scanner::ble_scanner_task(tx).await {
                 error!("BLE scanner failed: {}", e);
+            }
+        });
+    }
+
+    // Start HTTP ingest listener for Ethernet/WiFi devices
+    if cli.http_ingest_port > 0 {
+        let tx = chunk_tx.clone();
+        let port = cli.http_ingest_port;
+        tokio::spawn(async move {
+            if let Err(e) = http_ingest::http_ingest_task(port, tx).await {
+                error!("HTTP ingest listener failed: {}", e);
             }
         });
     }
