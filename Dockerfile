@@ -3,6 +3,23 @@
 # Multi-stage build for ferrite-server + dashboard.
 # Serves the Dioxus WASM dashboard as static files from the server.
 
+# Coolify injects all env vars as build ARGs — declare them here so
+# Docker doesn't fail on unknown ARGs. Values are ignored at build time;
+# they're only used at runtime via the entrypoint.
+ARG RUST_LOG
+ARG BASIC_AUTH_USER
+ARG BASIC_AUTH_PASS
+ARG INGEST_API_KEY
+ARG CORS_ORIGIN
+ARG RETENTION_DAYS
+ARG ALERT_WEBHOOK_URL
+ARG ALERT_OFFLINE_MINUTES
+ARG CHUNK_ENCRYPTION_KEY
+ARG DB_RESET_INTERVAL
+ARG COOLIFY_WEBHOOK_URL
+ARG COOLIFY_API_TOKEN
+ARG SOURCE_COMMIT
+
 # ── Stage 1: Dependency caching with cargo-chef ──────────────────────
 
 FROM rust:1.84-bookworm AS chef
