@@ -150,11 +150,7 @@ async fn main() -> Result<()> {
         let mut batch = chunk.raw.clone();
         let batch_start = tokio::time::Instant::now();
         loop {
-            match tokio::time::timeout(
-                std::time::Duration::from_millis(200),
-                chunk_rx.recv(),
-            )
-            .await
+            match tokio::time::timeout(std::time::Duration::from_millis(200), chunk_rx.recv()).await
             {
                 Ok(Some(next)) => {
                     batch.extend_from_slice(&next.raw);

@@ -775,11 +775,7 @@ impl Store {
     }
 
     /// Update device status and last_seen by device_id string.
-    pub fn update_device_status_by_id(
-        &self,
-        device_id: &str,
-        status: &str,
-    ) -> SqlResult<bool> {
+    pub fn update_device_status_by_id(&self, device_id: &str, status: &str) -> SqlResult<bool> {
         let changed = self.conn.execute(
             "UPDATE devices SET status = ?2, last_seen = datetime('now') WHERE device_id = ?1",
             params![device_id, status],

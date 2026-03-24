@@ -50,7 +50,11 @@ mod inner {
                         || name.contains("nrf5340-zephyr");
 
                     if is_ferrite {
-                        let name = if name.is_empty() { "unknown".to_string() } else { name };
+                        let name = if name.is_empty() {
+                            "unknown".to_string()
+                        } else {
+                            name
+                        };
                         info!("Found ferrite device: {} ({:?})", name, id);
 
                         let tx = tx.clone();

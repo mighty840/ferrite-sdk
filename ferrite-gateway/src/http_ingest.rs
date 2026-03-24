@@ -15,10 +15,7 @@ const MAX_BODY: usize = 8192;
 
 /// Start an HTTP ingest server on the given port.
 /// Accepts POST /ingest/chunks with raw chunk bytes in the body.
-pub async fn http_ingest_task(
-    port: u16,
-    tx: mpsc::Sender<DecodedChunk>,
-) -> anyhow::Result<()> {
+pub async fn http_ingest_task(port: u16, tx: mpsc::Sender<DecodedChunk>) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port)).await?;
     info!("HTTP ingest listening on 0.0.0.0:{}", port);
 
@@ -96,7 +93,11 @@ async fn handle_connection(
         }
 
         if count > 0 {
-            debug!("HTTP ingest: received {} chunks ({} bytes)", count, body.len());
+            debug!(
+                "HTTP ingest: received {} chunks ({} bytes)",
+                count,
+                body.len()
+            );
         } else if !body.is_empty() {
             warn!("HTTP ingest: {} bytes but no valid chunks", body.len());
         }
@@ -117,8 +118,7 @@ async fn handle_connection(
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
-    buf.windows(4)
-        .position(|w| w == b"\r\n\r\n")
+    buf.windows(4).position(|w| w == b"\r\n\r\n")
 }
 
 fn parse_content_length(headers: &[u8]) -> Option<usize> {
