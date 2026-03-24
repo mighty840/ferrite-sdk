@@ -2,5 +2,5 @@
 pre-build = [
     "dpkg --add-architecture armhf",
     "apt-get update",
-    "apt-get install -y libudev-dev:armhf"
+    "apt-get install -y libudev-dev:armhf libdbus-1-dev:armhf pkg-config"
 ]

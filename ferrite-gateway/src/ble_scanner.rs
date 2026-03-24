@@ -40,10 +40,17 @@ mod inner {
                     Err(_) => continue,
                 };
 
-                // Check if this device advertises the ferrite service
+                // Check if this device advertises the ferrite service UUID
+                // or has a name containing "ferrite" or "nrf5340-zephyr"
+                // (BlueZ on older distros may not populate service UUIDs from advertisements)
                 if let Ok(Some(props)) = peripheral.properties().await {
-                    if props.services.contains(&FERRITE_SERVICE_UUID) {
-                        let name = props.local_name.unwrap_or_else(|| "unknown".into());
+                    let name = props.local_name.clone().unwrap_or_default();
+                    let is_ferrite = props.services.contains(&FERRITE_SERVICE_UUID)
+                        || name.to_lowercase().contains("ferrite")
+                        || name.contains("nrf5340-zephyr");
+
+                    if is_ferrite {
+                        let name = if name.is_empty() { "unknown".to_string() } else { name };
                         info!("Found ferrite device: {} ({:?})", name, id);
 
                         let tx = tx.clone();

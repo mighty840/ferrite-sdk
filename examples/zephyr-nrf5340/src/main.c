@@ -89,8 +89,7 @@ BT_GATT_SERVICE_DEFINE(ferrite_svc,
 
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA_BYTES(BT_DATA_UUID128_ALL,
-        BT_UUID_128_ENCODE(0xFE771E00, 0x0001, 0x4000, 0x8000, 0x00805F9B34FB)),
+    BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_ID, sizeof(DEVICE_ID) - 1),
 };
 
 static const struct bt_data sd[] = {
