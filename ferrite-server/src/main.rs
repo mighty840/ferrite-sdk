@@ -31,6 +31,11 @@ struct Cli {
     #[arg(long, default_value = "./elfs")]
     elf_dir: PathBuf,
 
+    /// Directory containing dashboard static files (index.html + assets/).
+    /// If set, the server serves the dashboard UI and API from the same origin.
+    #[arg(long)]
+    static_dir: Option<PathBuf>,
+
     /// Path to arm-none-eabi-addr2line (auto-detect if omitted)
     #[arg(long)]
     addr2line: Option<PathBuf>,
@@ -117,7 +122,24 @@ async fn main() -> anyhow::Result<()> {
             }
 
             tracing::info!("Starting ferrite-server on {}", cli.http);
-            let app = ferrite_server::ingest::router(state);
+            let mut app = ferrite_server::ingest::router(state);
+
+            // Serve dashboard static files if --static-dir is set
+            if let Some(ref static_dir) = cli.static_dir {
+                if static_dir.join("index.html").exists() {
+                    tracing::info!("Serving dashboard from {}", static_dir.display());
+                    let serve = tower_http::services::ServeDir::new(static_dir).fallback(
+                        tower_http::services::ServeFile::new(static_dir.join("index.html")),
+                    );
+                    app = app.fallback_service(serve);
+                } else {
+                    tracing::warn!(
+                        "Static dir {} has no index.html — dashboard not served",
+                        static_dir.display()
+                    );
+                }
+            }
+
             let listener = tokio::net::TcpListener::bind(cli.http).await?;
             axum::serve(listener, app).await?;
         }
