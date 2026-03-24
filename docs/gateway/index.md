@@ -1,26 +1,30 @@
 # Edge Gateway
 
-`ferrite-gateway` is a Tokio-based daemon that bridges BLE, USB, and LoRa ferrite devices to a `ferrite-server` instance over HTTP. It runs on a Raspberry Pi, Intel NUC, or any Linux host with the appropriate radio hardware.
+`ferrite-gateway` is a Tokio-based daemon that bridges BLE, USB, Ethernet, and LoRa ferrite devices to a `ferrite-server` instance over HTTP. It runs on a Raspberry Pi, Intel NUC, or any Linux host with the appropriate radio hardware.
 
 ## Architecture
 
 ```
-BLE devices ──┐
-              ├──> ferrite-gateway ──[HTTP]──> ferrite-server
-USB devices ──┘         |
-                   SQLite buffer
-                  (offline queue)
+BLE devices ──────────┐
+                      │
+USB CDC devices ──────┤
+                      ├──> ferrite-gateway ──[HTTP]──> ferrite-server
+USB VCP (UART) ───────┤         │
+                      │    SQLite buffer
+Ethernet devices ─────┘   (offline queue)
+ (HTTP POST :4001)
 ```
 
-The gateway receives raw binary chunks from connected devices, validates CRC integrity, and forwards them to the server. If the server is unreachable, chunks are buffered in a local SQLite database and retried with exponential backoff.
+The gateway receives raw binary chunks from connected devices via 4 transport channels, validates CRC integrity, batches chunks from the same upload session (200ms window), and forwards them to the server. If the server is unreachable, chunks are buffered in a local SQLite database and retried with exponential backoff.
 
 ## Features
 
-- **BLE scanning** — discovers ferrite devices by GATT service UUID, subscribes to chunk notifications
-- **USB CDC serial** — reads chunks from USB-connected devices at configurable baud rate
+- **BLE scanning** — discovers ferrite devices by GATT service UUID or device name, subscribes to chunk notifications
+- **USB CDC/VCP serial** — reads chunks from multiple USB-connected devices at configurable baud rate, sets DTR for CDC devices
+- **HTTP ingest** — accepts chunk POSTs from Ethernet/WiFi devices on a configurable port (industrial edge pattern)
+- **Chunk batching** — groups chunks from the same upload session (200ms window) into a single server POST, preserving DeviceInfo context
 - **Offline buffering** — SQLite queue persists chunks across gateway restarts
 - **Automatic retry** — exponential backoff with health check polling
-- **Batch forwarding** — sends buffered chunks in batches for efficiency
 - **API key auth** — includes `X-API-Key` header if configured
 
 ## Installation
@@ -61,6 +65,7 @@ ferrite-gateway \
 | `--usb-port` | none | USB serial port path |
 | `--usb-baud` | `115200` | USB baud rate |
 | `--ble` | false | Enable BLE scanning |
+| `--http-ingest-port` | `4001` | HTTP ingest listener port (0 = disabled) |
 | `--buffer-db` | `ferrite-gateway.db` | SQLite buffer path |
 
 ## Environment variables

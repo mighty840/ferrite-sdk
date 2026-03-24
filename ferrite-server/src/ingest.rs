@@ -759,8 +759,11 @@ async fn ingest_chunks(
                     if hb.device_key != 0 {
                         let _ = store.touch_device_by_key(hb.device_key as i64, "online");
                     }
-                    // Touch the device to update last_seen.
-                    let _ = store.touch_device(&current_device_id);
+                    // Always update status to "online" and touch last_seen,
+                    // even for auto-discovered devices without a device_key.
+                    if current_device_id != "unknown" {
+                        let _ = store.update_device_status_by_id(&current_device_id, "online");
+                    }
                     let _ = state
                         .event_tx
                         .send(SsePayload::heartbeat(&current_device_id, hb.uptime_ticks));

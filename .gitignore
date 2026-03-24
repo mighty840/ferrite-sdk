@@ -38,3 +38,4 @@ ferrite.db-wal
 .env
 .env.*
 !.env.example
+log.log

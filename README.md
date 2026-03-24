@@ -18,6 +18,24 @@
 
 ---
 
+## Live Demo
+
+**[ferrite.shanifaas.com](https://ferrite.shanifaas.com)** — 5 real boards reporting telemetry.
+
+| Board | Stack | Transport |
+|-------|-------|-----------|
+| ESP32-C3 | Embassy (esp-hal) | WiFi → HTTP |
+| STM32L4A6 | Embassy (embassy-stm32) | USB CDC |
+| STM32WL55 | RTIC 2.x | LPUART VCP |
+| STM32H563 | Embassy (embassy-stm32) | Ethernet |
+| nRF5340 | Zephyr 4.1 (C + FFI) | BLE GATT |
+
+> **Login**: `admin` / `HdNka6HvI5FfqG8TOT1SiQ`
+>
+> Demo data resets every 2 hours.
+
+---
+
 ## What It Does
 
 ferrite-sdk captures everything you need to debug embedded devices in the field:

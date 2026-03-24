@@ -13,21 +13,48 @@ rustup target add thumbv7em-none-eabihf
 cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 ```
 
-## Flash examples (requires probe-rs / espflash)
+## Flash examples (requires probe-rs / espflash / nrfjprog)
 ```bash
-# Cortex-M boards (probe-rs)
-cd examples/embassy-nrf52840    # nRF52840-DK
-cd examples/embassy-nrf5340     # nRF5340-DK (BLE transport)
-cd examples/embassy-stm32l4a6   # Nucleo-L4A6ZG (USB CDC transport)
-cd examples/embassy-stm32h563   # Nucleo-H563ZI (Ethernet/HTTP transport)
-cd examples/embassy-stm32wl55   # NUCLEO-WL55JC1 (LoRa transport)
-cd examples/rtic-stm32f4        # STM32F411 (RTIC, blocking)
-cargo run --release
+# Embassy STM32 boards (probe-rs)
+cd examples/embassy-stm32l4a6   # Nucleo-L4A6ZG (USB CDC) — thumbv7em-none-eabihf
+cd examples/embassy-stm32h563   # Nucleo-H563ZI (Ethernet) — thumbv8m.main-none-eabihf
+probe-rs download --chip STM32L4A6ZGTx target/.../release/binary
+probe-rs reset --chip STM32L4A6ZGTx
 
-# RISC-V boards (espflash)
-cd examples/embassy-esp32c3     # ESP32-C3 (WiFi/HTTP transport)
-cargo run --release
+# RTIC STM32WL55 (st-flash — probe-rs can't connect without reset)
+cd examples/rtic-stm32wl55      # NUCLEO-WL55JC1 (USART VCP) — thumbv7em-none-eabi (NO FPU)
+arm-none-eabi-objcopy -O binary target/.../release/binary /tmp/fw.bin
+st-flash --connect-under-reset write /tmp/fw.bin 0x8000000
+
+# ESP32-C3 (espflash — needs nightly-2025-04-15)
+cd examples/embassy-esp32c3     # ESP32-C3 (WiFi/HTTP) — riscv32imc-unknown-none-elf
+espflash save-image --chip esp32c3 --merge target/.../release/binary /tmp/merged.bin
+esptool.py --port /dev/ttyUSB0 --chip esp32c3 write_flash -z 0x0 /tmp/merged.bin
+
+# nRF5340-DK Zephyr (nrfjprog — requires J-Link + nRF CLI tools)
+cd ~/zephyrproject
+west build -b nrf5340dk/nrf5340/cpuapp /path/to/examples/zephyr-nrf5340
+west build -b nrf5340dk/nrf5340/cpunet -d build_net zephyr/samples/bluetooth/hci_ipc
+nrfjprog --program build/zephyr/zephyr.hex -f NRF53 --coprocessor CP_APPLICATION --sectorerase --reset
+nrfjprog --program build_net/zephyr/zephyr.hex -f NRF53 --coprocessor CP_NETWORK --sectorerase --reset
+
+# C FFI example (arm-none-eabi-gcc + cbindgen)
+cd examples/c-stm32l4a6
+cargo build -p ferrite-ffi --release --target thumbv7em-none-eabihf
+cbindgen --config ../../ferrite-ffi/cbindgen.toml --crate ferrite-ffi --output include/ferrite-sdk.h
+make
 ```
+
+## Fleet demo table (5 boards, 5 stacks)
+| Board | MCU | Target | Stack | Transport | Path |
+|-------|-----|--------|-------|-----------|------|
+| ESP32-C3 | RISC-V | riscv32imc-unknown-none-elf | Embassy (esp-hal 0.23) | WiFi → HTTP | Direct to server |
+| STM32L4A6 | Cortex-M4 | thumbv7em-none-eabihf | Embassy (embassy-stm32 0.1) | USB CDC | → Gateway serial → Server |
+| STM32WL55 | Cortex-M4 | thumbv7em-none-eabi | RTIC 2.x (stm32wl PAC) | LPUART VCP | → Gateway serial → Server |
+| STM32H563 | Cortex-M33 | thumbv8m.main-none-eabihf | Embassy (embassy-stm32 0.1) | Ethernet | → Gateway HTTP:4001 → Server |
+| nRF5340 | Cortex-M33 | thumbv8m.main-none-eabi | Zephyr 4.1 (C + FFI) | BLE GATT | → Gateway BLE → Server |
+
+See `docs/guide/fleet-examples.md` for comprehensive pitfalls and bring-up guide.
 
 ## Run QEMU tests
 ```bash
@@ -131,6 +158,19 @@ components/       → Navbar (with user info + logout)
 pages/login.rs    → LoginPage (Keycloak redirect or Basic auth form)
 pages/            → Dashboard, Devices, DeviceDetail, Faults, Metrics, Settings
 ```
+
+## Critical embedded pitfalls (learned from fleet bring-up)
+- **Embassy WFE wake bug**: Default embassy-executor thread-mode uses WFE which doesn't wake on STM32L4A6 without debugger. Use `raw::Executor` with spin-poll loop.
+- **panic-probe without debugger**: Causes infinite reset loop. Use custom `#[panic_handler] fn panic(_) -> ! { loop { nop() } }` for standalone operation.
+- **No FPU**: STM32WL55 CM4 and nRF5340 CM33 lack FPU. Must use `-eabi` (soft-float) target and avoid all float ops.
+- **LPUART vs USART for VCP**: NUCLEO-WL55JC1 VCP routes through LPUART1 (AF8), not USART2 (AF7).
+- **nRF5340 dual-core BLE**: Network core must be separately programmed with `hci_ipc` sample for BLE to work.
+- **ESP ecosystem versions**: esp-hal 1.0.0 broke companion crates. Pin to 0.23 ecosystem.
+- **USB CDC DTR**: Gateway must set DTR on serial port open for USB CDC devices to send.
+- **Gateway chunk batching**: Without batching, individual chunk POSTs lose DeviceInfo context → "unknown" device.
+- **Excluded workspace examples**: `.cargo/config.toml` rustflags may not apply. Use `build.rs` for linker args.
+- **cbindgen naming**: `prefix_with_name = true` generates `FERRITE_ERROR_T_OK`, not `FERRITE_ERROR_OK`.
+- **RDP/APPROTECT on new boards**: WL55 needs `st-flash --connect-under-reset erase`, nRF5340 needs `nrfjprog --recover`.
 
 ## Adding a new ChunkType
 1. Add variant to ChunkType enum in `chunks/types.rs`

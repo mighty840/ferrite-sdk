@@ -20,9 +20,9 @@ pub struct GatewayConfig {
     /// Path to SQLite buffer database for offline queueing.
     pub buffer_db: String,
 
-    /// USB serial port path (e.g. "/dev/ttyACM0").
+    /// USB serial port paths (e.g. "/dev/ttyACM0", "/dev/ttyACM1").
     #[cfg(feature = "usb")]
-    pub usb_port: Option<String>,
+    pub usb_ports: Vec<String>,
 
     /// USB baud rate.
     #[cfg(feature = "usb")]
@@ -41,7 +41,7 @@ impl Default for GatewayConfig {
             api_key: None,
             buffer_db: "ferrite-gateway.db".to_string(),
             #[cfg(feature = "usb")]
-            usb_port: None,
+            usb_ports: Vec::new(),
             #[cfg(feature = "usb")]
             usb_baud: 115200,
             max_retries: 3,
@@ -72,8 +72,10 @@ impl GatewayConfig {
         }
         #[cfg(feature = "usb")]
         {
-            if let Ok(v) = std::env::var("USB_PORT") {
-                cfg.usb_port = Some(v);
+            if let Ok(v) = std::env::var("USB_PORTS") {
+                cfg.usb_ports = v.split(',').map(|s| s.trim().to_string()).collect();
+            } else if let Ok(v) = std::env::var("USB_PORT") {
+                cfg.usb_ports = vec![v];
             }
             if let Ok(v) = std::env::var("USB_BAUD") {
                 if let Ok(baud) = v.parse() {

@@ -1,0 +1,3 @@
+/* No additional device tree overlays needed for basic BLE + GPIO.
+ * The nRF5340-DK has 4 LEDs on P0.28-P0.31 and BLE via the network core.
+ */

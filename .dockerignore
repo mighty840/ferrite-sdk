@@ -1,0 +1,10 @@
+target/
+.git/
+*.db
+*.db-journal
+*.db-wal
+elfs/
+log.log
+node_modules/
+examples/*/target/
+tests/qemu/target/

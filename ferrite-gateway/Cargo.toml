@@ -13,7 +13,7 @@ ble = ["dep:btleplug"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

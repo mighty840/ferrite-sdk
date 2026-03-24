@@ -1,183 +1,215 @@
 # Ferrite Fleet Demo — Runbook
 
-Live demo of 4+ embedded devices reporting telemetry through mixed transports
-to a Raspberry Pi edge gateway running ferrite-server + dashboard.
+Live demo of 5 embedded devices across 5 firmware stacks, reporting telemetry
+through mixed transports to a Raspberry Pi edge gateway and dashboard.
 
 ## Fleet Topology
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Raspberry Pi (Gateway + Server)                                 │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐   │
-│  │ ferrite-server   │  │ ferrite-gateway   │  │ Dashboard     │   │
-│  │ :4000            │◄─│ USB + BLE bridge  │  │ :4000/        │   │
-│  │ SQLite + REST    │  │ offline buffer    │  │ (Dioxus WASM) │   │
-│  └────────▲─────────┘  └──▲────────▲──────┘  └───────────────┘   │
-│           │               │        │                              │
-└───────────┼───────────────┼────────┼──────────────────────────────┘
-            │               │        │
-     ┌──────┴──────┐  ┌────┴────┐  ┌┴──────────┐  ┌──────────────┐
-     │ ESP32-C3    │  │Nucleo   │  │ nRF5340-DK│  │NUCLEO-WL55JC1│
-     │ WiFi/HTTP   │  │L4A6ZG   │  │ BLE       │  │LoRa SubGHz   │
-     │ Direct POST │  │USB CDC  │  │ GATT notif│  │915 MHz P2P   │
-     └─────────────┘  └─────────┘  └───────────┘  └──────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Host Machine                                                           │
+│  ┌──────────────────┐  ┌────────────────────────────────────┐           │
+│  │ ferrite-server    │  │ ferrite-dashboard (dx serve)       │           │
+│  │ :4000             │  │ :8080 → proxy to :4000             │           │
+│  │ SQLite + REST API │  │ Dioxus WASM                        │           │
+│  └────────▲──────────┘  └────────────────────────────────────┘           │
+│           │                                                              │
+└───────────┼──────────────────────────────────────────────────────────────┘
+            │ HTTP
+┌───────────┼──────────────────────────────────────────────────────────────┐
+│  Raspberry Pi (Edge Gateway)                                             │
+│  ┌────────┴───────────────────────────────────────────────────────┐      │
+│  │ ferrite-gateway                                                │      │
+│  │   --usb-port /dev/ttyACM0  --usb-port /dev/ttyACM1            │      │
+│  │   --http-ingest-port 4001  --ble                               │      │
+│  │   --server http://host:4000                                    │      │
+│  └──▲──────────▲──────────────▲───────────────────▲───────────────┘      │
+│     │USB       │USB           │Ethernet           │BLE                   │
+└─────┼──────────┼──────────────┼───────────────────┼──────────────────────┘
+ ┌────┴────┐ ┌───┴──────┐  ┌───┴────────┐  ┌──────┴───────┐
+ │WL55JC1  │ │L4A6ZG    │  │H563ZI      │  │nRF5340-DK    │
+ │RTIC 2.x │ │Embassy   │  │Embassy     │  │Zephyr C+FFI  │
+ │LPUART   │ │USB CDC   │  │Ethernet    │  │BLE GATT      │
+ └─────────┘ └──────────┘  └────────────┘  └──────────────┘
+
+ ┌──────────────────┐
+ │ESP32-C3          │──WiFi HTTP POST──────────────────────▶ server:4000
+ │Embassy (esp-hal) │  (bypasses gateway)
+ └──────────────────┘
 ```
+
+## Device Summary
+
+| Board | MCU | Stack | Transport | Device ID |
+|-------|-----|-------|-----------|-----------|
+| ESP32-C3 | RISC-V | Embassy (esp-hal 0.23) | WiFi → HTTP | `esp32c3-embassy-01` |
+| STM32L4A6 | Cortex-M4 | Embassy (embassy-stm32) | USB CDC | `stm32l4a6-fleet-01` |
+| STM32WL55 | Cortex-M4 | RTIC 2.x (stm32wl PAC) | LPUART VCP | `stm32wl55-rtic-01` |
+| STM32H563 | Cortex-M33 | Embassy (embassy-stm32) | Ethernet HTTP | `stm32h563-fleet-01` |
+| nRF5340 | Cortex-M33 | Zephyr 4.1 (C + FFI) | BLE GATT | `nrf5340-zephyr-01` |
 
 ## Pre-Demo Checklist
 
 ### Hardware
-- [ ] RPi powered on, Ethernet/WiFi connected to same network
-- [ ] Nucleo-L4A6ZG connected to RPi via USB (shows as `/dev/ttyACM0`)
-- [ ] nRF5340-DK powered on (BLE advertising)
-- [ ] ESP32-C3 powered on (WiFi SSID configured, same network as RPi)
-- [ ] NUCLEO-WL55JC1 powered on (LoRa TX active)
-- [ ] All boards flashed with latest firmware (see Flash section)
+- [ ] RPi powered on, WiFi for management SSH + Ethernet for H563 direct link
+- [ ] WL55 connected to RPi USB (ST-LINK VCP → `/dev/ttyACMx`)
+- [ ] L4A6 connected to RPi USB (USB CDC → `/dev/ttyACMx`) — CN13 USB OTG port, NOT CN1 ST-LINK
+- [ ] H563 Ethernet cable → RPi Ethernet port (static IP 192.168.0.200 → RPi 192.168.0.103)
+- [ ] nRF5340-DK powered (USB to RPi or wall adapter, BLE advertising)
+- [ ] ESP32-C3 powered (USB, WiFi SSID configured, same network as host server)
+- [ ] All boards flashed with latest firmware (see Flash section below)
 
 ### Software
-- [ ] ferrite-server running: `sudo systemctl status ferrite-server`
-- [ ] ferrite-gateway running: `sudo systemctl status ferrite-gateway`
-- [ ] Dashboard accessible: `http://<rpi-ip>:4000`
-- [ ] Logged into dashboard (admin/changeme or configured credentials)
+- [ ] ferrite-server running on host: `cargo run -p ferrite-server` (port 4000)
+- [ ] ferrite-dashboard running on host: `cd ferrite-dashboard && dx serve` (port 8080)
+- [ ] ferrite-gateway running on RPi with all transports:
+  ```bash
+  sudo RUST_LOG=info ferrite-gateway \
+    --server http://<host-ip>:4000 \
+    --usb-port /dev/ttyACM0 --usb-port /dev/ttyACM1 \
+    --http-ingest-port 4001 --ble
+  ```
+- [ ] Dashboard accessible at `http://localhost:8080`
+- [ ] Login with admin/admin (Basic auth default)
 
 ## Flash Firmware
 
-From the development machine with probe-rs and espflash installed:
+### From host machine (probe-rs + espflash + nrfjprog)
 
 ```bash
-# ESP32-C3 (WiFi/HTTP) — edit WIFI_SSID/WIFI_PASS in src/main.rs first
+# ESP32-C3 — edit .env with WiFi credentials + server IP first
 cd examples/embassy-esp32c3
-# Update SERVER_URL to point to RPi IP
-cargo run --release
+# Update .env: WIFI_SSID, WIFI_PASS, SERVER_HOST
+espflash save-image --chip esp32c3 --merge target/.../release/embassy-esp32c3-example /tmp/esp.bin
+# SCP to RPi and flash via esptool, or flash directly if ESP32 is on host USB
 
-# nRF5340-DK (BLE)
-cd examples/embassy-nrf5340
-cargo run --release
+# STM32L4A6 — Embassy USB CDC
+cd examples/embassy-stm32l4a6
+cargo build --release
+probe-rs download --chip STM32L4A6ZGTx target/thumbv7em-none-eabihf/release/embassy-stm32l4a6-example
+probe-rs reset --chip STM32L4A6ZGTx
 
-# NUCLEO-WL55JC1 (LoRa)
-cd examples/embassy-stm32wl55
-cargo run --release
+# STM32WL55 — RTIC LPUART (may need --connect-under-reset erase first)
+cd examples/rtic-stm32wl55
+cargo build --release
+arm-none-eabi-objcopy -O binary target/thumbv7em-none-eabi/release/rtic-stm32wl55-example /tmp/wl55.bin
+st-flash --connect-under-reset write /tmp/wl55.bin 0x8000000
 
-# Nucleo-L4A6ZG (USB) — uses existing nRF52840 example adapted for L4A6ZG
-cd examples/embassy-nrf52840
-cargo run --release
+# STM32H563 — Embassy Ethernet
+cd examples/embassy-stm32h563
+cargo build --release
+probe-rs download --chip STM32H563ZITx target/thumbv8m.main-none-eabihf/release/embassy-stm32h563-example
+probe-rs reset --chip STM32H563ZITx
+
+# nRF5340-DK — Zephyr BLE (requires Zephyr workspace at ~/zephyrproject)
+cd ~/zephyrproject
+# App core
+west build -b nrf5340dk/nrf5340/cpuapp /path/to/examples/zephyr-nrf5340
+nrfjprog --program build/zephyr/zephyr.hex -f NRF53 --coprocessor CP_APPLICATION --sectorerase --reset
+# Network core (BLE controller — flash once, survives app core reflash)
+west build -b nrf5340dk/nrf5340/cpunet -d build_net zephyr/samples/bluetooth/hci_ipc
+nrfjprog --program build_net/zephyr/zephyr.hex -f NRF53 --coprocessor CP_NETWORK --sectorerase --reset
+```
+
+### Recovering locked boards
+```bash
+# STM32WL55 (RDP level 1)
+st-flash --connect-under-reset erase
+
+# nRF5340 (APPROTECT)
+nrfjprog --recover -f NRF53
 ```
 
 ## Demo Scenarios
 
 ### Scenario 1: Live Telemetry (2 min)
 
-**Goal**: Show real-time data flowing from all 4 devices.
+**Goal**: Show real-time data flowing from all 5 devices.
 
-1. Open dashboard at `http://<rpi-ip>:4000`
-2. Navigate to **Devices** page — all 4 devices should appear:
-   - `esp32c3-fleet-01` (WiFi/HTTP)
-   - `nrf5340-fleet-01` (BLE)
-   - `stm32wl55-fleet-01` (LoRa)
-   - `nrf52840-example-01` (USB)
+1. Open dashboard at `http://localhost:8080`
+2. Navigate to **Devices** page — all 5 devices should appear with green "online" dots
 3. Click any device → **Device Detail** page
 4. Show **Metrics** tab — `loop_count` incrementing, `uptime_seconds` growing
-5. Show **Fleet Overview** page — all devices on one screen with status indicators
+5. Show **Fleet Overview** page — all devices on one screen
 
 **Talking points**:
-- Mixed transports, single dashboard
-- Gateway bridges BLE/USB/LoRa to HTTP automatically
-- ESP32-C3 bypasses gateway entirely (direct WiFi POST)
+- 5 MCU architectures (RISC-V, 2× Cortex-M4, 2× Cortex-M33)
+- 5 firmware stacks (Embassy ×3, RTIC, Zephyr C+FFI)
+- 5 transports (WiFi, USB CDC, USART VCP, Ethernet, BLE)
 - All data stored in SQLite, no cloud dependency
+- ESP32-C3 bypasses gateway (direct WiFi POST)
+- Other 4 route through RPi edge gateway
 
 ### Scenario 2: Fault Recovery (3 min)
 
 **Goal**: Demonstrate crash detection and symbolicated stack traces.
 
-1. Trigger a fault on the nRF5340 (press reset button while holding a GPIO, or use a debug probe to inject a HardFault)
-2. Wait for the device to reboot and re-register
-3. Navigate to **Faults** page in dashboard
-4. Show the fault record: PC, LR, stack pointer, reboot reason
-5. Upload the ELF file via the dashboard **Settings** page
-6. Show symbolicated fault — source file + line number
-
-**Talking points**:
-- Retained RAM survives reboot (magic number validated)
-- Fault records include full exception frame
-- ELF symbolication via addr2line (no debug build on device)
+1. Trigger a fault (press reset or inject via debugger)
+2. Wait for device to reboot and re-register
+3. Navigate to **Faults** page — show fault record with PC, LR, stack pointer
+4. Upload ELF via **Settings** page for symbolication
 
 ### Scenario 3: Offline Resilience (2 min)
 
 **Goal**: Show gateway buffering when server is temporarily down.
 
-1. Stop ferrite-server: `sudo systemctl stop ferrite-server`
-2. Wait 30 seconds — devices keep sending, gateway buffers to SQLite
-3. Show gateway logs: `journalctl -u ferrite-gateway -f`
-   - Should see retry attempts with exponential backoff
-4. Restart server: `sudo systemctl start ferrite-server`
-5. Watch dashboard — buffered data appears within seconds
-6. Show no data loss by checking metric continuity (no gaps in `loop_count`)
-
-**Talking points**:
-- Gateway has SQLite offline buffer
-- Exponential backoff prevents server overload on recovery
-- Zero data loss during outage window
+1. Stop server: `Ctrl+C` on the `cargo run -p ferrite-server` terminal
+2. Wait 30s — devices keep sending, gateway buffers to SQLite
+3. Restart server: `cargo run -p ferrite-server`
+4. Watch dashboard — buffered data appears within seconds
 
 ### Scenario 4: Device Comparison (1 min)
 
-**Goal**: Compare metrics across fleet devices.
+1. Navigate to **Compare** view
+2. Select `esp32c3-embassy-01` and `stm32wl55-rtic-01`
+3. Show side-by-side `uptime_seconds` — note different reporting intervals
 
-1. Navigate to **Compare** view in dashboard
-2. Select `esp32c3-fleet-01` and `nrf5340-fleet-01`
-3. Show side-by-side `uptime_seconds` metrics
-4. Point out different reporting intervals (WiFi = 5s, BLE = 30s)
+### Scenario 5: Transport Disconnect/Reconnect (1 min)
 
-### Scenario 5: Unplug/Replug USB (1 min)
-
-**Goal**: Show transport disconnect/reconnect handling.
-
-1. Physically unplug Nucleo-L4A6ZG USB cable
-2. Show gateway log detecting disconnect
-3. Dashboard shows device going stale (no recent data)
-4. Replug USB cable
-5. Gateway auto-reconnects, data flows resume
+1. Unplug L4A6 USB cable — gateway detects disconnect
+2. Dashboard shows device going stale
+3. Replug — gateway auto-reconnects, data resumes
 
 ## Verification Commands
 
-Run these on the RPi to verify the stack is healthy:
-
 ```bash
-# Check services
-sudo systemctl status ferrite-server ferrite-gateway
-
 # Server health
-curl -s http://localhost:4000/health | jq .
+curl -s http://localhost:4000/health
 
-# List registered devices
-curl -s -u admin:changeme http://localhost:4000/devices | jq .
+# List all devices with status
+curl -s -u admin:admin http://localhost:4000/devices | python3 -m json.tool
 
-# Recent faults
-curl -s -u admin:changeme http://localhost:4000/devices/esp32c3-fleet-01/faults | jq .
+# Check metrics for a device
+curl -s -u admin:admin http://localhost:4000/devices/stm32wl55-rtic-01/metrics?limit=5
 
-# Recent metrics
-curl -s -u admin:changeme http://localhost:4000/devices/nrf5340-fleet-01/metrics?limit=10 | jq .
+# RPi gateway logs
+ssh pi@<rpi-ip> "tail -20 /tmp/ferrite-gateway.log"
 
-# Gateway logs (live)
-journalctl -u ferrite-gateway -f
+# RPi USB devices
+ssh pi@<rpi-ip> "lsusb && ls /dev/ttyACM*"
 
-# USB device check
-ls -la /dev/ttyACM*
+# Gateway HTTP ingest health
+ssh pi@<rpi-ip> "curl -s http://localhost:4001/health"
 
 # BLE scan (verify nRF5340 advertising)
-sudo bluetoothctl scan on
-# Look for device advertising FE771E00-0001-... service UUID
-
-# Server Prometheus metrics
-curl -s http://localhost:4000/metrics
+ssh pi@<rpi-ip> "sudo hcitool lescan --duplicates"
 ```
 
 ## Troubleshooting
 
-| Symptom | Check | Fix |
+| Symptom | Cause | Fix |
 |---------|-------|-----|
-| No devices in dashboard | `curl localhost:4000/health` | Restart ferrite-server |
-| ESP32-C3 not connecting | Serial monitor shows WiFi status | Check SSID/password in firmware |
-| BLE device not found | `sudo bluetoothctl scan on` | Ensure nRF5340 is advertising, gateway has `--ble` flag |
-| USB device not seen | `ls /dev/ttyACM*` | Check USB cable, `ferrite` user in `dialout` group |
-| LoRa no data | Gateway LoRa logs | Verify frequency match (915 MHz), antenna connected |
-| Dashboard blank | Browser console (F12) | Check CORS, API proxy config |
-| Auth failures | Server logs | Verify matching credentials in server.env and gateway.env |
+| Device shows "UNKNOWN" status | Heartbeat not updating status | Server fix: `update_device_status_by_id()` on every heartbeat |
+| "unknown" device in dashboard | Chunks without DeviceInfo context | Gateway batching (200ms window) groups chunks per upload |
+| L4A6 USB CDC no data | DTR not set by gateway | `port.write_data_terminal_ready(true)` in gateway |
+| WL55 no serial output | Using USART2 instead of LPUART1 | Switch to LPUART1 (AF8), use LPUART BRR formula |
+| ESP32-C3 won't build | esp-hal version mismatch | Pin to esp-hal 0.23 ecosystem, nightly-2025-04-15 |
+| nRF5340 bt_enable() hangs | Network core not programmed | Flash `hci_ipc` sample on cpunet |
+| nRF5340 "debug port ID 0" | APPROTECT enabled | `nrfjprog --recover -f NRF53` |
+| WL55 "Coprocessor access error" | Hard-float target, no FPU | Use `thumbv7em-none-eabi` (soft-float) |
+| Embassy firmware hangs standalone | WFE wake issue without debugger | Use `raw::Executor` spin-poll loop |
+| No LEDs on L4A6 | PB0 not connected to LD1 | Use PB14 (red) or PB7 (blue) instead |
+| BLE device not discovered | Name not in ad packet | Move `BT_DATA_NAME_COMPLETE` to `ad[]` |
+| H563 "BusFault" on boot | Wrong RCC_RSR address | H563 RCC base is `0x44020C00`, RSR at `+0x0D0` |
+| H563 no DHCP | Direct ETH to RPi, no DHCP server | Use static IP (192.168.0.200/24) |
+| Cross-compile OpenSSL error | reqwest native-tls | Use `rustls-tls` feature instead |
