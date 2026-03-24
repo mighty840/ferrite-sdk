@@ -32,7 +32,7 @@ jobs:
         run: cargo clippy -p ferrite-server -- -D warnings
 
       - name: Test – ferrite-sdk (no default features)
-        run: cargo test -p ferrite-sdk --no-default-features
+        run: cargo test -p ferrite-sdk --no-default-features -- --test-threads=1
 
       - name: Test – ferrite-server (unit)
         run: cargo test -p ferrite-server --lib
