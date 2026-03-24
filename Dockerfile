@@ -77,5 +77,7 @@ EXPOSE 4000
 
 ENV RUST_LOG=info
 
-ENTRYPOINT ["./ferrite-server"]
-CMD ["--http", "0.0.0.0:4000", "--db", "./data/ferrite.db", "--elf-dir", "./elfs", "--static-dir", "./dashboard"]
+# Entrypoint script: reset DB every 2 hours + run server
+COPY --from=builder --chown=ferrite:ferrite /app/docker/entrypoint.sh ./entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
