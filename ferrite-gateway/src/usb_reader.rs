@@ -21,10 +21,15 @@ mod inner {
             port_name, baud_rate
         );
 
-        let port = serialport::new(&port_name, baud_rate)
+        let mut port = serialport::new(&port_name, baud_rate)
             .timeout(Duration::from_millis(100))
             .open()
             .with_context(|| format!("Failed to open serial port {port_name}"))?;
+
+        // Set DTR (Data Terminal Ready) so USB CDC devices know a host is listening.
+        if let Err(e) = port.write_data_terminal_ready(true) {
+            warn!("Failed to set DTR on {}: {} (non-fatal)", port_name, e);
+        }
 
         // Run blocking serial reads in a dedicated thread
         let (byte_tx, mut byte_rx) = mpsc::channel::<Vec<u8>>(64);
