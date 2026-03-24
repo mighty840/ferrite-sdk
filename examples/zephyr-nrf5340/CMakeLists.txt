@@ -22,7 +22,7 @@ target_include_directories(app PRIVATE
     include
 )
 
-# Link pre-built ferrite FFI static library (thumbv8m.main-none-eabihf)
+# Link pre-built ferrite FFI static library
 target_link_libraries(app PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/libferrite_ffi.a
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../target/thumbv8m.main-none-eabi/release/libferrite_ffi.a
 )

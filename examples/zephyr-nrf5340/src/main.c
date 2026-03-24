@@ -30,6 +30,22 @@
 
 LOG_MODULE_REGISTER(ferrite, LOG_LEVEL_INF);
 
+/* ── Critical-section stubs for Rust critical-section crate ────────── */
+
+static unsigned int _cs_key;
+
+bool _critical_section_1_0_acquire(void)
+{
+    _cs_key = irq_lock();
+    return true;
+}
+
+void _critical_section_1_0_release(bool _token)
+{
+    (void)_token;
+    irq_unlock(_cs_key);
+}
+
 /* ── Configuration ─────────────────────────────────────────────────── */
 
 #define DEVICE_ID       "nrf5340-zephyr-01"
@@ -193,7 +209,7 @@ int main(void)
         1
     );
 
-    if (ferr != FERRITE_ERROR_OK) {
+    if (ferr != FERRITE_ERROR_T_OK) {
         LOG_ERR("ferrite_sdk_init failed: %d", ferr);
         while (1) {
             gpio_pin_toggle_dt(&led4);  /* Red LED blink on error */
@@ -283,7 +299,7 @@ int main(void)
 
                 gpio_pin_set_dt(&led2, 0);
 
-                if (uerr == FERRITE_ERROR_OK) {
+                if (uerr == FERRITE_ERROR_T_OK) {
                     LOG_INF("upload #%u OK: %u chunks, %u bytes",
                             upload_counter, stats.chunks_sent, stats.bytes_sent);
                     ferrite_metric_increment("upload_ok", 1);
