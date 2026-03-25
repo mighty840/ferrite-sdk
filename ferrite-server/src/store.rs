@@ -705,11 +705,8 @@ impl Store {
 
     /// Count total number of crash groups.
     pub fn count_crash_groups(&self) -> SqlResult<i64> {
-        self.conn.query_row(
-            "SELECT COUNT(*) FROM crash_groups",
-            [],
-            |row| row.get(0),
-        )
+        self.conn
+            .query_row("SELECT COUNT(*) FROM crash_groups", [], |row| row.get(0))
     }
 
     // ---- Metrics ----

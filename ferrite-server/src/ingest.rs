@@ -710,7 +710,9 @@ async fn ingest_chunks(
                         // Update affected device count for the crash group.
                         if let Some(cg_id) = crash_group_id {
                             if let Err(e) = store.update_crash_group_device_count(cg_id) {
-                                errors.push(format!("db error updating crash group device count: {e}"));
+                                errors.push(format!(
+                                    "db error updating crash group device count: {e}"
+                                ));
                             }
                         }
                         let _ = state.event_tx.send(SsePayload::fault(

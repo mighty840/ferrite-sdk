@@ -133,10 +133,7 @@ impl ApiClient {
     }
 
     /// Check that a response was successful; surface server error messages.
-    fn check_response(
-        &self,
-        resp: reqwest::blocking::Response,
-    ) -> Result<serde_json::Value> {
+    fn check_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {
         let status = resp.status();
         let body: serde_json::Value = resp.json().context("failed to parse response body")?;
         if !status.is_success() {
@@ -313,11 +310,7 @@ impl ApiClient {
         Ok(groups)
     }
 
-    pub fn create_group(
-        &self,
-        name: &str,
-        description: Option<&str>,
-    ) -> Result<DeviceGroup> {
+    pub fn create_group(&self, name: &str, description: Option<&str>) -> Result<DeviceGroup> {
         let mut body = serde_json::json!({ "name": name });
         if let Some(desc) = description {
             body["description"] = serde_json::Value::String(desc.to_string());

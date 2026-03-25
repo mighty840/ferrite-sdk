@@ -45,4 +45,7 @@ backend = "http://localhost:4000/events"
 backend = "http://localhost:4000/admin"
 
 [[web.proxy]]
+backend = "http://localhost:4000/crashes"
+
+[[web.proxy]]
 backend = "http://localhost:4000/ota"

@@ -25,6 +25,10 @@ pub enum Route {
         DeviceDetail { id: String },
         #[route("/faults")]
         Faults {},
+        #[route("/crashes")]
+        Crashes {},
+        #[route("/crashes/:id")]
+        CrashDetail { id: String },
         #[route("/metrics")]
         Metrics {},
         #[route("/fleet")]
@@ -112,6 +116,18 @@ fn DeviceDetail(id: String) -> Element {
 #[component]
 fn Faults() -> Element {
     rsx! { FaultsPage {} }
+}
+
+/// Crashes list page route handler.
+#[component]
+fn Crashes() -> Element {
+    rsx! { CrashesPage {} }
+}
+
+/// Crash detail page route handler.
+#[component]
+fn CrashDetail(id: String) -> Element {
+    rsx! { CrashDetailPage { id: id } }
 }
 
 /// Metrics overview page route handler.

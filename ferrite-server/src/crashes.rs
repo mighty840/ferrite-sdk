@@ -83,16 +83,15 @@ pub async fn get_crash_group_detail(
             );
         }
     };
-    let occurrences =
-        match store.list_faults_for_crash_group(id, params.limit(), params.offset()) {
-            Ok(f) => f,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({ "error": e.to_string() })),
-                );
-            }
-        };
+    let occurrences = match store.list_faults_for_crash_group(id, params.limit(), params.offset()) {
+        Ok(f) => f,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            );
+        }
+    };
     (
         StatusCode::OK,
         Json(serde_json::json!({ "group": group, "occurrences": occurrences })),

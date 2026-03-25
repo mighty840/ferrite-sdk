@@ -21,11 +21,7 @@ pub struct MetricsArgs {
 }
 
 pub fn run(args: &MetricsArgs, client: &ApiClient, format: OutputFormat) -> Result<()> {
-    let since = args
-        .since
-        .as_deref()
-        .map(duration_to_since)
-        .transpose()?;
+    let since = args.since.as_deref().map(duration_to_since).transpose()?;
 
     let metrics = if let Some(device_id) = &args.device {
         client.list_device_metrics(device_id, since.as_deref())?

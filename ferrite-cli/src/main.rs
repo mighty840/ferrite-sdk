@@ -87,10 +87,7 @@ fn main() -> Result<()> {
         }
         cmd => {
             let cfg = CliConfig::load()?;
-            let server = cli
-                .server
-                .as_deref()
-                .unwrap_or(&cfg.server);
+            let server = cli.server.as_deref().unwrap_or(&cfg.server);
             let auth = make_auth_header(&cfg.username, &cfg.password);
             let client = ApiClient::new(server, &auth)?;
 

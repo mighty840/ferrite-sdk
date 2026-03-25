@@ -17,11 +17,7 @@ pub struct FaultsArgs {
 }
 
 pub fn run(args: &FaultsArgs, client: &ApiClient, format: OutputFormat) -> Result<()> {
-    let since = args
-        .since
-        .as_deref()
-        .map(duration_to_since)
-        .transpose()?;
+    let since = args.since.as_deref().map(duration_to_since).transpose()?;
 
     let faults = if let Some(device_id) = &args.device {
         client.list_device_faults(device_id, since.as_deref())?
