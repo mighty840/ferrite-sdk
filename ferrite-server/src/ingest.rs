@@ -3,7 +3,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -1184,6 +1184,25 @@ async fn delete_device_handler(
     }
 }
 
+/// DELETE /admin/devices/:device_id — delete a device by its device_id string.
+async fn admin_delete_device_handler(
+    State(state): State<Arc<AppState>>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    let store = state.store.lock().await;
+    match store.delete_device_by_id(&device_id) {
+        Ok(true) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "device not found" })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string() })),
+        ),
+    }
+}
+
 /// Pagination and time-range query parameters shared by list endpoints.
 #[derive(Debug, Deserialize)]
 struct ListParams {
@@ -1353,9 +1372,13 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/ota/targets/:device_id",
             get(crate::ota::get_ota_target).delete(crate::ota::delete_ota_target),
         )
-        // Admin: backup & retention (#40, #29)
+        // Admin: backup, retention, device management
         .route("/admin/backup", get(crate::backup::backup_database))
         .route("/admin/retention", get(crate::backup::retention_info))
+        .route(
+            "/admin/devices/:device_id",
+            delete(admin_delete_device_handler),
+        )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::auth_middleware::require_auth,
