@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -84,6 +84,19 @@ pub struct OtaTarget {
     pub target_version: String,
     pub target_build_id: i64,
     pub firmware_url: Option<String>,
+    pub created_at: String,
+}
+
+/// A firmware binary artifact stored on the server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirmwareArtifact {
+    pub id: i64,
+    pub version: String,
+    pub build_id: i64,
+    pub sha256: String,
+    pub size: i64,
+    pub filename: String,
+    pub signer: Option<String>,
     pub created_at: String,
 }
 
@@ -213,6 +226,17 @@ impl Store {
                 title                 TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_crash_groups_count ON crash_groups(occurrence_count DESC);
+
+            CREATE TABLE IF NOT EXISTS firmware_artifacts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                version     TEXT NOT NULL,
+                build_id    INTEGER NOT NULL DEFAULT 0,
+                sha256      TEXT NOT NULL,
+                size        INTEGER NOT NULL,
+                filename    TEXT NOT NULL,
+                signer      TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             ",
         )?;
         Ok(())
@@ -1037,6 +1061,91 @@ impl Store {
             "DELETE FROM ota_targets WHERE device_id = ?1",
             params![device_id],
         )?;
+        Ok(changed > 0)
+    }
+
+    // ---- Firmware Artifacts ----
+
+    pub fn insert_firmware_artifact(
+        &self,
+        version: &str,
+        build_id: i64,
+        sha256: &str,
+        size: i64,
+        filename: &str,
+        signer: Option<&str>,
+    ) -> SqlResult<FirmwareArtifact> {
+        self.conn.execute(
+            "INSERT INTO firmware_artifacts (version, build_id, sha256, size, filename, signer)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![version, build_id, sha256, size, filename, signer],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.conn.query_row(
+            "SELECT id, version, build_id, sha256, size, filename, signer, created_at
+             FROM firmware_artifacts WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(FirmwareArtifact {
+                    id: row.get(0)?,
+                    version: row.get(1)?,
+                    build_id: row.get(2)?,
+                    sha256: row.get(3)?,
+                    size: row.get(4)?,
+                    filename: row.get(5)?,
+                    signer: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn list_firmware_artifacts(&self) -> SqlResult<Vec<FirmwareArtifact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, version, build_id, sha256, size, filename, signer, created_at
+             FROM firmware_artifacts ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(FirmwareArtifact {
+                id: row.get(0)?,
+                version: row.get(1)?,
+                build_id: row.get(2)?,
+                sha256: row.get(3)?,
+                size: row.get(4)?,
+                filename: row.get(5)?,
+                signer: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_firmware_artifact(&self, id: i64) -> SqlResult<Option<FirmwareArtifact>> {
+        self.conn
+            .query_row(
+                "SELECT id, version, build_id, sha256, size, filename, signer, created_at
+                 FROM firmware_artifacts WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(FirmwareArtifact {
+                        id: row.get(0)?,
+                        version: row.get(1)?,
+                        build_id: row.get(2)?,
+                        sha256: row.get(3)?,
+                        size: row.get(4)?,
+                        filename: row.get(5)?,
+                        signer: row.get(6)?,
+                        created_at: row.get(7)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
+    pub fn delete_firmware_artifact(&self, id: i64) -> SqlResult<bool> {
+        let changed = self
+            .conn
+            .execute("DELETE FROM firmware_artifacts WHERE id = ?1", params![id])?;
         Ok(changed > 0)
     }
 

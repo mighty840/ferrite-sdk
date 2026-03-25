@@ -1397,6 +1397,19 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/ota/targets/:device_id",
             get(crate::ota::get_ota_target).delete(crate::ota::delete_ota_target),
         )
+        // OTA firmware artifact storage (#Sprint2a)
+        .route(
+            "/ota/firmware",
+            get(crate::ota::list_firmware).post(crate::ota::upload_firmware),
+        )
+        .route(
+            "/ota/firmware/:id",
+            get(crate::ota::get_firmware).delete(crate::ota::delete_firmware),
+        )
+        .route(
+            "/ota/firmware/:id/download",
+            get(crate::ota::download_firmware),
+        )
         // Admin: backup, retention, device management
         .route("/admin/backup", get(crate::backup::backup_database))
         .route("/admin/retention", get(crate::backup::retention_info))
