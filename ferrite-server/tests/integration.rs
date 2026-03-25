@@ -78,7 +78,8 @@ async fn spawn_server_with_env(env_overrides: Vec<(&str, &str)>) -> String {
         let state = Arc::new(ferrite_server::AppState {
             store: Mutex::new(store),
             symbolicator: Mutex::new(symbolicator),
-            elf_dir,
+            elf_dir: elf_dir.clone(),
+            firmware_dir: elf_dir,
             config,
             event_tx,
             counters: ferrite_server::prometheus::RequestCounters::new(),

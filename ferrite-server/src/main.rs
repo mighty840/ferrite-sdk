@@ -31,6 +31,10 @@ struct Cli {
     #[arg(long, default_value = "./elfs")]
     elf_dir: PathBuf,
 
+    /// Directory for firmware artifacts (OTA binaries)
+    #[arg(long, default_value = "./firmware")]
+    firmware_dir: PathBuf,
+
     /// Directory containing dashboard static files (index.html + assets/).
     /// If set, the server serves the dashboard UI and API from the same origin.
     #[arg(long)]
@@ -71,8 +75,9 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    // Ensure elf directory exists
+    // Ensure directories exist
     std::fs::create_dir_all(&cli.elf_dir)?;
+    std::fs::create_dir_all(&cli.firmware_dir)?;
 
     // Load auth config from environment (leaked for 'static lifetime)
     let config: &'static AuthConfig = Box::leak(Box::new(AuthConfig::from_env()));
@@ -98,6 +103,7 @@ async fn main() -> anyhow::Result<()> {
         store: Mutex::new(store),
         symbolicator: Mutex::new(symbolicator),
         elf_dir: cli.elf_dir.clone(),
+        firmware_dir: cli.firmware_dir.clone(),
         config,
         event_tx,
         counters: RequestCounters::new(),

@@ -22,6 +22,7 @@ pub struct AppState {
     pub store: Mutex<store::Store>,
     pub symbolicator: Mutex<symbolicate::Symbolicator>,
     pub elf_dir: PathBuf,
+    pub firmware_dir: PathBuf,
     pub config: &'static config::AuthConfig,
     pub event_tx: broadcast::Sender<sse::SsePayload>,
     pub counters: prometheus::RequestCounters,
