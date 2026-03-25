@@ -629,7 +629,10 @@ async fn ingest_chunks(
     }
 
     // Ensure we have a device row.
-    if device_rowid.is_none() {
+    // Skip creating "unknown" devices — these are from batches without DeviceInfo
+    // (e.g. BLE chunks arriving before the DeviceInfo notification).
+    // The next batch will contain DeviceInfo and create the device properly.
+    if device_rowid.is_none() && current_device_id != "unknown" {
         match store.touch_device(&current_device_id) {
             Ok(rid) => device_rowid = Some(rid),
             Err(e) => {
@@ -647,12 +650,14 @@ async fn ingest_chunks(
     }
 
     let Some(dev_rid) = device_rowid else {
-        errors.push("device_rowid not set (no DeviceInfo chunk?)".into());
+        // No device context — either "unknown" device or missing DeviceInfo.
+        // Accept the request (chunks will arrive again with DeviceInfo) but don't store.
+        let _ = store.commit_transaction();
         return (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::OK,
             Json(IngestResponse {
-                ok: false,
-                chunks_received: 0,
+                ok: true,
+                chunks_received: num_chunks,
                 errors,
             }),
         );
