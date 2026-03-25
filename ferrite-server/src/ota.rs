@@ -4,7 +4,7 @@
 //! Firmware endpoints handle binary upload, listing, download, and deletion.
 
 use axum::{
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
