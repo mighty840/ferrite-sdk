@@ -87,6 +87,43 @@ pub struct OtaTarget {
     pub created_at: String,
 }
 
+/// An OTA campaign for rolling out firmware to a fleet of devices.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtaCampaign {
+    pub id: i64,
+    pub name: String,
+    pub firmware_id: i64,
+    pub target_version: String,
+    pub strategy: String,
+    pub target_group_id: Option<i64>,
+    pub target_tags: Option<String>,
+    pub rollout_percent: i64,
+    pub failure_threshold: f64,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// A device's status within an OTA campaign.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtaCampaignDevice {
+    pub id: i64,
+    pub campaign_id: i64,
+    pub device_id: String,
+    pub status: String,
+    pub updated_at: String,
+}
+
+/// A campaign with aggregated device status counts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CampaignSummary {
+    pub campaign: OtaCampaign,
+    pub pending: i64,
+    pub downloading: i64,
+    pub installed: i64,
+    pub failed: i64,
+}
+
 /// A firmware binary artifact stored on the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirmwareArtifact {
@@ -236,6 +273,30 @@ impl Store {
                 filename    TEXT NOT NULL,
                 signer      TEXT,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS ota_campaigns (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                name              TEXT NOT NULL,
+                firmware_id       INTEGER NOT NULL REFERENCES firmware_artifacts(id),
+                target_version    TEXT NOT NULL,
+                strategy          TEXT NOT NULL DEFAULT 'immediate',
+                target_group_id   INTEGER REFERENCES device_groups(id),
+                target_tags       TEXT,
+                rollout_percent   INTEGER NOT NULL DEFAULT 100,
+                failure_threshold REAL NOT NULL DEFAULT 5.0,
+                status            TEXT NOT NULL DEFAULT 'created',
+                created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS ota_campaign_devices (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                campaign_id     INTEGER NOT NULL REFERENCES ota_campaigns(id) ON DELETE CASCADE,
+                device_id       TEXT NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'pending',
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(campaign_id, device_id)
             );
             ",
         )?;
@@ -1149,6 +1210,212 @@ impl Store {
         Ok(changed > 0)
     }
 
+    // ---- OTA Campaigns ----
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_campaign(
+        &self,
+        name: &str,
+        firmware_id: i64,
+        target_version: &str,
+        strategy: &str,
+        target_group_id: Option<i64>,
+        target_tags: Option<&str>,
+        rollout_percent: i64,
+        failure_threshold: f64,
+    ) -> SqlResult<OtaCampaign> {
+        self.conn.execute(
+            "INSERT INTO ota_campaigns (name, firmware_id, target_version, strategy, target_group_id, target_tags, rollout_percent, failure_threshold)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![name, firmware_id, target_version, strategy, target_group_id, target_tags, rollout_percent, failure_threshold],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.get_campaign(id)?
+            .ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)
+    }
+
+    const CAMPAIGN_COLUMNS: &str =
+        "id, name, firmware_id, target_version, strategy, target_group_id, target_tags, rollout_percent, failure_threshold, status, created_at, updated_at";
+
+    fn campaign_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OtaCampaign> {
+        Ok(OtaCampaign {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            firmware_id: row.get(2)?,
+            target_version: row.get(3)?,
+            strategy: row.get(4)?,
+            target_group_id: row.get(5)?,
+            target_tags: row.get(6)?,
+            rollout_percent: row.get(7)?,
+            failure_threshold: row.get(8)?,
+            status: row.get(9)?,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
+        })
+    }
+
+    pub fn get_campaign(&self, id: i64) -> SqlResult<Option<OtaCampaign>> {
+        let sql = format!(
+            "SELECT {} FROM ota_campaigns WHERE id = ?1",
+            Self::CAMPAIGN_COLUMNS
+        );
+        self.conn
+            .query_row(&sql, params![id], Self::campaign_from_row)
+            .optional()
+    }
+
+    pub fn list_campaigns(&self) -> SqlResult<Vec<OtaCampaign>> {
+        let sql = format!(
+            "SELECT {} FROM ota_campaigns ORDER BY created_at DESC",
+            Self::CAMPAIGN_COLUMNS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map([], Self::campaign_from_row)?;
+        rows.collect()
+    }
+
+    pub fn update_campaign_status(&self, id: i64, status: &str) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE ota_campaigns SET status = ?2, updated_at = datetime('now') WHERE id = ?1",
+            params![id, status],
+        )?;
+        Ok(changed > 0)
+    }
+
+    pub fn add_devices_to_campaign(
+        &self,
+        campaign_id: i64,
+        device_ids: &[String],
+    ) -> SqlResult<usize> {
+        let mut count = 0usize;
+        for device_id in device_ids {
+            let result = self.conn.execute(
+                "INSERT OR IGNORE INTO ota_campaign_devices (campaign_id, device_id) VALUES (?1, ?2)",
+                params![campaign_id, device_id],
+            )?;
+            count += result;
+        }
+        Ok(count)
+    }
+
+    pub fn get_campaign_device_status(
+        &self,
+        campaign_id: i64,
+        device_id: &str,
+    ) -> SqlResult<Option<OtaCampaignDevice>> {
+        self.conn
+            .query_row(
+                "SELECT id, campaign_id, device_id, status, updated_at
+                 FROM ota_campaign_devices
+                 WHERE campaign_id = ?1 AND device_id = ?2",
+                params![campaign_id, device_id],
+                |row| {
+                    Ok(OtaCampaignDevice {
+                        id: row.get(0)?,
+                        campaign_id: row.get(1)?,
+                        device_id: row.get(2)?,
+                        status: row.get(3)?,
+                        updated_at: row.get(4)?,
+                    })
+                },
+            )
+            .optional()
+    }
+
+    pub fn update_campaign_device_status(
+        &self,
+        campaign_id: i64,
+        device_id: &str,
+        status: &str,
+    ) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "UPDATE ota_campaign_devices SET status = ?3, updated_at = datetime('now')
+             WHERE campaign_id = ?1 AND device_id = ?2",
+            params![campaign_id, device_id, status],
+        )?;
+        Ok(changed > 0)
+    }
+
+    pub fn get_campaign_summary(&self, campaign_id: i64) -> SqlResult<Option<CampaignSummary>> {
+        let campaign = match self.get_campaign(campaign_id)? {
+            Some(c) => c,
+            None => return Ok(None),
+        };
+        let mut stmt = self.conn.prepare(
+            "SELECT
+                 COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0),
+                 COALESCE(SUM(CASE WHEN status = 'downloading' THEN 1 ELSE 0 END), 0),
+                 COALESCE(SUM(CASE WHEN status = 'installed' THEN 1 ELSE 0 END), 0),
+                 COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
+             FROM ota_campaign_devices WHERE campaign_id = ?1",
+        )?;
+        let summary = stmt.query_row(params![campaign_id], |row| {
+            Ok(CampaignSummary {
+                campaign,
+                pending: row.get(0)?,
+                downloading: row.get(1)?,
+                installed: row.get(2)?,
+                failed: row.get(3)?,
+            })
+        })?;
+        Ok(Some(summary))
+    }
+
+    pub fn list_campaign_devices(&self, campaign_id: i64) -> SqlResult<Vec<OtaCampaignDevice>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, campaign_id, device_id, status, updated_at
+             FROM ota_campaign_devices
+             WHERE campaign_id = ?1
+             ORDER BY device_id",
+        )?;
+        let rows = stmt.query_map(params![campaign_id], |row| {
+            Ok(OtaCampaignDevice {
+                id: row.get(0)?,
+                campaign_id: row.get(1)?,
+                device_id: row.get(2)?,
+                status: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Find active campaigns that include a given device.
+    pub fn find_active_campaigns_for_device(&self, device_id: &str) -> SqlResult<Vec<OtaCampaign>> {
+        let sql =
+            "SELECT c.id, c.name, c.firmware_id, c.target_version, c.strategy, c.target_group_id,
+                    c.target_tags, c.rollout_percent, c.failure_threshold, c.status, c.created_at, c.updated_at
+             FROM ota_campaigns c
+             JOIN ota_campaign_devices cd ON cd.campaign_id = c.id
+             WHERE cd.device_id = ?1 AND c.status = 'active'"
+            .to_string();
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![device_id], |row| Self::campaign_from_row(row))?;
+        rows.collect()
+    }
+
+    /// Check if all devices in a campaign are done (installed or failed).
+    /// Returns true if no devices are still pending or downloading.
+    pub fn campaign_all_devices_done(&self, campaign_id: i64) -> SqlResult<bool> {
+        let remaining: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM ota_campaign_devices
+             WHERE campaign_id = ?1 AND status IN ('pending', 'downloading')",
+            params![campaign_id],
+            |row| row.get(0),
+        )?;
+        Ok(remaining == 0)
+    }
+
+    /// Delete all OTA targets for devices in a campaign.
+    pub fn delete_ota_targets_for_campaign(&self, campaign_id: i64) -> SqlResult<usize> {
+        self.conn.execute(
+            "DELETE FROM ota_targets WHERE device_id IN (
+                SELECT device_id FROM ota_campaign_devices WHERE campaign_id = ?1
+             )",
+            params![campaign_id],
+        )
+    }
+
     // ---- Data retention purge ----
 
     /// Delete metrics older than the given SQLite date modifier (e.g. "-90 days").
@@ -1748,5 +2015,147 @@ mod tests {
         // Verify faults for crash group.
         let faults = store.list_faults_for_crash_group(cg, 100, 0).unwrap();
         assert_eq!(faults.len(), 2);
+    }
+
+    // ---- OTA Campaign tests ----
+
+    #[test]
+    fn test_campaign_create_and_summary() {
+        let store = Store::open_in_memory().unwrap();
+
+        // Create a firmware artifact first (required by FK).
+        let fw = store
+            .insert_firmware_artifact("2.0.0", 200, "abc123", 1024, "fw.bin", None)
+            .unwrap();
+
+        // Create some devices.
+        store.upsert_device("dev-001", "1.0.0", 100).unwrap();
+        store.upsert_device("dev-002", "1.0.0", 100).unwrap();
+        store.upsert_device("dev-003", "1.0.0", 100).unwrap();
+
+        // Create campaign.
+        let campaign = store
+            .create_campaign(
+                "rollout-v2",
+                fw.id,
+                "2.0.0",
+                "immediate",
+                None,
+                None,
+                100,
+                5.0,
+            )
+            .unwrap();
+        assert_eq!(campaign.name, "rollout-v2");
+        assert_eq!(campaign.status, "created");
+        assert_eq!(campaign.strategy, "immediate");
+        assert_eq!(campaign.rollout_percent, 100);
+
+        // Add devices to campaign.
+        let device_ids = vec![
+            "dev-001".to_string(),
+            "dev-002".to_string(),
+            "dev-003".to_string(),
+        ];
+        let added = store
+            .add_devices_to_campaign(campaign.id, &device_ids)
+            .unwrap();
+        assert_eq!(added, 3);
+
+        // Verify summary: all pending.
+        let summary = store.get_campaign_summary(campaign.id).unwrap().unwrap();
+        assert_eq!(summary.pending, 3);
+        assert_eq!(summary.downloading, 0);
+        assert_eq!(summary.installed, 0);
+        assert_eq!(summary.failed, 0);
+
+        // List campaigns.
+        let campaigns = store.list_campaigns().unwrap();
+        assert_eq!(campaigns.len(), 1);
+
+        // List campaign devices.
+        let devices = store.list_campaign_devices(campaign.id).unwrap();
+        assert_eq!(devices.len(), 3);
+    }
+
+    #[test]
+    fn test_campaign_device_status_update() {
+        let store = Store::open_in_memory().unwrap();
+
+        let fw = store
+            .insert_firmware_artifact("2.0.0", 200, "abc123", 1024, "fw.bin", None)
+            .unwrap();
+
+        store.upsert_device("dev-001", "1.0.0", 100).unwrap();
+        store.upsert_device("dev-002", "1.0.0", 100).unwrap();
+
+        let campaign = store
+            .create_campaign(
+                "test-campaign",
+                fw.id,
+                "2.0.0",
+                "canary",
+                None,
+                None,
+                50,
+                10.0,
+            )
+            .unwrap();
+
+        let device_ids = vec!["dev-001".to_string(), "dev-002".to_string()];
+        store
+            .add_devices_to_campaign(campaign.id, &device_ids)
+            .unwrap();
+
+        // Update dev-001 to downloading.
+        assert!(store
+            .update_campaign_device_status(campaign.id, "dev-001", "downloading")
+            .unwrap());
+
+        let summary = store.get_campaign_summary(campaign.id).unwrap().unwrap();
+        assert_eq!(summary.pending, 1);
+        assert_eq!(summary.downloading, 1);
+
+        // Update dev-001 to installed.
+        assert!(store
+            .update_campaign_device_status(campaign.id, "dev-001", "installed")
+            .unwrap());
+
+        // Update dev-002 to failed.
+        assert!(store
+            .update_campaign_device_status(campaign.id, "dev-002", "failed")
+            .unwrap());
+
+        let summary = store.get_campaign_summary(campaign.id).unwrap().unwrap();
+        assert_eq!(summary.pending, 0);
+        assert_eq!(summary.downloading, 0);
+        assert_eq!(summary.installed, 1);
+        assert_eq!(summary.failed, 1);
+
+        // All devices are done.
+        assert!(store.campaign_all_devices_done(campaign.id).unwrap());
+
+        // Verify individual device status.
+        let dev_status = store
+            .get_campaign_device_status(campaign.id, "dev-001")
+            .unwrap()
+            .unwrap();
+        assert_eq!(dev_status.status, "installed");
+
+        // Verify campaign status update.
+        assert!(store
+            .update_campaign_status(campaign.id, "completed")
+            .unwrap());
+        let c = store.get_campaign(campaign.id).unwrap().unwrap();
+        assert_eq!(c.status, "completed");
+
+        // Find active campaigns (should be empty since status is 'completed').
+        let active = store.find_active_campaigns_for_device("dev-001").unwrap();
+        assert!(active.is_empty());
+
+        // Set to active, then find.
+        store.update_campaign_status(campaign.id, "active").unwrap();
+        let active = store.find_active_campaigns_for_device("dev-001").unwrap();
+        assert_eq!(active.len(), 1);
     }
 }

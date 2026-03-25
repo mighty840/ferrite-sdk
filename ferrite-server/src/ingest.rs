@@ -831,6 +831,33 @@ async fn ingest_chunks(
                                 &target.target_version,
                                 target.target_build_id,
                             ));
+                        } else {
+                            // Device build_id matches the target — mark campaign device as installed.
+                            if let Ok(campaigns) =
+                                store.find_active_campaigns_for_device(&current_device_id)
+                            {
+                                for campaign in &campaigns {
+                                    if campaign.target_version == target.target_version {
+                                        let _ = store.update_campaign_device_status(
+                                            campaign.id,
+                                            &current_device_id,
+                                            "installed",
+                                        );
+                                        // Check if all devices are done — auto-complete the campaign.
+                                        if let Ok(true) =
+                                            store.campaign_all_devices_done(campaign.id)
+                                        {
+                                            let _ = store
+                                                .update_campaign_status(campaign.id, "completed");
+                                            tracing::info!(
+                                                campaign_id = campaign.id,
+                                                campaign_name = %campaign.name,
+                                                "OTA campaign auto-completed: all devices installed"
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
@@ -1409,6 +1436,28 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/ota/firmware/:id/download",
             get(crate::ota::download_firmware),
+        )
+        // OTA campaigns
+        .route(
+            "/ota/campaigns",
+            get(crate::campaigns::list_campaigns).post(crate::campaigns::create_campaign),
+        )
+        .route("/ota/campaigns/:id", get(crate::campaigns::get_campaign))
+        .route(
+            "/ota/campaigns/:id/activate",
+            post(crate::campaigns::activate_campaign),
+        )
+        .route(
+            "/ota/campaigns/:id/pause",
+            post(crate::campaigns::pause_campaign),
+        )
+        .route(
+            "/ota/campaigns/:id/rollback",
+            post(crate::campaigns::rollback_campaign),
+        )
+        .route(
+            "/ota/campaigns/:id/devices",
+            get(crate::campaigns::list_campaign_devices),
         )
         // Admin: backup, retention, device management
         .route("/admin/backup", get(crate::backup::backup_database))
