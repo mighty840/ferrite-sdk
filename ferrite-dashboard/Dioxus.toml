@@ -5,6 +5,14 @@ default_platform = "web"
 [web.app]
 title = "Ferrite"
 
+[web.resource]
+style = []
+script = []
+
+[web.resource.dev]
+style = []
+script = []
+
 [web.watcher]
 reload_html = true
 watch_path = ["src"]

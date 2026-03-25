@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+    <linearGradient id="dieGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E293B"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <filter id="coreGlow">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pinGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#020617"/>
+  <!-- IC Package body -->
+  <rect x="136" y="136" width="240" height="240" rx="8" fill="url(#dieGrad)" stroke="#1E293B" stroke-width="2"/>
+  <!-- Pin 1 indicator -->
+  <circle cx="160" cy="160" r="8" fill="none" stroke="#334155" stroke-width="1.5"/>
+  <!-- Die surface pattern -->
+  <g stroke="#334155" stroke-width="0.5" opacity="0.5">
+    <rect x="164" y="164" width="184" height="184" rx="2" fill="none"/>
+    <line x1="164" y1="220" x2="348" y2="220"/>
+    <line x1="164" y1="292" x2="348" y2="292"/>
+    <line x1="220" y1="164" x2="220" y2="348"/>
+    <line x1="292" y1="164" x2="292" y2="348"/>
+  </g>
+  <!-- Pins — Top -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="172" y="104" width="12" height="36" rx="3"/>
+    <rect x="204" y="104" width="12" height="36" rx="3"/>
+    <rect x="236" y="104" width="12" height="36" rx="3"/>
+    <rect x="268" y="104" width="12" height="36" rx="3"/>
+    <rect x="300" y="104" width="12" height="36" rx="3"/>
+    <rect x="332" y="104" width="12" height="36" rx="3"/>
+  </g>
+  <!-- Pins — Bottom -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="172" y="372" width="12" height="36" rx="3"/>
+    <rect x="204" y="372" width="12" height="36" rx="3"/>
+    <rect x="236" y="372" width="12" height="36" rx="3"/>
+    <rect x="268" y="372" width="12" height="36" rx="3"/>
+    <rect x="300" y="372" width="12" height="36" rx="3"/>
+    <rect x="332" y="372" width="12" height="36" rx="3"/>
+  </g>
+  <!-- Pins — Left -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="104" y="172" width="36" height="12" rx="3"/>
+    <rect x="104" y="204" width="36" height="12" rx="3"/>
+    <rect x="104" y="236" width="36" height="12" rx="3"/>
+    <rect x="104" y="268" width="36" height="12" rx="3"/>
+    <rect x="104" y="300" width="36" height="12" rx="3"/>
+    <rect x="104" y="332" width="36" height="12" rx="3"/>
+  </g>
+  <!-- Pins — Right -->
+  <g fill="url(#chipGrad)" filter="url(#pinGlow)">
+    <rect x="372" y="172" width="36" height="12" rx="3"/>
+    <rect x="372" y="204" width="36" height="12" rx="3"/>
+    <rect x="372" y="236" width="36" height="12" rx="3"/>
+    <rect x="372" y="268" width="36" height="12" rx="3"/>
+    <rect x="372" y="300" width="36" height="12" rx="3"/>
+    <rect x="372" y="332" width="36" height="12" rx="3"/>
+  </g>
+  <!-- Central observation core -->
+  <circle cx="256" cy="256" r="36" fill="url(#coreGrad)" opacity="0.15" filter="url(#coreGlow)"/>
+  <circle cx="256" cy="256" r="22" fill="url(#coreGrad)" opacity="0.3" filter="url(#coreGlow)"/>
+  <circle cx="256" cy="256" r="10" fill="url(#coreGrad)" filter="url(#coreGlow)"/>
+  <!-- Radiant lines -->
+  <g stroke="url(#coreGrad)" stroke-width="1.5" opacity="0.4">
+    <line x1="256" y1="220" x2="256" y2="174"/>
+    <line x1="256" y1="292" x2="256" y2="338"/>
+    <line x1="220" y1="256" x2="174" y2="256"/>
+    <line x1="292" y1="256" x2="338" y2="256"/>
+    <line x1="231" y1="231" x2="200" y2="200"/>
+    <line x1="281" y1="281" x2="312" y2="312"/>
+    <line x1="281" y1="231" x2="312" y2="200"/>
+    <line x1="231" y1="281" x2="200" y2="312"/>
+  </g>
+</svg>
