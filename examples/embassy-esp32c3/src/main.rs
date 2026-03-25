@@ -43,7 +43,7 @@ use ferrite_sdk::upload::UploadManager;
 
 const WIFI_SSID: &str = env!("WIFI_SSID");
 const WIFI_PASS: &str = env!("WIFI_PASS");
-const SERVER_PORT: u16 = 4000;
+const SERVER_PORT: u16 = 4001;
 const INGEST_PATH: &str = "/ingest/chunks";
 const INGEST_API_KEY: Option<&str> = option_env!("INGEST_API_KEY");
 const DEVICE_ID: &str = "esp32c3-embassy-01";

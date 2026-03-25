@@ -381,6 +381,15 @@ impl Store {
         Ok(changed > 0)
     }
 
+    /// Delete a device by device_id string.
+    pub fn delete_device_by_id(&self, device_id: &str) -> SqlResult<bool> {
+        let changed = self.conn.execute(
+            "DELETE FROM devices WHERE device_id = ?1",
+            params![device_id],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// Touch a device by device_key and update its status.
     pub fn touch_device_by_key(&self, device_key: i64, status: &str) -> SqlResult<Option<i64>> {
         let changed = self.conn.execute(
