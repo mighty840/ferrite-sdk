@@ -2,6 +2,7 @@ pub mod alerting;
 pub mod auth;
 pub mod auth_middleware;
 pub mod backup;
+pub mod campaigns;
 pub mod config;
 pub mod crashes;
 pub mod groups;
