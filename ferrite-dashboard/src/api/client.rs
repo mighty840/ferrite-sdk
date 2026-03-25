@@ -219,6 +219,59 @@ impl ApiClient {
         }
     }
 
+    pub async fn list_crash_groups(&self) -> Result<Vec<CrashGroup>, ApiError> {
+        let url = format!("{}/crashes", self.base_url);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct Wrapper {
+                    crash_groups: Vec<CrashGroup>,
+                }
+                let w: Wrapper = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.crash_groups)
+            }
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {}", code))),
+        }
+    }
+
+    pub async fn get_crash_group(
+        &self,
+        id: i64,
+    ) -> Result<(CrashGroup, Vec<FaultEvent>), ApiError> {
+        let url = format!("{}/crashes/{}", self.base_url, id);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct Wrapper {
+                    group: CrashGroup,
+                    occurrences: Vec<FaultEvent>,
+                }
+                let w: Wrapper = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok((w.group, w.occurrences))
+            }
+            401 => Err(ApiError::Unauthorized),
+            404 => Err(ApiError::NotFound),
+            code => Err(ApiError::Server(format!("HTTP {}", code))),
+        }
+    }
+
     pub async fn register_device(
         &self,
         device_key: &str,

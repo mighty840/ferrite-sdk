@@ -1,5 +1,6 @@
 pub mod callback;
 pub mod compare;
+pub mod crashes;
 pub mod dashboard;
 pub mod device_detail;
 pub mod devices;
@@ -12,6 +13,7 @@ pub mod settings;
 
 pub use callback::CallbackPage;
 pub use compare::ComparePage;
+pub use crashes::{CrashDetailPage, CrashesPage};
 pub use dashboard::DashboardPage;
 pub use device_detail::DeviceDetailPage;
 pub use devices::DevicesPage;

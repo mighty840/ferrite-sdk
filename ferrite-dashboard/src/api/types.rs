@@ -105,6 +105,31 @@ pub struct MetricRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CrashGroup {
+    pub id: i64,
+    pub signature_hash: String,
+    pub pc: u32,
+    pub fault_type: u8,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub occurrence_count: i64,
+    pub affected_device_count: i64,
+    pub title: Option<String>,
+}
+
+impl CrashGroup {
+    pub fn fault_type_name(&self) -> &'static str {
+        match self.fault_type {
+            0 => "HardFault",
+            1 => "MemManage",
+            2 => "BusFault",
+            3 => "UsageFault",
+            _ => "Unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TraceEntry {
     pub id: String,
     pub device_id: String,

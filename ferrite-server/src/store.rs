@@ -36,6 +36,21 @@ pub struct FaultEvent {
     pub stack_snapshot: String,
     pub symbol: Option<String>,
     pub created_at: String,
+    pub crash_group_id: Option<i64>,
+}
+
+/// A crash group that deduplicates faults by signature (fault_type + PC).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrashGroup {
+    pub id: i64,
+    pub signature_hash: String,
+    pub pc: u32,
+    pub fault_type: u8,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub occurrence_count: i64,
+    pub affected_device_count: i64,
+    pub title: Option<String>,
 }
 
 /// A stored metric row.
@@ -185,6 +200,19 @@ impl Store {
                 added_at    TEXT NOT NULL DEFAULT (datetime('now')),
                 PRIMARY KEY (group_id, device_id)
             );
+
+            CREATE TABLE IF NOT EXISTS crash_groups (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                signature_hash        TEXT NOT NULL UNIQUE,
+                pc                    INTEGER NOT NULL,
+                fault_type            INTEGER NOT NULL,
+                first_seen            TEXT NOT NULL DEFAULT (datetime('now')),
+                last_seen             TEXT NOT NULL DEFAULT (datetime('now')),
+                occurrence_count      INTEGER NOT NULL DEFAULT 1,
+                affected_device_count INTEGER NOT NULL DEFAULT 1,
+                title                 TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_crash_groups_count ON crash_groups(occurrence_count DESC);
             ",
         )?;
         Ok(())
@@ -199,6 +227,7 @@ impl Store {
             "ALTER TABLE devices ADD COLUMN tags TEXT",
             "ALTER TABLE devices ADD COLUMN provisioned_by TEXT",
             "ALTER TABLE devices ADD COLUMN provisioned_at TEXT",
+            "ALTER TABLE fault_events ADD COLUMN crash_group_id INTEGER REFERENCES crash_groups(id)",
         ];
         for sql in &columns {
             let _ = self.conn.execute(sql, []);
@@ -423,12 +452,13 @@ impl Store {
         sp: u32,
         stack_snapshot: &[u32],
         symbol: Option<&str>,
+        crash_group_id: Option<i64>,
     ) -> SqlResult<i64> {
         let snapshot_json = serde_json::to_string(stack_snapshot).unwrap_or_else(|_| "[]".into());
         self.conn.execute(
             "INSERT INTO fault_events
-             (device_rowid, fault_type, pc, lr, cfsr, hfsr, mmfar, bfar, sp, stack_snapshot, symbol)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             (device_rowid, fault_type, pc, lr, cfsr, hfsr, mmfar, bfar, sp, stack_snapshot, symbol, crash_group_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 device_rowid,
                 fault_type as i64,
@@ -441,9 +471,30 @@ impl Store {
                 sp as i64,
                 snapshot_json,
                 symbol,
+                crash_group_id,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    fn fault_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FaultEvent> {
+        Ok(FaultEvent {
+            id: row.get(0)?,
+            device_rowid: row.get(1)?,
+            device_id: row.get(2)?,
+            fault_type: row.get::<_, i64>(3)? as u8,
+            pc: row.get::<_, i64>(4)? as u32,
+            lr: row.get::<_, i64>(5)? as u32,
+            cfsr: row.get::<_, i64>(6)? as u32,
+            hfsr: row.get::<_, i64>(7)? as u32,
+            mmfar: row.get::<_, i64>(8)? as u32,
+            bfar: row.get::<_, i64>(9)? as u32,
+            sp: row.get::<_, i64>(10)? as u32,
+            stack_snapshot: row.get(11)?,
+            symbol: row.get(12)?,
+            created_at: row.get(13)?,
+            crash_group_id: row.get(14)?,
+        })
     }
 
     pub fn list_faults_for_device(&self, device_id: &str) -> SqlResult<Vec<FaultEvent>> {
@@ -460,7 +511,7 @@ impl Store {
     ) -> SqlResult<Vec<FaultEvent>> {
         let mut sql = String::from(
             "SELECT f.id, f.device_rowid, d.device_id, f.fault_type, f.pc, f.lr,
-                    f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at
+                    f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at, f.crash_group_id
              FROM fault_events f
              JOIN devices d ON d.id = f.device_rowid
              WHERE d.device_id = ?1",
@@ -486,24 +537,7 @@ impl Store {
         let params_ref: Vec<&dyn rusqlite::types::ToSql> =
             param_values.iter().map(|p| p.as_ref()).collect();
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params_ref.as_slice(), |row| {
-            Ok(FaultEvent {
-                id: row.get(0)?,
-                device_rowid: row.get(1)?,
-                device_id: row.get(2)?,
-                fault_type: row.get::<_, i64>(3)? as u8,
-                pc: row.get::<_, i64>(4)? as u32,
-                lr: row.get::<_, i64>(5)? as u32,
-                cfsr: row.get::<_, i64>(6)? as u32,
-                hfsr: row.get::<_, i64>(7)? as u32,
-                mmfar: row.get::<_, i64>(8)? as u32,
-                bfar: row.get::<_, i64>(9)? as u32,
-                sp: row.get::<_, i64>(10)? as u32,
-                stack_snapshot: row.get(11)?,
-                symbol: row.get(12)?,
-                created_at: row.get(13)?,
-            })
-        })?;
+        let rows = stmt.query_map(params_ref.as_slice(), Self::fault_from_row)?;
         rows.collect()
     }
 
@@ -520,7 +554,7 @@ impl Store {
     ) -> SqlResult<Vec<FaultEvent>> {
         let mut sql = String::from(
             "SELECT f.id, f.device_rowid, d.device_id, f.fault_type, f.pc, f.lr,
-                    f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at
+                    f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at, f.crash_group_id
              FROM fault_events f
              JOIN devices d ON d.id = f.device_rowid
              WHERE 1=1",
@@ -545,25 +579,134 @@ impl Store {
         let params_ref: Vec<&dyn rusqlite::types::ToSql> =
             param_values.iter().map(|p| p.as_ref()).collect();
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params_ref.as_slice(), |row| {
-            Ok(FaultEvent {
+        let rows = stmt.query_map(params_ref.as_slice(), Self::fault_from_row)?;
+        rows.collect()
+    }
+
+    // ---- Crash groups ----
+
+    /// Compute a deterministic signature hash from fault_type and PC.
+    fn compute_signature_hash(fault_type: u8, pc: u32) -> String {
+        format!("{:02x}{:08x}", fault_type, pc)
+    }
+
+    /// Find or create a crash group for the given fault signature.
+    /// Upserts the crash group and returns its id.
+    pub fn find_or_create_crash_group(
+        &self,
+        fault_type: u8,
+        pc: u32,
+        title: Option<&str>,
+        _device_rowid: i64,
+    ) -> SqlResult<i64> {
+        let sig = Self::compute_signature_hash(fault_type, pc);
+        self.conn.execute(
+            "INSERT INTO crash_groups (signature_hash, pc, fault_type, title)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(signature_hash) DO UPDATE SET
+                last_seen = datetime('now'),
+                occurrence_count = crash_groups.occurrence_count + 1,
+                title = COALESCE(?4, crash_groups.title)",
+            params![sig, pc as i64, fault_type as i64, title],
+        )?;
+        let id: i64 = self.conn.query_row(
+            "SELECT id FROM crash_groups WHERE signature_hash = ?1",
+            params![sig],
+            |row| row.get(0),
+        )?;
+        Ok(id)
+    }
+
+    /// Update the affected_device_count for a crash group based on distinct devices in fault_events.
+    pub fn update_crash_group_device_count(&self, crash_group_id: i64) -> SqlResult<()> {
+        self.conn.execute(
+            "UPDATE crash_groups SET affected_device_count = (
+                SELECT COUNT(DISTINCT device_rowid) FROM fault_events WHERE crash_group_id = ?1
+             ) WHERE id = ?1",
+            params![crash_group_id],
+        )?;
+        Ok(())
+    }
+
+    /// List crash groups ordered by occurrence_count descending.
+    pub fn list_crash_groups(&self, limit: usize, offset: usize) -> SqlResult<Vec<CrashGroup>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, signature_hash, pc, fault_type, first_seen, last_seen,
+                    occurrence_count, affected_device_count, title
+             FROM crash_groups
+             ORDER BY occurrence_count DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt.query_map(params![limit as i64, offset as i64], |row| {
+            Ok(CrashGroup {
                 id: row.get(0)?,
-                device_rowid: row.get(1)?,
-                device_id: row.get(2)?,
+                signature_hash: row.get(1)?,
+                pc: row.get::<_, i64>(2)? as u32,
                 fault_type: row.get::<_, i64>(3)? as u8,
-                pc: row.get::<_, i64>(4)? as u32,
-                lr: row.get::<_, i64>(5)? as u32,
-                cfsr: row.get::<_, i64>(6)? as u32,
-                hfsr: row.get::<_, i64>(7)? as u32,
-                mmfar: row.get::<_, i64>(8)? as u32,
-                bfar: row.get::<_, i64>(9)? as u32,
-                sp: row.get::<_, i64>(10)? as u32,
-                stack_snapshot: row.get(11)?,
-                symbol: row.get(12)?,
-                created_at: row.get(13)?,
+                first_seen: row.get(4)?,
+                last_seen: row.get(5)?,
+                occurrence_count: row.get(6)?,
+                affected_device_count: row.get(7)?,
+                title: row.get(8)?,
             })
         })?;
         rows.collect()
+    }
+
+    /// Get a single crash group by id.
+    pub fn get_crash_group(&self, id: i64) -> SqlResult<Option<CrashGroup>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, signature_hash, pc, fault_type, first_seen, last_seen,
+                    occurrence_count, affected_device_count, title
+             FROM crash_groups
+             WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok(CrashGroup {
+                id: row.get(0)?,
+                signature_hash: row.get(1)?,
+                pc: row.get::<_, i64>(2)? as u32,
+                fault_type: row.get::<_, i64>(3)? as u8,
+                first_seen: row.get(4)?,
+                last_seen: row.get(5)?,
+                occurrence_count: row.get(6)?,
+                affected_device_count: row.get(7)?,
+                title: row.get(8)?,
+            })
+        })?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    /// List fault events belonging to a specific crash group.
+    pub fn list_faults_for_crash_group(
+        &self,
+        crash_group_id: i64,
+        limit: usize,
+        offset: usize,
+    ) -> SqlResult<Vec<FaultEvent>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT f.id, f.device_rowid, d.device_id, f.fault_type, f.pc, f.lr,
+                    f.cfsr, f.hfsr, f.mmfar, f.bfar, f.sp, f.stack_snapshot, f.symbol, f.created_at, f.crash_group_id
+             FROM fault_events f
+             JOIN devices d ON d.id = f.device_rowid
+             WHERE f.crash_group_id = ?1
+             ORDER BY f.created_at DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(
+            params![crash_group_id, limit as i64, offset as i64],
+            Self::fault_from_row,
+        )?;
+        rows.collect()
+    }
+
+    /// Count total number of crash groups.
+    pub fn count_crash_groups(&self) -> SqlResult<i64> {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM crash_groups", [], |row| row.get(0))
     }
 
     // ---- Metrics ----
@@ -1158,6 +1301,7 @@ mod tests {
                 0x2000_3F00,
                 &[0xDEAD; 4],
                 Some("main+0x20"),
+                None,
             )
             .unwrap();
         assert!(f1 > 0);
@@ -1207,7 +1351,7 @@ mod tests {
         assert_eq!(store.count_reboots_for_device(dev).unwrap(), 0);
 
         store
-            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, None)
             .unwrap();
         store.insert_metric(dev, "k", 0, "{}", 0).unwrap();
         store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
@@ -1224,7 +1368,7 @@ mod tests {
 
         for _ in 0..5 {
             store
-                .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+                .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, None)
                 .unwrap();
         }
 
@@ -1325,7 +1469,7 @@ mod tests {
 
         let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
         store
-            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, None)
             .unwrap();
         store.insert_metric(dev, "k", 0, "{}", 0).unwrap();
         store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
@@ -1347,7 +1491,7 @@ mod tests {
         // Insert some data
         store.insert_metric(dev, "old", 0, "{}", 0).unwrap();
         store
-            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None)
+            .insert_fault(dev, 0, 0, 0, 0, 0, 0, 0, 0, &[], None, None)
             .unwrap();
         store.insert_reboot(dev, 1, 0, 1, 0).unwrap();
 
@@ -1422,5 +1566,78 @@ mod tests {
         assert!(store.delete_ota_target("dev-001").unwrap());
         assert!(!store.delete_ota_target("dev-001").unwrap()); // already gone
         assert!(store.list_ota_targets().unwrap().is_empty());
+    }
+
+    // ---- Crash group tests ----
+
+    #[test]
+    fn test_crash_group_deduplication() {
+        let store = Store::open_in_memory().unwrap();
+        let dev = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+
+        // Insert two faults with the same PC and fault_type.
+        let cg1 = store
+            .find_or_create_crash_group(3, 0x0800_2000, Some("HardFault at main+0x20"), dev)
+            .unwrap();
+        store
+            .insert_fault(dev, 3, 0x0800_2000, 0, 0, 0, 0, 0, 0, &[], None, Some(cg1))
+            .unwrap();
+
+        let cg2 = store
+            .find_or_create_crash_group(3, 0x0800_2000, None, dev)
+            .unwrap();
+        store
+            .insert_fault(dev, 3, 0x0800_2000, 0, 0, 0, 0, 0, 0, &[], None, Some(cg2))
+            .unwrap();
+
+        // Same crash group should be reused.
+        assert_eq!(cg1, cg2);
+
+        let group = store.get_crash_group(cg1).unwrap().unwrap();
+        assert_eq!(group.occurrence_count, 2);
+        assert_eq!(group.pc, 0x0800_2000);
+        assert_eq!(group.fault_type, 3);
+        // Title should be preserved from the first insert.
+        assert_eq!(group.title, Some("HardFault at main+0x20".to_string()));
+
+        // Only one crash group total.
+        assert_eq!(store.count_crash_groups().unwrap(), 1);
+
+        // List should return it.
+        let groups = store.list_crash_groups(100, 0).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].occurrence_count, 2);
+    }
+
+    #[test]
+    fn test_crash_group_affected_devices() {
+        let store = Store::open_in_memory().unwrap();
+        let dev1 = store.upsert_device("dev-001", "1.0.0", 1).unwrap();
+        let dev2 = store.upsert_device("dev-002", "1.0.0", 1).unwrap();
+
+        // Insert faults from two different devices with the same signature.
+        let cg = store
+            .find_or_create_crash_group(3, 0x0800_3000, Some("UsageFault"), dev1)
+            .unwrap();
+        store
+            .insert_fault(dev1, 3, 0x0800_3000, 0, 0, 0, 0, 0, 0, &[], None, Some(cg))
+            .unwrap();
+        store.update_crash_group_device_count(cg).unwrap();
+
+        let _ = store
+            .find_or_create_crash_group(3, 0x0800_3000, None, dev2)
+            .unwrap();
+        store
+            .insert_fault(dev2, 3, 0x0800_3000, 0, 0, 0, 0, 0, 0, &[], None, Some(cg))
+            .unwrap();
+        store.update_crash_group_device_count(cg).unwrap();
+
+        let group = store.get_crash_group(cg).unwrap().unwrap();
+        assert_eq!(group.occurrence_count, 2);
+        assert_eq!(group.affected_device_count, 2);
+
+        // Verify faults for crash group.
+        let faults = store.list_faults_for_crash_group(cg, 100, 0).unwrap();
+        assert_eq!(faults.len(), 2);
     }
 }
