@@ -3,27 +3,19 @@
 # Multi-stage build for ferrite-server + dashboard.
 # Serves the Dioxus WASM dashboard as static files from the server.
 
-# Coolify injects all env vars as build ARGs — declare them here so
-# Docker doesn't fail on unknown ARGs. Values are ignored at build time;
-# they're only used at runtime via the entrypoint.
-ARG RUST_LOG
-ARG BASIC_AUTH_USER
-ARG BASIC_AUTH_PASS
-ARG INGEST_API_KEY
-ARG CORS_ORIGIN
-ARG RETENTION_DAYS
-ARG ALERT_WEBHOOK_URL
-ARG ALERT_OFFLINE_MINUTES
-ARG CHUNK_ENCRYPTION_KEY
-ARG DB_RESET_INTERVAL
-ARG COOLIFY_WEBHOOK_URL
-ARG COOLIFY_API_TOKEN
-ARG SOURCE_COMMIT
-
 # ── Stage 1: Dependency caching with cargo-chef ──────────────────────
 
 FROM rust:1.84-bookworm AS chef
-RUN cargo install cargo-chef
+
+# Coolify injects all env vars as build ARGs into every stage.
+# Declare them so Docker doesn't fail on unknown args.
+ARG RUST_LOG BASIC_AUTH_USER BASIC_AUTH_PASS INGEST_API_KEY CORS_ORIGIN
+ARG RETENTION_DAYS ALERT_WEBHOOK_URL ALERT_OFFLINE_MINUTES CHUNK_ENCRYPTION_KEY
+ARG DB_RESET_INTERVAL COOLIFY_WEBHOOK_URL COOLIFY_API_TOKEN SOURCE_COMMIT
+ARG COOLIFY_URL COOLIFY_FQDN COOLIFY_BRANCH COOLIFY_RESOURCE_UUID
+ARG COOLIFY_BUILD_SECRETS_HASH
+
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 FROM chef AS planner
@@ -33,6 +25,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 # ── Stage 2: Build server + dashboard ────────────────────────────────
 
 FROM chef AS builder
+
+# Re-declare Coolify ARGs for this stage
+ARG RUST_LOG BASIC_AUTH_USER BASIC_AUTH_PASS INGEST_API_KEY CORS_ORIGIN
+ARG RETENTION_DAYS ALERT_WEBHOOK_URL ALERT_OFFLINE_MINUTES CHUNK_ENCRYPTION_KEY
+ARG DB_RESET_INTERVAL COOLIFY_WEBHOOK_URL COOLIFY_API_TOKEN SOURCE_COMMIT
+ARG COOLIFY_URL COOLIFY_FQDN COOLIFY_BRANCH COOLIFY_RESOURCE_UUID
+ARG COOLIFY_BUILD_SECRETS_HASH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev curl \
@@ -70,6 +69,13 @@ RUN --mount=type=cache,target=/tmp/sccache \
 # ── Stage 3: Minimal runtime ────────────────────────────────────────
 
 FROM debian:bookworm-slim AS runtime
+
+# Re-declare Coolify ARGs for this stage
+ARG RUST_LOG BASIC_AUTH_USER BASIC_AUTH_PASS INGEST_API_KEY CORS_ORIGIN
+ARG RETENTION_DAYS ALERT_WEBHOOK_URL ALERT_OFFLINE_MINUTES CHUNK_ENCRYPTION_KEY
+ARG DB_RESET_INTERVAL COOLIFY_WEBHOOK_URL COOLIFY_API_TOKEN SOURCE_COMMIT
+ARG COOLIFY_URL COOLIFY_FQDN COOLIFY_BRANCH COOLIFY_RESOURCE_UUID
+ARG COOLIFY_BUILD_SECRETS_HASH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates binutils \
