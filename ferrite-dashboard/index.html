@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f97316" />
+    <meta name="description" content="Firmware observability for ARM Cortex-M — crashes, metrics, and logs" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="manifest" href="/assets/manifest.json" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,5 +85,10 @@
 </head>
 <body class="bg-surface-950 min-h-screen text-gray-200">
     <div id="main"></div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/assets/sw.js');
+        }
+    </script>
 </body>
 </html>

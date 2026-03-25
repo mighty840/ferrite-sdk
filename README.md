@@ -14,6 +14,7 @@
   <a href="https://docs.rs/ferrite-sdk"><img src="https://img.shields.io/docsrs/ferrite-sdk?style=flat-square&logo=docs.rs&label=docs.rs" alt="docs.rs"></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License"></a>
   <a href="https://mighty840.github.io/ferrite-sdk/"><img src="https://img.shields.io/badge/docs-VitePress-646CFF?style=flat-square&logo=vitepress" alt="Docs"></a>
+  <a href="https://ferrite.shanifaas.com"><img src="https://img.shields.io/badge/live-dashboard-f97316?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgZmlsbD0id2hpdGUiIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTggMWE3IDcgMCAxMDAgMTRBNyA3IDAgMDA4IDFtMCA2YTEgMSAwIDExMCAyIDEgMSAwIDAxMC0yIi8+PC9zdmc+" alt="Live Dashboard"></a>
 </p>
 
 ---
