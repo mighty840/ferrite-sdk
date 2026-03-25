@@ -1390,7 +1390,7 @@ impl Store {
              WHERE cd.device_id = ?1 AND c.status = 'active'"
             .to_string();
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![device_id], |row| Self::campaign_from_row(row))?;
+        let rows = stmt.query_map(params![device_id], Self::campaign_from_row)?;
         rows.collect()
     }
 
