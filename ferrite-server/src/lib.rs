@@ -3,6 +3,7 @@ pub mod auth;
 pub mod auth_middleware;
 pub mod backup;
 pub mod config;
+pub mod crashes;
 pub mod groups;
 pub mod ingest;
 pub mod ota;

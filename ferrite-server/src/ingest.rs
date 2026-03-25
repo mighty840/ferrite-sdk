@@ -677,6 +677,20 @@ async fn ingest_chunks(
                         sym.symbolize(fault.pc).await.ok().flatten()
                     };
 
+                    // Find or create crash group for deduplication.
+                    let crash_group_id = match store.find_or_create_crash_group(
+                        fault.fault_type,
+                        fault.pc,
+                        symbol.as_deref(),
+                        dev_rid,
+                    ) {
+                        Ok(id) => Some(id),
+                        Err(e) => {
+                            errors.push(format!("db error upserting crash group: {e}"));
+                            None
+                        }
+                    };
+
                     if let Err(e) = store.insert_fault(
                         dev_rid,
                         fault.fault_type,
@@ -689,9 +703,16 @@ async fn ingest_chunks(
                         fault.sp,
                         &fault.stack_snapshot,
                         symbol.as_deref(),
+                        crash_group_id,
                     ) {
                         errors.push(format!("db error inserting fault: {e}"));
                     } else {
+                        // Update affected device count for the crash group.
+                        if let Some(cg_id) = crash_group_id {
+                            if let Err(e) = store.update_crash_group_device_count(cg_id) {
+                                errors.push(format!("db error updating crash group device count: {e}"));
+                            }
+                        }
                         let _ = state.event_tx.send(SsePayload::fault(
                             &current_device_id,
                             fault.fault_type,
@@ -1335,6 +1356,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/devices/:id/faults", get(list_device_faults))
         .route("/devices/:id/metrics", get(list_device_metrics))
         .route("/faults", get(list_all_faults))
+        .route("/crashes", get(crate::crashes::list_crash_groups))
+        .route("/crashes/:id", get(crate::crashes::get_crash_group_detail))
         .route("/metrics", get(list_all_metrics))
         // SSE live event stream (#26)
         .route("/events/stream", get(crate::sse::event_stream))

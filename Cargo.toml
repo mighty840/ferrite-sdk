@@ -9,6 +9,7 @@ members = [
   "ferrite-dashboard",
   "ferrite-provision",
   "ferrite-gateway",
+  "ferrite-cli",
 ]
 exclude = [
   "examples/embassy-nrf52840",

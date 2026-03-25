@@ -39,3 +39,6 @@ ferrite.db-wal
 .env.*
 !.env.example
 log.log
+
+# Plans
+plan.md
