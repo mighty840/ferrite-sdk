@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # ferrite-sdk: no default features to avoid embassy-time version conflict with workspace
-ferrite-sdk = { path = "../../ferrite-sdk", default-features = false }
+ferrite-sdk = { path = "../../ferrite-sdk", default-features = false, features = ["cortex-m"] }
 
 # Embassy core
 embassy-executor = { version = "0.10", features = ["platform-cortex-m", "executor-thread"] }

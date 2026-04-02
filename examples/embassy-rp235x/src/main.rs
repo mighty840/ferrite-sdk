@@ -285,6 +285,14 @@ async fn main(spawner: Spawner) {
         }],
     });
 
+    // Check for previous fault (survives reset via retained RAM)
+    if let Some(fault) = ferrite_sdk::fault::last_fault() {
+        error!(
+            "Recovered from fault: PC={:#010x} LR={:#010x}",
+            fault.frame.pc, fault.frame.lr
+        );
+    }
+
     ferrite_sdk::reboot_reason::record_reboot_reason(ferrite_sdk::RebootReason::PowerOnReset);
 
     info!("Network ready — starting telemetry loop");
@@ -304,6 +312,12 @@ async fn main(spawner: Spawner) {
         let _ = ferrite_sdk::metric_gauge!("uptime_seconds", counter * 5);
 
         info!("[{}] metrics recorded", counter);
+
+        // Comment out to trigger an undefined instruction to test fault detection
+        // if counter == 20 {
+        //     info!("Triggering UDF (undefined instruction) for fault test...");
+        //     cortex_m::asm::udf();
+        // }
 
         // Upload every 30 seconds (6 x 5s)
         if counter % 6 == 0 {
