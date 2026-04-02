@@ -14,6 +14,7 @@ members = [
 exclude = [
   "examples/embassy-nrf52840",
   "examples/embassy-rp2040",
+  "examples/embassy-rp235x",
   "examples/embassy-esp32c3",
   "examples/embassy-stm32l4a6",
   "examples/embassy-stm32wl55",

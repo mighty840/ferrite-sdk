@@ -1,0 +1,48 @@
+[package]
+name = "embassy-rp235x-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# ferrite-sdk: no default features to avoid embassy-time version conflict with workspace
+ferrite-sdk = { path = "../../ferrite-sdk", default-features = false }
+
+# Embassy core
+embassy-executor = { version = "0.10", features = ["platform-cortex-m", "executor-thread"] }
+embassy-time = "0.5"
+embassy-net = { version = "0.9", features = ["tcp", "dhcpv4"] }
+embassy-rp = { version = "0.10", features = ["unstable-pac", "time-driver", "critical-section-impl", "rp235xa"] }
+
+# CYW43 WiFi driver (Pico W / Pico W2)
+cyw43 = "0.7"
+cyw43-pio = "0.10"
+cyw43-firmware = { version = "0.1", features = ["wifi"] }
+
+# Cortex-M
+cortex-m = { version = "0.7", features = ["inline-asm"] }
+cortex-m-rt = "0.7"
+
+# Logging
+defmt = "1"
+defmt-rtt = "1"
+panic-probe = { version = "1", features = ["print-defmt"] }
+
+# Utilities
+embedded-io-async = "0.7"
+heapless = "0.9"
+static_cell = "2"
+rand = { version = "0.9", default-features = false }
+portable-atomic = { version = "1", features = ["critical-section"] }
+
+[[bin]]
+name = "embassy-rp235x-example"
+path = "src/main.rs"
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = "s"
+
+[profile.dev]
+debug = 2
+opt-level = 1
