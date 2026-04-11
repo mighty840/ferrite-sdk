@@ -5,7 +5,10 @@ fn main() {
 
     // ARMv7-M, ARMv7E-M, and ARMv8-M targets have CFSR, HFSR, MMFAR, BFAR registers
     // and support Thumb-2 instructions (str high regs with immediate offset).
-    if target.starts_with("thumbv7m") || target.starts_with("thumbv7em") || target.starts_with("thumbv8m") {
+    if target.starts_with("thumbv7m")
+        || target.starts_with("thumbv7em")
+        || target.starts_with("thumbv8m")
+    {
         println!("cargo:rustc-cfg=has_fault_registers");
     }
 
