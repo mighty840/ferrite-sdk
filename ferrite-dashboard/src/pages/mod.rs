@@ -1,22 +1,22 @@
+pub mod callback;
 pub mod campaign_detail;
 pub mod campaign_new;
-pub mod callback;
 pub mod compare;
 pub mod crashes;
 pub mod dashboard;
 pub mod device_detail;
 pub mod devices;
 pub mod faults;
-pub mod ota;
 pub mod fleet;
 pub mod login;
 pub mod metrics;
+pub mod ota;
 pub mod register;
 pub mod settings;
 
+pub use callback::CallbackPage;
 pub use campaign_detail::CampaignDetailPage;
 pub use campaign_new::CampaignNewPage;
-pub use callback::CallbackPage;
 pub use compare::ComparePage;
 pub use crashes::{CrashDetailPage, CrashesPage};
 pub use dashboard::DashboardPage;

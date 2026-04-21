@@ -290,11 +290,20 @@ fn FirmwareCard(
 #[component]
 fn StepDot(n: u8, active: bool, done: bool, label: String) -> Element {
     let (dot_class, text_class) = if active {
-        ("bg-ferrite-600 border-ferrite-500 text-white", "text-ferrite-400")
+        (
+            "bg-ferrite-600 border-ferrite-500 text-white",
+            "text-ferrite-400",
+        )
     } else if done {
-        ("bg-green-500/20 border-green-500/40 text-green-400", "text-green-400")
+        (
+            "bg-green-500/20 border-green-500/40 text-green-400",
+            "text-green-400",
+        )
     } else {
-        ("bg-surface-800 border-surface-600 text-gray-500", "text-gray-500")
+        (
+            "bg-surface-800 border-surface-600 text-gray-500",
+            "text-gray-500",
+        )
     };
     rsx! {
         div { class: "flex flex-col items-center gap-1",

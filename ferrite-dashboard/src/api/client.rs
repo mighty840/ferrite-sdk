@@ -386,7 +386,10 @@ impl ApiClient {
                 struct W {
                     campaigns: Vec<OtaCampaign>,
                 }
-                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                let w: W = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
                 Ok(w.campaigns)
             }
             401 => Err(ApiError::Unauthorized),
@@ -407,7 +410,10 @@ impl ApiClient {
                 struct W {
                     campaign: CampaignSummary,
                 }
-                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                let w: W = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
                 Ok(w.campaign)
             }
             401 => Err(ApiError::Unauthorized),
@@ -429,7 +435,10 @@ impl ApiClient {
                 struct W {
                     devices: Vec<CampaignDevice>,
                 }
-                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                let w: W = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
                 Ok(w.devices)
             }
             401 => Err(ApiError::Unauthorized),
@@ -465,7 +474,10 @@ impl ApiClient {
                 struct W {
                     campaign: OtaCampaign,
                 }
-                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                let w: W = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
                 Ok(w.campaign)
             }
             400 => Err(ApiError::Parse("invalid campaign request".into())),
@@ -531,7 +543,10 @@ impl ApiClient {
                 struct W {
                     artifacts: Vec<FirmwareArtifact>,
                 }
-                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                let w: W = resp
+                    .json()
+                    .await
+                    .map_err(|e| ApiError::Parse(e.to_string()))?;
                 Ok(w.artifacts)
             }
             401 => Err(ApiError::Unauthorized),
