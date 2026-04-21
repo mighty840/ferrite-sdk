@@ -371,6 +371,174 @@ impl ApiClient {
         }
     }
 
+    // ── OTA Campaigns ────────────────────────────────────────────────────────
+
+    pub async fn list_campaigns(&self) -> Result<Vec<OtaCampaign>, ApiError> {
+        let url = format!("{}/ota/campaigns", self.base_url);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct W {
+                    campaigns: Vec<OtaCampaign>,
+                }
+                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.campaigns)
+            }
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn get_campaign(&self, id: i64) -> Result<CampaignSummary, ApiError> {
+        let url = format!("{}/ota/campaigns/{}", self.base_url, id);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct W {
+                    campaign: CampaignSummary,
+                }
+                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.campaign)
+            }
+            401 => Err(ApiError::Unauthorized),
+            404 => Err(ApiError::NotFound),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn list_campaign_devices(&self, id: i64) -> Result<Vec<CampaignDevice>, ApiError> {
+        let url = format!("{}/ota/campaigns/{}/devices", self.base_url, id);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct W {
+                    devices: Vec<CampaignDevice>,
+                }
+                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.devices)
+            }
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn create_campaign(
+        &self,
+        name: &str,
+        firmware_id: i64,
+        target_version: &str,
+        strategy: &str,
+        rollout_percent: i64,
+    ) -> Result<OtaCampaign, ApiError> {
+        let url = format!("{}/ota/campaigns", self.base_url);
+        let body = serde_json::json!({
+            "name": name,
+            "firmware_id": firmware_id,
+            "target_version": target_version,
+            "strategy": strategy,
+            "rollout_percent": rollout_percent,
+        });
+        let resp = self
+            .build_post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            201 | 200 => {
+                #[derive(Deserialize)]
+                struct W {
+                    campaign: OtaCampaign,
+                }
+                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.campaign)
+            }
+            400 => Err(ApiError::Parse("invalid campaign request".into())),
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn activate_campaign(&self, id: i64) -> Result<(), ApiError> {
+        let url = format!("{}/ota/campaigns/{}/activate", self.base_url, id);
+        let resp = self
+            .build_post(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => Ok(()),
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn pause_campaign(&self, id: i64) -> Result<(), ApiError> {
+        let url = format!("{}/ota/campaigns/{}/pause", self.base_url, id);
+        let resp = self
+            .build_post(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => Ok(()),
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    pub async fn rollback_campaign(&self, id: i64) -> Result<(), ApiError> {
+        let url = format!("{}/ota/campaigns/{}/rollback", self.base_url, id);
+        let resp = self
+            .build_post(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => Ok(()),
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    // ── Firmware Artifacts ───────────────────────────────────────────────────
+
+    pub async fn list_firmware(&self) -> Result<Vec<FirmwareArtifact>, ApiError> {
+        let url = format!("{}/ota/firmware", self.base_url);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                #[derive(Deserialize)]
+                struct W {
+                    artifacts: Vec<FirmwareArtifact>,
+                }
+                let w: W = resp.json().await.map_err(|e| ApiError::Parse(e.to_string()))?;
+                Ok(w.artifacts)
+            }
+            401 => Err(ApiError::Unauthorized),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
     pub async fn delete_device(&self, device_key: &str) -> Result<(), ApiError> {
         let url = format!("{}/devices/{}", self.base_url, device_key);
         let resp = self
