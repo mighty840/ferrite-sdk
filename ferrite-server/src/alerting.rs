@@ -126,19 +126,23 @@ pub fn send_fault_alert(
     });
 }
 
-/// Background task that periodically checks for offline devices and sends alerts.
+/// Background task that periodically checks for offline devices and updates their status.
+/// Optionally sends webhook alerts when `ALERT_WEBHOOK_URL` is configured.
 pub fn spawn_offline_check_task(state: Arc<AppState>) {
-    if state.config.alert_webhook_url.is_none() {
-        tracing::info!("Alerting disabled (ALERT_WEBHOOK_URL not set)");
-        return;
-    }
-
     let offline_minutes = state.config.alert_offline_minutes;
-    tracing::info!(
-        "Alerting enabled: webhook={}, offline_threshold={}min",
-        state.config.alert_webhook_url.as_deref().unwrap_or(""),
-        offline_minutes
-    );
+
+    if let Some(ref url) = state.config.alert_webhook_url {
+        tracing::info!(
+            "Offline check enabled: webhook={}, offline_threshold={}min",
+            url,
+            offline_minutes
+        );
+    } else {
+        tracing::info!(
+            "Offline check enabled: no webhook, offline_threshold={}min",
+            offline_minutes
+        );
+    }
 
     tokio::spawn(async move {
         // Check every minute
@@ -166,22 +170,27 @@ async fn check_offline_devices(state: &Arc<AppState>, offline_minutes: u64) {
         Err(_) => return,
     };
 
-    // Drop the store lock before sending HTTP requests
-    let alerts: Vec<AlertPayload> = devices
+    // Collect stale devices (were "online" but no activity within threshold)
+    let stale_devices: Vec<_> = devices
         .iter()
-        .filter(|d| {
-            // Only alert on devices that were previously "online" and are now stale
-            d.status.as_deref() == Some("online") && d.last_seen < cutoff
-        })
-        .map(|d| AlertPayload::device_offline(&d.device_id, &d.last_seen, offline_minutes))
+        .filter(|d| d.status.as_deref() == Some("online") && d.last_seen < cutoff)
         .collect();
 
-    // Update status to "offline" for stale devices
-    for device in &devices {
-        if device.status.as_deref() == Some("online") && device.last_seen < cutoff {
-            let _ = store.update_device_status(device.id, "offline");
-        }
+    // Always update status to "offline" for stale devices
+    for device in &stale_devices {
+        let _ = store.update_device_status(device.id, "offline");
     }
+
+    // Only build alert payloads if webhook is configured
+    let alerts: Vec<AlertPayload> = if state.config.alert_webhook_url.is_some() {
+        stale_devices
+            .iter()
+            .map(|d| AlertPayload::device_offline(&d.device_id, &d.last_seen, offline_minutes))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     drop(store);
 
     for alert in alerts {
