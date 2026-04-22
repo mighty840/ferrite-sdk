@@ -128,7 +128,7 @@ export default defineConfig({
     ],
 
     footer: {
-      message: 'Released under the MIT License.',
+      message: 'Released under the MIT License. <a href="/ferrite-sdk/legal/privacy-policy">Privacy Policy</a> · <a href="/ferrite-sdk/legal/impressum">Impressum</a>',
       copyright: 'Copyright 2024-present ferrite contributors',
     },
   },
