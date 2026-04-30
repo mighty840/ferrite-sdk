@@ -4,14 +4,14 @@
 
 # ── Stage 1: Build ───────────────────────────────────────────────────
 
-FROM rust:1.84-bookworm AS builder
+FROM rust:latest AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup target add wasm32-unknown-unknown
-RUN cargo install dioxus-cli@0.6.3 --locked
+RUN cargo install dioxus-cli@0.7.6
 
 WORKDIR /app
 COPY . .
