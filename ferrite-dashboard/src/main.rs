@@ -35,6 +35,12 @@ pub enum Route {
         Fleet {},
         #[route("/compare")]
         Compare {},
+        #[route("/ota")]
+        Ota {},
+        #[route("/ota/campaigns/new")]
+        CampaignNew {},
+        #[route("/ota/campaigns/:id")]
+        CampaignDetail { id: String },
         #[route("/settings")]
         Settings {},
     #[end_layout]
@@ -146,6 +152,24 @@ fn Fleet() -> Element {
 #[component]
 fn Compare() -> Element {
     rsx! { ComparePage {} }
+}
+
+/// OTA campaigns list route handler.
+#[component]
+fn Ota() -> Element {
+    rsx! { OtaPage {} }
+}
+
+/// New campaign wizard route handler.
+#[component]
+fn CampaignNew() -> Element {
+    rsx! { CampaignNewPage {} }
+}
+
+/// Campaign detail route handler.
+#[component]
+fn CampaignDetail(id: String) -> Element {
+    rsx! { CampaignDetailPage { id } }
 }
 
 /// Settings page route handler.

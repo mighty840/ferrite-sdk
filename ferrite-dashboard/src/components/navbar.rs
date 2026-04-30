@@ -138,6 +138,12 @@ pub fn Navbar() -> Element {
                         on_click: move |_| mobile_open.set(false),
                     }
                     SidebarLink {
+                        to: Route::Ota {},
+                        label: "OTA",
+                        icon_path: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10",
+                        on_click: move |_| mobile_open.set(false),
+                    }
+                    SidebarLink {
                         to: Route::Compare {},
                         label: "Compare",
                         icon_path: "M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2",
