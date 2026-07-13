@@ -130,6 +130,120 @@ impl CrashGroup {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OtaCampaign {
+    pub id: i64,
+    pub name: String,
+    pub firmware_id: i64,
+    pub target_version: String,
+    pub strategy: String,
+    pub target_group_id: Option<i64>,
+    pub target_tags: Option<String>,
+    pub rollout_percent: i64,
+    pub failure_threshold: f64,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl OtaCampaign {
+    pub fn status_color(&self) -> &'static str {
+        match self.status.as_str() {
+            "active" => "text-green-400 bg-green-400/10 border-green-500/20",
+            "paused" => "text-yellow-400 bg-yellow-400/10 border-yellow-500/20",
+            "completed" => "text-blue-400 bg-blue-400/10 border-blue-500/20",
+            "rolled_back" => "text-orange-400 bg-orange-400/10 border-orange-500/20",
+            "failed" => "text-red-400 bg-red-400/10 border-red-500/20",
+            _ => "text-gray-400 bg-gray-400/10 border-gray-500/20",
+        }
+    }
+
+    pub fn strategy_color(&self) -> &'static str {
+        match self.strategy.as_str() {
+            "canary" => "text-amber-400 bg-amber-400/10 border-amber-500/20",
+            "scheduled" => "text-blue-400 bg-blue-400/10 border-blue-500/20",
+            _ => "text-gray-400 bg-gray-400/10 border-gray-500/20",
+        }
+    }
+
+    pub fn can_activate(&self) -> bool {
+        matches!(self.status.as_str(), "created" | "paused")
+    }
+
+    pub fn can_pause(&self) -> bool {
+        self.status == "active"
+    }
+
+    pub fn can_rollback(&self) -> bool {
+        matches!(self.status.as_str(), "active" | "paused")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CampaignSummary {
+    pub campaign: OtaCampaign,
+    pub pending: i64,
+    pub downloading: i64,
+    pub installed: i64,
+    pub failed: i64,
+}
+
+impl CampaignSummary {
+    pub fn total_devices(&self) -> i64 {
+        self.pending + self.downloading + self.installed + self.failed
+    }
+
+    pub fn progress_pct(&self) -> u32 {
+        let total = self.total_devices();
+        if total == 0 {
+            return 0;
+        }
+        ((self.installed * 100) / total) as u32
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CampaignDevice {
+    pub id: i64,
+    pub campaign_id: i64,
+    pub device_id: String,
+    pub status: String,
+    pub updated_at: String,
+}
+
+impl CampaignDevice {
+    pub fn status_color(&self) -> &'static str {
+        match self.status.as_str() {
+            "installed" => "text-green-400 bg-green-400/10 border-green-500/20",
+            "downloading" => "text-blue-400 bg-blue-400/10 border-blue-500/20",
+            "failed" => "text-red-400 bg-red-400/10 border-red-500/20",
+            _ => "text-gray-400 bg-gray-400/10 border-gray-500/20",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FirmwareArtifact {
+    pub id: i64,
+    pub version: String,
+    pub build_id: i64,
+    pub sha256: String,
+    pub size: i64,
+    pub filename: String,
+    pub signer: Option<String>,
+    pub created_at: String,
+}
+
+impl FirmwareArtifact {
+    pub fn size_display(&self) -> String {
+        if self.size >= 1024 * 1024 {
+            format!("{:.1} MB", self.size as f64 / (1024.0 * 1024.0))
+        } else {
+            format!("{} KB", self.size / 1024)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TraceEntry {
     pub id: String,
     pub device_id: String,
