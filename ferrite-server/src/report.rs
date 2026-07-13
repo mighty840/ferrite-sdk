@@ -28,7 +28,7 @@ pub fn print_report(store: &Store) -> anyhow::Result<()> {
             fault_count,
             metric_count,
             reboot_count,
-            &dev.last_seen,
+            dev.last_seen,
         );
     }
 
@@ -67,7 +67,7 @@ pub fn print_faults(store: &Store) -> anyhow::Result<()> {
             f.pc,
             f.lr,
             truncate(f.symbol.as_deref().unwrap_or("-"), 29),
-            &f.created_at,
+            f.created_at,
         );
     }
 
@@ -104,7 +104,7 @@ pub fn print_metrics(store: &Store) -> anyhow::Result<()> {
             truncate(&m.key, 24),
             type_name,
             truncate(&m.value_json, 34),
-            &m.created_at,
+            m.created_at,
         );
     }
 
