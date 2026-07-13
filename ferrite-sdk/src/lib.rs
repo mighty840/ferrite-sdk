@@ -12,6 +12,9 @@ pub mod trace;
 pub mod transport;
 pub mod upload;
 
+#[cfg(feature = "http")]
+pub mod ota;
+
 #[cfg(feature = "defmt")]
 pub mod defmt_sink;
 
