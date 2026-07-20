@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup target add wasm32-unknown-unknown
-RUN cargo install dioxus-cli@0.7.6
+RUN cargo install --locked dioxus-cli@0.7.6
 
 WORKDIR /app
 COPY . .
