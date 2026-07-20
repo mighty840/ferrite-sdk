@@ -1,0 +1,46 @@
+# Build the ferrite-server container image and deploy it to the
+# personal orca cluster (2026-07 infra split, Phase 4).
+name: deploy-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "ferrite-server/**"
+      - "ferrite-dashboard/**"
+      - ".github/workflows/deploy-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/mighty840/ferrite:latest,ghcr.io/mighty840/ferrite:${{ github.sha }}
+
+      - name: Trigger Orca redeploy
+        run: |
+          PAYLOAD=$(printf '{"ref":"refs/heads/main","repository":{"full_name":"mighty840/ferrite-sdk"},"head_commit":{"id":"%s","message":"CI deploy"}}' "${GITHUB_SHA}")
+          SIG=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ secrets.ORCA_WEBHOOK_SECRET }}" | awk '{print $2}')
+          curl -fsS -w "\nHTTP %{http_code}" -X POST "http://217.154.26.121:6880/api/v1/webhooks/github" \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: sha256=$SIG" \
+            -d "$PAYLOAD"
