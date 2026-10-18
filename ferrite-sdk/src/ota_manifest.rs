@@ -323,8 +323,9 @@ fn decode_hex(hex: &[u8], out: &mut [u8]) -> Result<(), ManifestError> {
             _ => Err(ManifestError::InvalidHex),
         }
     }
-    for (i, pair) in hex.chunks_exact(2).enumerate() {
-        out[i] = (nibble(pair[0])? << 4) | nibble(pair[1])?;
+    let (pairs, _) = hex.as_chunks::<2>();
+    for (i, &[hi, lo]) in pairs.iter().enumerate() {
+        out[i] = (nibble(hi)? << 4) | nibble(lo)?;
     }
     Ok(())
 }
