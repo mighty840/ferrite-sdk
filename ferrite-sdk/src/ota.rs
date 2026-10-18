@@ -19,10 +19,11 @@
 //! const SECURITY_VERSION: u32 = 3;
 //!
 //! let policy = UpdatePolicy { trusted_keys: &OTA_KEYS, min_security_version: SECURITY_VERSION };
-//! let mut ota = OtaClient::new(tcp, "MY-DEVICE", build_id, "http://192.168.1.10:4000", None);
-//! match ota.check().await {
+//! let ota = OtaClient::new("MY-DEVICE", build_id, "http://192.168.1.10:4000", None);
+//! match ota.check(&mut new_tcp_connection().await?).await {
 //!     Ok(OtaCheckResult::UpdateAvailable(target)) => {
-//!         let manifest = ota.download(&target, &policy, |offset, data| flash.write(offset, data)).await?;
+//!         let mut tcp = new_tcp_connection().await?; // one connection per request
+//!         let manifest = ota.download(&mut tcp, &target, &policy, |offset, data| flash.write(offset, data)).await?;
 //!         mcuboot_mark_slot_ready(); // only after download() returned Ok
 //!         reboot();
 //!     }
@@ -78,36 +79,36 @@ pub enum OtaError<E = core::convert::Infallible> {
 
 /// OTA client using `reqwless` HTTP (WiFi / Ethernet devices).
 ///
-/// Generic over the TCP connection type; the platform's network stack
-/// supplies a `T: embedded_io_async::Read + Write` handle.
-pub struct OtaClient<'a, T: Read + Write> {
-    connection: T,
+/// Each call takes its own connection, supplied by the platform's network
+/// stack (`T: embedded_io_async::Read + Write`, e.g. an embassy-net
+/// `TcpSocket`). Responses are not drained, so a connection must not be
+/// reused for a second request; open a fresh one per call.
+pub struct OtaClient<'a> {
     device_id: &'a str,
     current_build_id: u64,
-    base_url: &'a str,
+    host: &'a str,
     api_key: Option<&'a str>,
 }
 
-impl<'a, T: Read + Write> OtaClient<'a, T> {
+impl<'a> OtaClient<'a> {
     /// Create a new OTA client.
     ///
-    /// - `connection`: Platform TCP socket (from esp-wifi / embassy-net).
     /// - `device_id`: Exact device ID registered with the server.
     /// - `current_build_id`: The `build_id` this firmware was compiled with.
-    /// - `base_url`: Server root, e.g. `"http://192.168.1.10:4000"`.
+    /// - `base_url`: Server (or gateway) root, e.g. `"http://192.168.0.103:4001"`.
+    ///   Only the host part is used, for the `Host` header; the caller's
+    ///   connection decides where requests actually go.
     /// - `api_key`: Optional `X-API-Key` header value.
     pub fn new(
-        connection: T,
         device_id: &'a str,
         current_build_id: u64,
         base_url: &'a str,
         api_key: Option<&'a str>,
     ) -> Self {
         Self {
-            connection,
             device_id,
             current_build_id,
-            base_url,
+            host: host_of(base_url),
             api_key,
         }
     }
@@ -116,26 +117,18 @@ impl<'a, T: Read + Write> OtaClient<'a, T> {
     ///
     /// Returns `UpToDate` when no target is set (404) or when the target's
     /// `build_id` matches `current_build_id`.
-    pub async fn check(&mut self) -> Result<OtaCheckResult, OtaError> {
-        let mut url: heapless::String<256> = heapless::String::new();
-        url.push_str(self.base_url)
-            .and_then(|_| url.push_str("/ota/targets/"))
-            .and_then(|_| url.push_str(self.device_id))
+    pub async fn check<T: Read + Write>(
+        &self,
+        connection: &mut T,
+    ) -> Result<OtaCheckResult, OtaError> {
+        let mut path: heapless::String<160> = heapless::String::new();
+        path.push_str("/ota/targets/")
+            .and_then(|_| path.push_str(self.device_id))
             .map_err(|_| OtaError::ParseError)?;
 
-        let mut conn = HttpConnection::Plain(&mut self.connection);
+        let mut conn = HttpConnection::Plain(connection);
         let mut rx_buf = [0u8; 1024];
-
-        let resp = if let Some(key) = self.api_key {
-            let headers = [("X-API-Key", key)];
-            let req = Request::new(Method::GET, url.as_str())
-                .headers(&headers)
-                .build();
-            conn.send(req, &mut rx_buf).await.map_err(OtaError::Http)?
-        } else {
-            let req = Request::new(Method::GET, url.as_str()).build();
-            conn.send(req, &mut rx_buf).await.map_err(OtaError::Http)?
-        };
+        let resp = self.get(&mut conn, &path, &mut rx_buf).await?;
 
         match resp.status.0 {
             404 => return Ok(OtaCheckResult::UpToDate),
@@ -152,7 +145,7 @@ impl<'a, T: Read + Write> OtaClient<'a, T> {
                 match body.read(&mut body_buf[total..]).await {
                     Ok(0) => break,
                     Ok(n) => total += n,
-                    Err(_) => break,
+                    Err(_) => return Err(OtaError::ReadError),
                 }
             }
             total
@@ -199,35 +192,25 @@ impl<'a, T: Read + Write> OtaClient<'a, T> {
     /// the slot must not be marked bootable unless this returns `Ok`.
     ///
     /// Returns the verified manifest.
-    pub async fn download<F, E>(
-        &mut self,
+    pub async fn download<T, F, E>(
+        &self,
+        connection: &mut T,
         target: &OtaTarget,
         policy: &UpdatePolicy<'_>,
         mut flash_write: F,
     ) -> Result<Manifest, OtaError<E>>
     where
+        T: Read + Write,
         F: FnMut(u32, &[u8]) -> Result<(), E>,
     {
-        let mut url: heapless::String<256> = heapless::String::new();
-        url.push_str(self.base_url)
-            .and_then(|_| url.push_str(&target.firmware_url))
-            .map_err(|_| OtaError::ParseError)?;
-
-        let mut conn = HttpConnection::Plain(&mut self.connection);
+        let mut conn = HttpConnection::Plain(connection);
         // Larger than check()'s buffer: response headers include the
         // 336-character manifest.
         let mut rx_buf = [0u8; 2048];
-
-        let resp = if let Some(key) = self.api_key {
-            let headers = [("X-API-Key", key)];
-            let req = Request::new(Method::GET, url.as_str())
-                .headers(&headers)
-                .build();
-            conn.send(req, &mut rx_buf).await.map_err(OtaError::Http)?
-        } else {
-            let req = Request::new(Method::GET, url.as_str()).build();
-            conn.send(req, &mut rx_buf).await.map_err(OtaError::Http)?
-        };
+        let resp = self
+            .get(&mut conn, &target.firmware_url, &mut rx_buf)
+            .await
+            .map_err(OtaError::widen)?;
 
         if resp.status.0 != 200 {
             return Err(OtaError::ServerError(resp.status.0));
@@ -272,6 +255,53 @@ impl<'a, T: Read + Write> OtaClient<'a, T> {
         verifier.finish().map_err(OtaError::Manifest)?;
         Ok(manifest.clone())
     }
+
+    /// Send an origin-form `GET path` with `Host` (and `X-API-Key`).
+    async fn get<'x, 'b, T: Read + Write>(
+        &self,
+        conn: &'x mut HttpConnection<'x, T>,
+        path: &str,
+        rx_buf: &'b mut [u8],
+    ) -> Result<reqwless::response::Response<'x, 'b, HttpConnection<'x, T>>, OtaError> {
+        let api_key_header;
+        let headers: &[(&str, &str)] = match self.api_key {
+            Some(key) => {
+                api_key_header = [("X-API-Key", key)];
+                &api_key_header
+            }
+            None => &[],
+        };
+        let req = Request::new(Method::GET, path)
+            .host(self.host)
+            .headers(headers)
+            .build();
+        conn.send(req, rx_buf).await.map_err(OtaError::Http)
+    }
+}
+
+impl OtaError {
+    /// Carry a request-phase error into a download error type.
+    fn widen<E>(self) -> OtaError<E> {
+        match self {
+            OtaError::Http(e) => OtaError::Http(e),
+            OtaError::ServerError(c) => OtaError::ServerError(c),
+            OtaError::ParseError => OtaError::ParseError,
+            OtaError::MissingManifest => OtaError::MissingManifest,
+            OtaError::Manifest(e) => OtaError::Manifest(e),
+            OtaError::TargetMismatch => OtaError::TargetMismatch,
+            OtaError::ReadError => OtaError::ReadError,
+            OtaError::FlashError(never) => match never {},
+        }
+    }
+}
+
+/// Host part of a base URL: `http://10.0.0.2:4001/x` → `10.0.0.2:4001`.
+fn host_of(base_url: &str) -> &str {
+    let rest = base_url
+        .strip_prefix("http://")
+        .or_else(|| base_url.strip_prefix("https://"))
+        .unwrap_or(base_url);
+    rest.split('/').next().unwrap_or(rest)
 }
 
 // ── JSON helpers ─────────────────────────────────────────────────────────────
@@ -312,10 +342,11 @@ mod tests {
     const IMAGE: [u8; 100] = [0xA5; 100];
     const BUILD_ID: u64 = 42;
 
-    /// Connection that discards the request and replays a canned response.
+    /// Connection that records the request and replays a canned response.
     struct MockConn<'a> {
         response: &'a [u8],
         pos: usize,
+        request: heapless::Vec<u8, 512>,
     }
 
     impl embedded_io_async::ErrorType for MockConn<'_> {
@@ -333,6 +364,7 @@ mod tests {
 
     impl Write for MockConn<'_> {
         async fn write(&mut self, buf: &[u8]) -> Result<usize, Infallible> {
+            let _ = self.request.extend_from_slice(buf);
             Ok(buf.len())
         }
         async fn flush(&mut self) -> Result<(), Infallible> {
@@ -421,18 +453,72 @@ mod tests {
             trusted_keys: keys,
             min_security_version: 1,
         };
-        let conn = MockConn {
-            response: resp,
-            pos: 0,
-        };
-        let mut client = OtaClient::new(conn, "dev-1", 0, "http://ferrite.test", None);
+        let mut conn = mock(resp);
+        let client = OtaClient::new("dev-1", 0, "http://ferrite.test", None);
         let mut flashed = heapless::Vec::<u8, 256>::new();
-        let result = block_on(
-            client.download(&target(target_build_id), &policy, |_, data| {
-                flashed.extend_from_slice(data).map_err(|_| unreachable!())
-            }),
-        );
+        let result = block_on(client.download(
+            &mut conn,
+            &target(target_build_id),
+            &policy,
+            |_, data| flashed.extend_from_slice(data).map_err(|_| unreachable!()),
+        ));
         (result, flashed)
+    }
+
+    fn mock(response: &[u8]) -> MockConn<'_> {
+        MockConn {
+            response,
+            pos: 0,
+            request: heapless::Vec::new(),
+        }
+    }
+
+    #[test]
+    fn requests_are_origin_form_with_host_and_key() {
+        let body = br#"{"target":{"target_build_id":9,"target_version":"2.0.0","firmware_url":"/ota/firmware/4/download"}}"#;
+        let resp = response(None, body);
+        let mut conn = mock(&resp);
+        let client = OtaClient::new("dev-1", 1, "http://192.168.0.103:4001/", Some("k3y"));
+        let result = block_on(client.check(&mut conn)).unwrap();
+
+        let req = core::str::from_utf8(&conn.request).unwrap();
+        assert!(
+            req.starts_with("GET /ota/targets/dev-1 HTTP/1.1\r\n"),
+            "{req}"
+        );
+        assert!(req.contains("Host: 192.168.0.103:4001\r\n"), "{req}");
+        assert!(req.contains("X-API-Key: k3y\r\n"), "{req}");
+        match result {
+            OtaCheckResult::UpdateAvailable(t) => {
+                assert_eq!(t.build_id, 9);
+                assert_eq!(t.firmware_url.as_str(), "/ota/firmware/4/download");
+            }
+            OtaCheckResult::UpToDate => panic!("expected update"),
+        }
+    }
+
+    #[test]
+    fn check_reports_up_to_date_for_same_build_and_404() {
+        let body = br#"{"target":{"target_build_id":5,"firmware_url":"/x"}}"#;
+        let resp = response(None, body);
+        let client = OtaClient::new("dev-1", 5, "http://h", None);
+        assert!(matches!(
+            block_on(client.check(&mut mock(&resp))),
+            Ok(OtaCheckResult::UpToDate)
+        ));
+
+        let not_found = b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        assert!(matches!(
+            block_on(client.check(&mut mock(not_found))),
+            Ok(OtaCheckResult::UpToDate)
+        ));
+    }
+
+    #[test]
+    fn host_parsing() {
+        assert_eq!(host_of("http://10.0.0.2:4001"), "10.0.0.2:4001");
+        assert_eq!(host_of("http://example.com/base/"), "example.com");
+        assert_eq!(host_of("gateway:4001"), "gateway:4001");
     }
 
     #[test]

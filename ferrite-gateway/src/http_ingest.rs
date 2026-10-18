@@ -3,6 +3,11 @@
 //! Devices on the local network POST raw chunks to the gateway's HTTP endpoint,
 //! which then forwards them to the upstream ferrite-server. This is the
 //! industrial pattern: all devices route through the edge gateway.
+//!
+//! The same listener relays the device-facing OTA reads to the server (see
+//! [`crate::ota_relay`]), so devices behind the gateway can update.
+
+use std::sync::Arc;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -10,21 +15,28 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
 use crate::framing::{ChunkFramer, DecodedChunk};
+use crate::ota_relay::{relay_path, OtaRelay};
 
 const MAX_BODY: usize = 8192;
 
 /// Start an HTTP ingest server on the given port.
-/// Accepts POST /ingest/chunks with raw chunk bytes in the body.
-pub async fn http_ingest_task(port: u16, tx: mpsc::Sender<DecodedChunk>) -> anyhow::Result<()> {
+/// Accepts POST /ingest/chunks with raw chunk bytes in the body, and relays
+/// device OTA reads when `ota_relay` is set.
+pub async fn http_ingest_task(
+    port: u16,
+    tx: mpsc::Sender<DecodedChunk>,
+    ota_relay: Option<Arc<OtaRelay>>,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port)).await?;
     info!("HTTP ingest listening on 0.0.0.0:{}", port);
 
     loop {
         let (mut stream, addr) = listener.accept().await?;
         let tx = tx.clone();
+        let ota_relay = ota_relay.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(&mut stream, &tx).await {
+            if let Err(e) = handle_connection(&mut stream, &tx, ota_relay.as_deref()).await {
                 debug!("Connection from {} error: {}", addr, e);
             }
         });
@@ -34,6 +46,7 @@ pub async fn http_ingest_task(port: u16, tx: mpsc::Sender<DecodedChunk>) -> anyh
 async fn handle_connection(
     stream: &mut tokio::net::TcpStream,
     tx: &mpsc::Sender<DecodedChunk>,
+    ota_relay: Option<&OtaRelay>,
 ) -> anyhow::Result<()> {
     let mut buf = vec![0u8; MAX_BODY + 1024]; // extra for headers
     let mut total = 0;
@@ -73,7 +86,18 @@ async fn handle_connection(
     let body = &buf[body_start..total];
 
     // Route
-    if first_line.starts_with("GET /health") {
+    let relayed = match (ota_relay, first_line.strip_prefix("GET ")) {
+        (Some(relay), Some(rest)) => rest
+            .split_whitespace()
+            .next()
+            .and_then(relay_path)
+            .map(|path| (relay, path)),
+        _ => None,
+    };
+
+    if let Some((relay, path)) = relayed {
+        relay.relay(path, stream).await?;
+    } else if first_line.starts_with("GET /health") {
         let resp = "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"ok\"}";
         stream.write_all(resp.as_bytes()).await?;
     } else if first_line.starts_with("POST /ingest") {
