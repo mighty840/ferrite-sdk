@@ -114,6 +114,10 @@ jobs:
 
       # Version tag only: deploy-image.yml keeps owning :latest and the demo.
       - uses: docker/build-push-action@v6
+        env:
+          # The action uploads a build record as a `*.dockerbuild` artifact,
+          # which the release job's download-all can't extract (v0.1.0 failed).
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           push: true
