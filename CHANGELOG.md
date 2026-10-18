@@ -33,27 +33,34 @@ with a server, dashboard, CLI, edge gateway, and signed OTA updates.
 
 ### Dashboard (`ferrite-dashboard`, Dioxus/WASM)
 - Fleet overview and topology, devices, faults, crashes, metrics charts, device comparison, CSV/JSON export, OTA campaigns and firmware.
+- Deep links and reloads (e.g. `/ota/campaigns/3`) work when the server serves the dashboard; the web manifest and icon ship with the build, and the unused service worker is gone.
 
 ### CLI (`ferrite`)
 - Devices, faults, groups, metrics, OTA targets.
 - `ferrite ota keygen | sign | verify | upload` for signed firmware.
 - `ferrite report builds | campaign | history` for update-reach reports.
 - `ferrite evidence list | verify`; CSV output quotes fields that need it.
+- `--since` on `faults` and `metrics` uses the server's timestamp format; same-day rows were filtered out before.
 
 ### Gateway (`ferrite-gateway`)
 - Bridges USB serial, BLE GATT and HTTP-ingest devices to the server with offline buffering.
 - Reconnects USB serial ports after a reset/replug and BLE devices after a dropped or silent connection.
 - Relays device OTA reads (target, firmware, manifest) to the server with the gateway's credentials.
 
+### Linux agent (`ferrite-agent`)
+- Reports embedded Linux devices with the same chunk format as the MCU SDK: image identity from `/etc/os-release`, CPU/memory/disk/temperature, watched systemd units (e.g. the CODESYS runtime), failed units, core dumps, and reboot reasons.
+- Offline spool, unprivileged hardened systemd unit, optional TLS (`tls` feature).
+
 ### Examples
 - Embassy: nRF52840, nRF5340, RP2040, RP235x, ESP32-C3, STM32L4A6 (USB CDC), STM32WL55, STM32H563 (Ethernet).
 - RTIC: STM32F4, STM32WL55. C: STM32L4A6 (bare metal), nRF5340 (Zephyr).
-- STM32H563: embassy-boot bootloader + signed OTA app with watchdog-driven rollback (`FERRITE_BUILD_ID`, `FERRITE_OTA_PUBKEY`, `FERRITE_SECURITY_VERSION`).
+- STM32H563: embassy-boot bootloader + signed OTA app with watchdog-driven rollback (`FERRITE_BUILD_ID`, `FERRITE_FIRMWARE_VERSION`, `FERRITE_OTA_PUBKEY`, `FERRITE_SECURITY_VERSION`).
 
 ### Build and release
 - `Cargo.lock` files are committed and CI builds with `--locked`.
 - Releases publish `libferrite_ffi.a` for Cortex-M targets, the C header, Linux x86_64 binaries for server/gateway/CLI, `SHA256SUMS`, and a version-tagged server image (`ghcr.io/mighty840/ferrite:<tag>`).
 - QEMU integration tests (Cortex-M3) run in CI, including manifest verification.
+- Docker image: `DB_RESET_INTERVAL` (demo reset) defaults to off, and when set it restarts the server around the reset so the reset takes effect; uploaded firmware and ELF files live under the mounted `data/` directory.
 
 ### Known limitations
 - Not published to crates.io yet: the `ferrite` and `ferrite-cli` names are taken there (#79).

@@ -1,0 +1,29 @@
+[Unit]
+Description=ferrite device agent
+Documentation=https://mighty840.github.io/ferrite-sdk/guide/linux-agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ferrite-agent --config /etc/ferrite/agent.conf run
+Restart=always
+RestartSec=10
+
+# Unprivileged. State (boot tracking, offline spool) in /var/lib/ferrite-agent.
+DynamicUser=yes
+StateDirectory=ferrite-agent
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target
