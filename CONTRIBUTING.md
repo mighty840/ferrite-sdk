@@ -245,6 +245,17 @@ nrfjprog --program build/zephyr/zephyr.hex -f NRF53 --coprocessor CP_APPLICATION
 
 See `CLAUDE.md` for detailed flash instructions and common pitfalls.
 
+## Sign your commits (DCO)
+
+Every commit in a pull request needs a `Signed-off-by` line. It certifies the [Developer Certificate of Origin](https://developercertificate.org/): you wrote the change, or otherwise have the right to submit it under the project's MIT licence.
+
+```bash
+git commit -s -m "fix(server): ..."       # adds: Signed-off-by: Your Name <you@example.com>
+git rebase --signoff main                 # sign off commits you already made
+```
+
+The name and email must match the commit author. The **DCO** check fails a PR with an unsigned commit; bots (`*[bot]`) are exempt.
+
 ## CI
 
 Every PR runs:
@@ -255,6 +266,7 @@ Every PR runs:
 | Keycloak tests | Server integration with real Keycloak container |
 | Embedded builds | SDK compiles for nRF52840, RP2040, STM32F4 targets |
 | QEMU tests | Integration tests on emulated Cortex-M3 |
+| DCO | Every commit carries a `Signed-off-by` matching its author |
 
 The deploy job triggers a Coolify webhook on merge to `main`.
 
