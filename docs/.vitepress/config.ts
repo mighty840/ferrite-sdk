@@ -37,6 +37,7 @@ export default defineConfig({
             { text: 'Transport Layer', link: '/guide/transports' },
             { text: 'Security & Encryption', link: '/guide/security' },
             { text: 'Signed OTA Updates', link: '/guide/ota' },
+            { text: 'Update-Reach Reports', link: '/guide/update-reach' },
           ],
         },
       ],

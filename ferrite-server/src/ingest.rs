@@ -1408,6 +1408,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/devices/:id/faults", get(list_device_faults))
         .route("/devices/:id/metrics", get(list_device_metrics))
         .route("/faults", get(list_all_faults))
+        // Update-reach reports (#78)
+        .route("/reports/fleet/builds", get(crate::reach::fleet_builds))
+        .route("/reports/campaigns/:id", get(crate::reach::campaign_reach))
+        .route(
+            "/reports/devices/:device_id/firmware-history",
+            get(crate::reach::firmware_history),
+        )
         .route("/crashes", get(crate::crashes::list_crash_groups))
         .route("/crashes/:id", get(crate::crashes::get_crash_group_detail))
         .route("/metrics", get(list_all_metrics))

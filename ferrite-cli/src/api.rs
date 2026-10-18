@@ -96,6 +96,42 @@ pub struct OtaTarget {
     pub created_at: String,
 }
 
+/// Devices running one build (`GET /reports/fleet/builds`).
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+pub struct BuildRow {
+    pub firmware_version: String,
+    pub build_id: u64,
+    pub devices: i64,
+    pub online: i64,
+    #[tabled(display_with = "display_option")]
+    pub last_seen: Option<String>,
+}
+
+/// One campaign device in an update-reach report.
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+pub struct ReachDevice {
+    pub device_id: String,
+    pub status: String,
+    pub on_target: bool,
+    #[tabled(display_with = "display_option")]
+    pub current_version: Option<String>,
+    #[tabled(display_with = "display_option")]
+    pub current_build_id: Option<u64>,
+    pub reachable: bool,
+    #[tabled(display_with = "display_option")]
+    pub installed_at: Option<String>,
+    #[tabled(display_with = "display_option")]
+    pub time_to_patch_secs: Option<i64>,
+}
+
+/// A build a device reported, first seen at `observed_at`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+pub struct FirmwareObservation {
+    pub build_id: u64,
+    pub firmware_version: String,
+    pub observed_at: String,
+}
+
 // ---------------------------------------------------------------------------
 // Display helpers for tabled
 // ---------------------------------------------------------------------------
@@ -396,6 +432,49 @@ impl ApiClient {
         Ok(target)
     }
 
+    // -- Reports --
+
+    fn get_json(&self, path: &str) -> Result<serde_json::Value> {
+        let resp = self
+            .http
+            .get(self.url(path))
+            .header("Authorization", &self.auth_header)
+            .send()
+            .context("failed to reach server")?;
+        self.check_response(resp)
+    }
+
+    pub fn report_builds(&self, group_id: Option<i64>, tag: Option<&str>) -> Result<Vec<BuildRow>> {
+        let mut query = Vec::new();
+        if let Some(g) = group_id {
+            query.push(format!("group_id={g}"));
+        }
+        if let Some(t) = tag {
+            query.push(format!("tag={}", urlencode(t)));
+        }
+        let path = if query.is_empty() {
+            "/reports/fleet/builds".to_string()
+        } else {
+            format!("/reports/fleet/builds?{}", query.join("&"))
+        };
+        let body = self.get_json(&path)?;
+        Ok(serde_json::from_value(body["builds"].clone())?)
+    }
+
+    /// The campaign's update-reach report as returned by the server.
+    pub fn report_campaign(&self, campaign_id: i64) -> Result<serde_json::Value> {
+        let body = self.get_json(&format!("/reports/campaigns/{campaign_id}"))?;
+        Ok(body["reach"].clone())
+    }
+
+    pub fn report_firmware_history(&self, device_id: &str) -> Result<Vec<FirmwareObservation>> {
+        let body = self.get_json(&format!(
+            "/reports/devices/{}/firmware-history",
+            urlencode(device_id)
+        ))?;
+        Ok(serde_json::from_value(body["history"].clone())?)
+    }
+
     /// Upload a firmware image; returns the stored artifact as JSON.
     pub fn upload_firmware(
         &self,
@@ -478,4 +557,16 @@ impl ApiClient {
         }
         Ok(())
     }
+}
+
+/// Percent-encode a path or query component.
+fn urlencode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }

@@ -1,6 +1,6 @@
 use crate::api::types::*;
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading};
+use crate::components::{ErrorDisplay, ExportButtons, Loading};
 use crate::Route;
 use dioxus::prelude::*;
 
@@ -31,6 +31,18 @@ pub fn CampaignDetailPage(id: String) -> Element {
         client.list_campaign_devices(campaign_id).await
     });
 
+    // Update reach (#78): who runs the target build, time to patch.
+    let reach_resource = use_resource(move || async move {
+        let _tick = poll_tick();
+        let _r = reload();
+        let client = crate::api::client::authenticated_client(&auth_state());
+        let reach = client.get_campaign_reach(campaign_id).await?;
+        let csv = client
+            .get_text(&format!("/reports/campaigns/{campaign_id}?format=csv"))
+            .await?;
+        Ok::<_, ApiError>((reach.0, reach.1, csv))
+    });
+
     let summary_binding = summary_resource.read();
     let summary = match &*summary_binding {
         None => return rsx! { Loading {} },
@@ -41,6 +53,16 @@ pub fn CampaignDetailPage(id: String) -> Element {
     let devices: Vec<CampaignDevice> = match &*devices_resource.read() {
         Some(Ok(d)) => d.clone(),
         _ => vec![],
+    };
+
+    let reach = match &*reach_resource.read() {
+        Some(Ok(r)) => Some(r.clone()),
+        _ => None,
+    };
+    let reach_by_device = |id: &str| {
+        reach
+            .as_ref()
+            .and_then(|(r, _, _)| r.devices.iter().find(|d| d.device_id == id).cloned())
     };
 
     let camp = &summary.campaign;
@@ -153,6 +175,49 @@ pub fn CampaignDetailPage(id: String) -> Element {
                 }
             }
 
+            // Update reach
+            if let Some((r, json, csv)) = reach.clone() {
+                div {
+                    class: "bg-surface-900 rounded-xl border border-surface-700 p-5 mb-6",
+                    div { class: "flex items-center justify-between mb-4",
+                        div {
+                            h2 { class: "text-sm font-semibold text-gray-200", "Update reach" }
+                            p { class: "text-xs text-gray-500 mt-0.5",
+                                "Devices reporting target build {r.target_build_id}"
+                                if let Some(at) = &r.activated_at { " · activated {at}" }
+                            }
+                        }
+                        ExportButtons {
+                            csv_data: csv,
+                            json_data: json,
+                            filename_base: format!("campaign-{campaign_id}-reach"),
+                        }
+                    }
+                    div { class: "grid grid-cols-2 sm:grid-cols-4 gap-4",
+                        ReachStat {
+                            label: "On target build",
+                            value: format!("{}/{}", r.on_target, r.targeted),
+                            hint: format!("{}%", r.percent_on_target),
+                        }
+                        ReachStat {
+                            label: "Unreachable",
+                            value: r.unreachable.to_string(),
+                            hint: "not on target, offline".to_string(),
+                        }
+                        ReachStat {
+                            label: "Median time to patch",
+                            value: r.time_to_patch.median_secs.map(format_duration_secs).unwrap_or_else(|| "–".into()),
+                            hint: format!("{} device(s) patched", r.time_to_patch.count),
+                        }
+                        ReachStat {
+                            label: "Slowest",
+                            value: r.time_to_patch.max_secs.map(format_duration_secs).unwrap_or_else(|| "–".into()),
+                            hint: "activation → first report of target".to_string(),
+                        }
+                    }
+                }
+            }
+
             // Device table
             div {
                 class: "bg-surface-900 rounded-xl border border-surface-700",
@@ -175,6 +240,8 @@ pub fn CampaignDetailPage(id: String) -> Element {
                                 tr { class: "border-b border-surface-700",
                                     th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Device ID" }
                                     th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Status" }
+                                    th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Running build" }
+                                    th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Time to patch" }
                                     th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Last Updated" }
                                 }
                             }
@@ -192,6 +259,26 @@ pub fn CampaignDetailPage(id: String) -> Element {
                                             span {
                                                 class: "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border {device.status_color()}",
                                                 "{device.status}"
+                                            }
+                                        }
+                                        {
+                                            let rd = reach_by_device(&device.device_id);
+                                            let build = rd.as_ref().and_then(|d| d.current_build_id).map(|b| b.to_string()).unwrap_or_else(|| "–".into());
+                                            let on_target = rd.as_ref().is_some_and(|d| d.on_target);
+                                            let unreachable = rd.as_ref().is_some_and(|d| !d.reachable && !d.on_target);
+                                            let ttp = match &rd {
+                                                Some(d) if d.patched_before_campaign => "already on target".to_string(),
+                                                Some(d) => d.time_to_patch_secs.map(format_duration_secs).unwrap_or_else(|| "–".into()),
+                                                None => "–".into(),
+                                            };
+                                            rsx! {
+                                                td { class: "px-5 py-3 font-mono text-xs",
+                                                    span { class: if on_target { "text-green-400" } else { "text-gray-300" }, "{build}" }
+                                                    if unreachable {
+                                                        span { class: "ml-2 text-[10px] text-yellow-500", "unreachable" }
+                                                    }
+                                                }
+                                                td { class: "px-5 py-3 text-gray-400 text-xs font-mono", "{ttp}" }
                                             }
                                         }
                                         td { class: "px-5 py-3 text-gray-500 text-xs font-mono",
@@ -231,6 +318,18 @@ fn ProgressCard(label: String, value: i64, color: String) -> Element {
             class: "bg-surface-900 rounded-xl border border-surface-700 p-4",
             p { class: "text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1", "{label}" }
             p { class: "text-2xl font-bold font-mono {accent}", "{value}" }
+        }
+    }
+}
+
+#[component]
+fn ReachStat(label: String, value: String, hint: String) -> Element {
+    rsx! {
+        div {
+            class: "bg-surface-800/50 rounded-lg border border-surface-700 p-3",
+            p { class: "text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1", "{label}" }
+            p { class: "text-xl font-bold font-mono text-gray-100", "{value}" }
+            p { class: "text-[10px] text-gray-500 mt-1", "{hint}" }
         }
     }
 }

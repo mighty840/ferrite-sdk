@@ -1039,3 +1039,142 @@ async fn rolled_back_device_is_failed_and_no_longer_offered_the_build() {
     // 1 of 1 failed exceeds the default 5% threshold.
     assert_eq!(summary["campaign"]["campaign"]["status"], "paused");
 }
+
+// =========================================================================
+// Update-reach reports (#78)
+// =========================================================================
+
+#[tokio::test]
+async fn update_reach_reports_json_and_csv() {
+    use ferrite_sdk::chunks::encoder::ChunkEncoder;
+
+    let base = spawn_server().await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+    let mut enc = ChunkEncoder::new();
+    let mut report = |device: &str, version: &str, build: u64| {
+        let mut body = Vec::new();
+        enc.encode_device_info(device, version, build, |c| body.extend_from_slice(c));
+        enc.encode_ota_request(build, 256, |c| body.extend_from_slice(c));
+        client
+            .post(format!("{base}/ingest/chunks"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body)
+            .send()
+    };
+    for d in ["r1", "r2", "r3"] {
+        report(d, "1.0.0", 100).await.unwrap();
+    }
+
+    let fw: serde_json::Value = client
+        .post(format!("{base}/ota/firmware"))
+        .header("Authorization", &auth)
+        .header("X-Firmware-Version", "2.0.0")
+        .header("X-Build-Id", "200")
+        .body(vec![1; 32])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let campaign: serde_json::Value = client
+        .post(format!("{base}/ota/campaigns"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "name": "v2", "firmware_id": fw["artifact"]["id"], "target_version": "2.0.0"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cid = campaign["campaign"]["id"].as_i64().unwrap();
+    client
+        .post(format!("{base}/ota/campaigns/{cid}/activate"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    // r1 installs the update.
+    report("r1", "2.0.0", 200).await.unwrap();
+
+    let get = |path: String| {
+        client
+            .get(format!("{base}{path}"))
+            .header("Authorization", &auth)
+            .send()
+    };
+
+    let builds: serde_json::Value = get("/reports/fleet/builds".into())
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(builds["total_devices"], 3);
+    let counts: Vec<(u64, i64)> = builds["builds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| {
+            (
+                b["build_id"].as_u64().unwrap(),
+                b["devices"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(counts, vec![(100, 2), (200, 1)]);
+
+    let reach: serde_json::Value = get(format!("/reports/campaigns/{cid}"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let r = &reach["reach"];
+    assert_eq!(r["targeted"], 3);
+    assert_eq!(r["on_target"], 1);
+    assert_eq!(r["installed"], 1);
+    assert_eq!(r["pending"], 2);
+    assert!(r["activated_at"].is_string());
+    assert_eq!(r["time_to_patch"]["count"], 1);
+
+    let csv = get(format!("/reports/campaigns/{cid}?format=csv"))
+        .await
+        .unwrap();
+    assert!(csv.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .starts_with("text/csv"));
+    let text = csv.text().await.unwrap();
+    let mut lines = text.lines();
+    assert!(lines
+        .next()
+        .unwrap()
+        .starts_with("campaign_id,campaign,target_version"));
+    assert_eq!(lines.count(), 3);
+
+    let history: serde_json::Value = get("/reports/devices/r1/firmware-history".into())
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let builds: Vec<u64> = history["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["build_id"].as_u64().unwrap())
+        .collect();
+    assert_eq!(builds, vec![100, 200]);
+
+    // Reports need user auth.
+    let anon = Client::new()
+        .get(format!("{base}/reports/fleet/builds"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
+}

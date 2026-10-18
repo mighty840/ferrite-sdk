@@ -135,6 +135,16 @@ Roles: `admin`, `provisioner`, `viewer`.
 
 "Device" means a valid `X-API-Key` when `INGEST_API_KEY` is set; it opens `GET /ota/targets/:device_id` and the two firmware reads above. See [Signed OTA updates](/guide/ota).
 
+### Update-reach reports
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/reports/fleet/builds` | User | Devices per firmware build (`?group_id=`, `?tag=`) |
+| GET | `/reports/campaigns/:id` | User | Campaign reach: on target, unreachable, time to patch |
+| GET | `/reports/devices/:device_id/firmware-history` | User | Builds a device reported over time |
+
+All accept `?format=csv`. See [Update-reach reports](/guide/update-reach).
+
 ### Admin
 
 | Method | Path | Auth | Description |
