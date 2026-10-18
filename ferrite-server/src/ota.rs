@@ -2,6 +2,12 @@
 //!
 //! Target endpoints let operators set target firmware versions per device.
 //! Firmware endpoints handle binary upload, listing, download, and deletion.
+//!
+//! Firmware is authenticated by a signed manifest (`ferrite_sdk::ota_manifest`)
+//! created offline with `ferrite ota sign`. The server stores and serves the
+//! manifest but never holds a signing key. With `OTA_TRUSTED_KEYS` set it
+//! also refuses uploads whose manifest isn't signed by a trusted key or
+//! doesn't match the uploaded bytes.
 
 use axum::{
     extract::{Path, State},
@@ -9,10 +15,12 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use ferrite_sdk::ota_manifest::SignedManifest;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::store::NewFirmwareArtifact;
 use crate::AppState;
 
 /// Maximum firmware binary size (20 MB).
@@ -112,86 +120,144 @@ pub async fn delete_ota_target(
 
 /// POST /ota/firmware — upload a firmware binary.
 ///
-/// Headers: X-Firmware-Version (required), X-Build-Id (optional), X-Signer (optional).
 /// Body: raw binary firmware data.
+///
+/// Headers:
+/// - `X-Firmware-Manifest`: hex signed manifest. Required when
+///   `OTA_TRUSTED_KEYS` is set; version, build id and signer then come from
+///   the manifest.
+/// - `X-Firmware-Version`, `X-Build-Id`, `X-Signer`: only for uploads without
+///   a manifest (no trusted keys configured).
 pub async fn upload_firmware(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     if body.len() > MAX_FIRMWARE_SIZE {
-        return (
+        return reject(
             StatusCode::PAYLOAD_TOO_LARGE,
-            Json(serde_json::json!({
-                "ok": false,
-                "error": format!(
-                    "firmware too large: {} bytes (max {})",
-                    body.len(),
-                    MAX_FIRMWARE_SIZE
-                ),
-            })),
+            format!(
+                "firmware too large: {} bytes (max {})",
+                body.len(),
+                MAX_FIRMWARE_SIZE
+            ),
         );
     }
 
     if body.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "ok": false, "error": "empty body" })),
-        );
+        return reject(StatusCode::BAD_REQUEST, "empty body".into());
     }
-
-    let version = headers
-        .get("X-Firmware-Version")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .to_string();
-
-    let build_id: i64 = headers
-        .get("X-Build-Id")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
-
-    let signer = headers
-        .get("X-Signer")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
 
     let mut hasher = Sha256::new();
     hasher.update(&body);
     let sha256 = format!("{:x}", hasher.finalize());
 
-    let filename = format!("{}-b{}-{}.bin", version, build_id, &sha256[..8]);
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let trusted_keys = &state.config.ota_trusted_keys;
+
+    let meta = match header("X-Firmware-Manifest") {
+        Some(hex) => {
+            let signed = match SignedManifest::from_hex(hex.trim().as_bytes()) {
+                Ok(s) => s,
+                Err(e) => {
+                    return reject(StatusCode::BAD_REQUEST, format!("invalid manifest: {e:?}"))
+                }
+            };
+            let (manifest, signer) = if trusted_keys.is_empty() {
+                // Nothing to verify against here; devices still verify.
+                (signed.unverified(), None)
+            } else {
+                match signed.verify(trusted_keys) {
+                    Ok(m) => (m, Some(hex::encode(m.key_id))),
+                    Err(e) => {
+                        return reject(
+                            StatusCode::FORBIDDEN,
+                            format!("manifest signature rejected: {e:?}"),
+                        )
+                    }
+                }
+            };
+            if manifest.image_size as usize != body.len() || hex::encode(manifest.sha256) != sha256
+            {
+                return reject(
+                    StatusCode::BAD_REQUEST,
+                    "manifest does not match the uploaded image (size or sha256)".into(),
+                );
+            }
+            UploadMeta {
+                version: manifest.version.to_string(),
+                // Stored as the same 64 bits the device reports.
+                build_id: manifest.build_id as i64,
+                signer,
+                manifest: Some(String::from_utf8_lossy(&signed.to_hex()).into_owned()),
+                security_version: Some(manifest.security_version as i64),
+            }
+        }
+        None if !trusted_keys.is_empty() => {
+            return reject(
+                StatusCode::BAD_REQUEST,
+                "signed manifest required (X-Firmware-Manifest); create one with `ferrite ota sign`"
+                    .into(),
+            );
+        }
+        None => UploadMeta {
+            version: header("X-Firmware-Version")
+                .unwrap_or("unknown")
+                .to_string(),
+            build_id: header("X-Build-Id")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
+            signer: header("X-Signer").map(str::to_string),
+            manifest: None,
+            security_version: None,
+        },
+    };
+
+    let filename = format!("{}-b{}-{}.bin", meta.version, meta.build_id, &sha256[..8]);
     let path = state.firmware_dir.join(&filename);
 
     if let Err(e) = tokio::fs::write(&path, &body).await {
-        return (
+        return reject(
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "ok": false, "error": format!("failed to write file: {e}") })),
+            format!("failed to write file: {e}"),
         );
     }
 
     let store = state.store.lock().await;
-    match store.insert_firmware_artifact(
-        &version,
-        build_id,
-        &sha256,
-        body.len() as i64,
-        &filename,
-        signer.as_deref(),
-    ) {
+    match store.insert_firmware_artifact(&NewFirmwareArtifact {
+        version: &meta.version,
+        build_id: meta.build_id,
+        sha256: &sha256,
+        size: body.len() as i64,
+        filename: &filename,
+        signer: meta.signer.as_deref(),
+        manifest: meta.manifest.as_deref(),
+        security_version: meta.security_version,
+    }) {
         Ok(artifact) => (
             StatusCode::OK,
             Json(serde_json::json!({ "ok": true, "artifact": artifact })),
         ),
         Err(e) => {
             let _ = tokio::fs::remove_file(&path).await;
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
-            )
+            reject(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
         }
     }
+}
+
+struct UploadMeta {
+    version: String,
+    build_id: i64,
+    signer: Option<String>,
+    manifest: Option<String>,
+    security_version: Option<i64>,
+}
+
+fn reject(status: StatusCode, error: String) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        status,
+        Json(serde_json::json!({ "ok": false, "error": error })),
+    )
 }
 
 /// GET /ota/firmware — list all firmware artifacts.
@@ -256,20 +322,49 @@ pub async fn download_firmware(
 
     let path = state.firmware_dir.join(&artifact.filename);
     match tokio::fs::read(&path).await {
-        Ok(data) => axum::response::Response::builder()
-            .status(StatusCode::OK)
-            .header("Content-Type", "application/octet-stream")
-            .header(
-                "Content-Disposition",
-                format!("attachment; filename=\"{}\"", artifact.filename),
-            )
-            .header("X-Firmware-SHA256", &artifact.sha256)
-            .body(axum::body::Body::from(data))
-            .unwrap(),
+        Ok(data) => {
+            let mut builder = axum::response::Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/octet-stream")
+                .header(
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}\"", artifact.filename),
+                )
+                .header("X-Firmware-SHA256", &artifact.sha256);
+            // Devices verify this before writing anything to flash.
+            if let Some(manifest) = &artifact.manifest {
+                builder = builder.header("X-Firmware-Manifest", manifest);
+            }
+            builder.body(axum::body::Body::from(data)).unwrap()
+        }
         Err(_) => axum::response::Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(axum::body::Body::from("firmware file missing from disk"))
             .unwrap(),
+    }
+}
+
+/// GET /ota/firmware/:id/manifest — the signed manifest as raw bytes.
+pub async fn download_manifest(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> axum::response::Response {
+    let store = state.store.lock().await;
+    let manifest = match store.get_firmware_artifact(id) {
+        Ok(Some(a)) => a.manifest,
+        Ok(None) => None,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response();
+        }
+    };
+    match manifest.and_then(|m| hex::decode(m).ok()) {
+        Some(bytes) => (
+            StatusCode::OK,
+            [("Content-Type", "application/octet-stream")],
+            bytes,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "no manifest for this firmware").into_response(),
     }
 }
 

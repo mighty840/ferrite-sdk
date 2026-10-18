@@ -18,3 +18,8 @@ tabled = "0.17"
 base64 = "0.22"
 humantime = "2"
 chrono = { version = "0.4", features = ["serde"] }
+ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["ota-manifest"] }
+ed25519-compact = { version = "2.6", default-features = false, features = ["random"] }
+sha2 = "0.10"
+hex = "0.4"
+heapless = { workspace = true }

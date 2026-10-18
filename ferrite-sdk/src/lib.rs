@@ -15,6 +15,9 @@ pub mod upload;
 #[cfg(feature = "http")]
 pub mod ota;
 
+#[cfg(feature = "ota-manifest")]
+pub mod ota_manifest;
+
 #[cfg(feature = "defmt")]
 pub mod defmt_sink;
 

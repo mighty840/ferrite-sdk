@@ -1437,6 +1437,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/ota/firmware/:id/download",
             get(crate::ota::download_firmware),
         )
+        .route(
+            "/ota/firmware/:id/manifest",
+            get(crate::ota::download_manifest),
+        )
         // OTA campaigns
         .route(
             "/ota/campaigns",

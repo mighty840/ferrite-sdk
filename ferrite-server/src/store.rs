@@ -135,6 +135,40 @@ pub struct FirmwareArtifact {
     pub filename: String,
     pub signer: Option<String>,
     pub created_at: String,
+    /// Hex-encoded signed OTA manifest (see `ferrite_sdk::ota_manifest`).
+    pub manifest: Option<String>,
+    /// Anti-rollback counter from the manifest.
+    pub security_version: Option<i64>,
+}
+
+/// Fields for a new firmware artifact row.
+pub struct NewFirmwareArtifact<'a> {
+    pub version: &'a str,
+    pub build_id: i64,
+    pub sha256: &'a str,
+    pub size: i64,
+    pub filename: &'a str,
+    pub signer: Option<&'a str>,
+    pub manifest: Option<&'a str>,
+    pub security_version: Option<i64>,
+}
+
+const FIRMWARE_COLUMNS: &str =
+    "id, version, build_id, sha256, size, filename, signer, created_at, manifest, security_version";
+
+fn row_to_firmware(row: &rusqlite::Row<'_>) -> rusqlite::Result<FirmwareArtifact> {
+    Ok(FirmwareArtifact {
+        id: row.get(0)?,
+        version: row.get(1)?,
+        build_id: row.get(2)?,
+        sha256: row.get(3)?,
+        size: row.get(4)?,
+        filename: row.get(5)?,
+        signer: row.get(6)?,
+        created_at: row.get(7)?,
+        manifest: row.get(8)?,
+        security_version: row.get(9)?,
+    })
 }
 
 /// A stored reboot event.
@@ -313,6 +347,8 @@ impl Store {
             "ALTER TABLE devices ADD COLUMN provisioned_by TEXT",
             "ALTER TABLE devices ADD COLUMN provisioned_at TEXT",
             "ALTER TABLE fault_events ADD COLUMN crash_group_id INTEGER REFERENCES crash_groups(id)",
+            "ALTER TABLE firmware_artifacts ADD COLUMN manifest TEXT",
+            "ALTER TABLE firmware_artifacts ADD COLUMN security_version INTEGER",
         ];
         for sql in &columns {
             let _ = self.conn.execute(sql, []);
@@ -1129,76 +1165,45 @@ impl Store {
 
     pub fn insert_firmware_artifact(
         &self,
-        version: &str,
-        build_id: i64,
-        sha256: &str,
-        size: i64,
-        filename: &str,
-        signer: Option<&str>,
+        new: &NewFirmwareArtifact<'_>,
     ) -> SqlResult<FirmwareArtifact> {
         self.conn.execute(
-            "INSERT INTO firmware_artifacts (version, build_id, sha256, size, filename, signer)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![version, build_id, sha256, size, filename, signer],
+            "INSERT INTO firmware_artifacts
+                (version, build_id, sha256, size, filename, signer, manifest, security_version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                new.version,
+                new.build_id,
+                new.sha256,
+                new.size,
+                new.filename,
+                new.signer,
+                new.manifest,
+                new.security_version
+            ],
         )?;
         let id = self.conn.last_insert_rowid();
         self.conn.query_row(
-            "SELECT id, version, build_id, sha256, size, filename, signer, created_at
-             FROM firmware_artifacts WHERE id = ?1",
+            &format!("SELECT {FIRMWARE_COLUMNS} FROM firmware_artifacts WHERE id = ?1"),
             params![id],
-            |row| {
-                Ok(FirmwareArtifact {
-                    id: row.get(0)?,
-                    version: row.get(1)?,
-                    build_id: row.get(2)?,
-                    sha256: row.get(3)?,
-                    size: row.get(4)?,
-                    filename: row.get(5)?,
-                    signer: row.get(6)?,
-                    created_at: row.get(7)?,
-                })
-            },
+            row_to_firmware,
         )
     }
 
     pub fn list_firmware_artifacts(&self) -> SqlResult<Vec<FirmwareArtifact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, version, build_id, sha256, size, filename, signer, created_at
-             FROM firmware_artifacts ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(FirmwareArtifact {
-                id: row.get(0)?,
-                version: row.get(1)?,
-                build_id: row.get(2)?,
-                sha256: row.get(3)?,
-                size: row.get(4)?,
-                filename: row.get(5)?,
-                signer: row.get(6)?,
-                created_at: row.get(7)?,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {FIRMWARE_COLUMNS} FROM firmware_artifacts ORDER BY created_at DESC"
+        ))?;
+        let rows = stmt.query_map([], row_to_firmware)?;
         rows.collect()
     }
 
     pub fn get_firmware_artifact(&self, id: i64) -> SqlResult<Option<FirmwareArtifact>> {
         self.conn
             .query_row(
-                "SELECT id, version, build_id, sha256, size, filename, signer, created_at
-                 FROM firmware_artifacts WHERE id = ?1",
+                &format!("SELECT {FIRMWARE_COLUMNS} FROM firmware_artifacts WHERE id = ?1"),
                 params![id],
-                |row| {
-                    Ok(FirmwareArtifact {
-                        id: row.get(0)?,
-                        version: row.get(1)?,
-                        build_id: row.get(2)?,
-                        sha256: row.get(3)?,
-                        size: row.get(4)?,
-                        filename: row.get(5)?,
-                        signer: row.get(6)?,
-                        created_at: row.get(7)?,
-                    })
-                },
+                row_to_firmware,
             )
             .optional()
     }
@@ -2025,7 +2030,16 @@ mod tests {
 
         // Create a firmware artifact first (required by FK).
         let fw = store
-            .insert_firmware_artifact("2.0.0", 200, "abc123", 1024, "fw.bin", None)
+            .insert_firmware_artifact(&NewFirmwareArtifact {
+                version: "2.0.0",
+                build_id: 200,
+                sha256: "abc123",
+                size: 1024,
+                filename: "fw.bin",
+                signer: None,
+                manifest: None,
+                security_version: None,
+            })
             .unwrap();
 
         // Create some devices.
@@ -2083,7 +2097,16 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
 
         let fw = store
-            .insert_firmware_artifact("2.0.0", 200, "abc123", 1024, "fw.bin", None)
+            .insert_firmware_artifact(&NewFirmwareArtifact {
+                version: "2.0.0",
+                build_id: 200,
+                sha256: "abc123",
+                size: 1024,
+                filename: "fw.bin",
+                signer: None,
+                manifest: None,
+                security_version: None,
+            })
             .unwrap();
 
         store.upsert_device("dev-001", "1.0.0", 100).unwrap();

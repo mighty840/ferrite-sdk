@@ -36,6 +36,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 aes = "0.8"
 ccm = "0.5"
 sha2 = "0.10"
+ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["ota-manifest"] }
 
 [dev-dependencies]
+heapless = { workspace = true }
+ed25519-compact = { version = "2.6", default-features = false }
 tempfile = "3"

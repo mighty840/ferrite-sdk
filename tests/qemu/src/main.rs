@@ -53,6 +53,8 @@ fn main() -> ! {
     run_test!("chunks::encode_decode_fault", tests::test_chunks::encode_decode_fault);
     run_test!("chunks::crc_mismatch_detected", tests::test_chunks::crc_mismatch_detected);
     run_test!("reboot_reason::roundtrip", tests::test_reboot_reason::roundtrip);
+    run_test!("ota_manifest::verify_signed_image", tests::test_ota_manifest::verify_signed_image);
+    run_test!("ota_manifest::reject_tampered_and_rollback", tests::test_ota_manifest::reject_tampered_and_rollback);
 
     hprintln!("=== {} passed, {} failed ===", passed, failed);
 

@@ -52,6 +52,7 @@ Roles: `admin`, `provisioner`, `viewer`.
 | `CORS_ORIGIN` | `*` (all) | Allowed CORS origin |
 | `CHUNK_ENCRYPTION_KEY` | — | 32-char hex AES-128 key for encrypted chunks |
 | `RATE_LIMIT_RPS` | disabled | Per-IP rate limit (requests/second) |
+| `OTA_TRUSTED_KEYS` | — | Comma-separated hex Ed25519 public keys allowed to sign OTA manifests. When set, firmware uploads must carry a valid signed manifest. See [Signed OTA updates](/guide/ota) |
 
 ### Alerting
 
@@ -125,6 +126,14 @@ Roles: `admin`, `provisioner`, `viewer`.
 | POST | `/ota/targets` | Admin | Set OTA target for a device |
 | GET | `/ota/targets/:device_id` | User | Get target for device |
 | DELETE | `/ota/targets/:device_id` | Admin | Remove OTA target |
+| GET | `/ota/firmware` | User | List firmware artifacts |
+| POST | `/ota/firmware` | Admin | Upload firmware (`X-Firmware-Manifest` header; required with `OTA_TRUSTED_KEYS`) |
+| GET | `/ota/firmware/:id` | User | Firmware artifact metadata |
+| GET | `/ota/firmware/:id/download` | User or device | Firmware binary, with `X-Firmware-Manifest` header |
+| GET | `/ota/firmware/:id/manifest` | User or device | Signed manifest (raw bytes) |
+| DELETE | `/ota/firmware/:id` | Admin | Delete firmware artifact |
+
+"Device" means a valid `X-API-Key` when `INGEST_API_KEY` is set; it opens `GET /ota/targets/:device_id` and the two firmware reads above. See [Signed OTA updates](/guide/ota).
 
 ### Admin
 
