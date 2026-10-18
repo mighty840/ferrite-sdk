@@ -174,6 +174,14 @@ async fn main() -> anyhow::Result<()> {
                         tower_http::services::ServeFile::new(static_dir.join("index.html")),
                     );
                     app = app.fallback_service(serve);
+                    // Dashboard routes share paths with the API: browser
+                    // navigations get the dashboard, API clients the API (#94).
+                    let index = std::sync::Arc::new(std::fs::read_to_string(
+                        static_dir.join("index.html"),
+                    )?);
+                    app = app.layer(axum::middleware::from_fn(move |req, next| {
+                        ferrite_server::spa::serve_index_for_navigation(index.clone(), req, next)
+                    }));
                 } else {
                     tracing::warn!(
                         "Static dir {} has no index.html — dashboard not served",

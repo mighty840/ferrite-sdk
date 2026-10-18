@@ -13,6 +13,7 @@ pub mod prometheus;
 pub mod rate_limit;
 pub mod reach;
 pub mod retention;
+pub mod spa;
 pub mod sse;
 pub mod store;
 pub mod symbolicate;
