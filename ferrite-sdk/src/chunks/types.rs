@@ -26,6 +26,33 @@ impl ChunkType {
     }
 }
 
+/// What kind of device sent a `DeviceInfo` chunk: an optional byte after the
+/// build ID. Devices that omit it are MCUs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DeviceType {
+    Mcu = 0,
+    Linux = 1,
+}
+
+impl DeviceType {
+    pub fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::Mcu),
+            1 => Some(Self::Linux),
+            _ => None,
+        }
+    }
+
+    /// Name stored and shown by the server.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Mcu => "mcu",
+            Self::Linux => "linux",
+        }
+    }
+}
+
 /// Wire format chunk header (parsed, not the raw bytes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChunkHeader {

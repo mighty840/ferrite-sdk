@@ -8,6 +8,7 @@ use dioxus::prelude::*;
 pub fn DevicesPage() -> Element {
     let mut search = use_signal(|| String::new());
     let mut status_filter = use_signal(|| "all".to_string());
+    let mut type_filter = use_signal(|| "all".to_string());
     let auth_state = use_context::<Signal<AuthState>>();
 
     let poll_tick = crate::hooks::use_poll_tick();
@@ -43,7 +44,8 @@ pub fn DevicesPage() -> Element {
                         "provisioned" => d.status_str() == "provisioned",
                         _ => true,
                     };
-                    matches_search && matches_status
+                    let matches_type = type_filter() == "all" || d.device_type == type_filter();
+                    matches_search && matches_status && matches_type
                 })
                 .collect();
 
@@ -111,6 +113,14 @@ pub fn DevicesPage() -> Element {
                             option { value: "provisioned", "Provisioned" }
                             option { value: "degraded", "Degraded" }
                             option { value: "offline", "Offline" }
+                        }
+                        select {
+                            class: "px-4 py-2.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-gray-300 focus:ring-2 focus:ring-ferrite-500/40 focus:border-ferrite-600 outline-none transition-all",
+                            value: "{type_filter}",
+                            onchange: move |e| type_filter.set(e.value()),
+                            option { value: "all", "All types" }
+                            option { value: "mcu", "MCU" }
+                            option { value: "linux", "Linux" }
                         }
                     }
 

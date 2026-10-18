@@ -1,4 +1,4 @@
-use crate::chunks::types::{ChunkHeader, ChunkType};
+use crate::chunks::types::{ChunkHeader, ChunkType, DeviceType};
 use crate::config::MAX_PAYLOAD_SIZE;
 use crate::fault::FaultRecord;
 use crate::metrics::MetricEntry;
@@ -259,10 +259,44 @@ impl ChunkEncoder {
         device_id: &str,
         firmware_version: &str,
         build_id: u64,
+        emit: F,
+    ) {
+        self.encode_device_info_inner(device_id, firmware_version, build_id, None, emit);
+    }
+
+    /// [`Self::encode_device_info`] plus the device type byte. Servers before
+    /// 0.2 ignore the extra byte; devices that omit it count as MCUs.
+    pub fn encode_device_info_typed<F: FnMut(&[u8])>(
+        &mut self,
+        device_id: &str,
+        firmware_version: &str,
+        build_id: u64,
+        device_type: DeviceType,
+        emit: F,
+    ) {
+        self.encode_device_info_inner(
+            device_id,
+            firmware_version,
+            build_id,
+            Some(device_type),
+            emit,
+        );
+    }
+
+    fn encode_device_info_inner<F: FnMut(&[u8])>(
+        &mut self,
+        device_id: &str,
+        firmware_version: &str,
+        build_id: u64,
+        device_type: Option<DeviceType>,
         mut emit: F,
     ) {
         let mut payload = [0u8; MAX_PAYLOAD_SIZE];
         let mut pos = 0;
+        // What `encode` keeps of a payload; the version gives way so that the
+        // build ID and type byte always fit.
+        let max = MAX_PAYLOAD_SIZE.min(256 - 10);
+        let fixed = 2 + 8 + usize::from(device_type.is_some());
 
         let did_len = device_id.len().min(127);
         payload[pos] = did_len as u8;
@@ -270,7 +304,7 @@ impl ChunkEncoder {
         payload[pos..pos + did_len].copy_from_slice(&device_id.as_bytes()[..did_len]);
         pos += did_len;
 
-        let fw_len = firmware_version.len().min(127);
+        let fw_len = firmware_version.len().min(127).min(max - fixed - did_len);
         payload[pos] = fw_len as u8;
         pos += 1;
         payload[pos..pos + fw_len].copy_from_slice(&firmware_version.as_bytes()[..fw_len]);
@@ -278,6 +312,11 @@ impl ChunkEncoder {
 
         payload[pos..pos + 8].copy_from_slice(&build_id.to_le_bytes());
         pos += 8;
+
+        if let Some(t) = device_type {
+            payload[pos] = t as u8;
+            pos += 1;
+        }
 
         let mut out = [0u8; 256];
         let n = self.encode(ChunkType::DeviceInfo, &payload[..pos], true, &mut out);
@@ -341,6 +380,56 @@ mod tests {
         let p = &decoded.payload;
         let did_len = p[0] as usize;
         assert_eq!(&p[1..1 + did_len], b"test-device");
+    }
+
+    fn device_info_payload(
+        encode: impl FnOnce(&mut ChunkEncoder, &mut dyn FnMut(&[u8])),
+    ) -> std::vec::Vec<u8> {
+        let mut encoder = ChunkEncoder::new();
+        let mut chunks = std::vec::Vec::new();
+        encode(&mut encoder, &mut |c: &[u8]| {
+            chunks.push(std::vec::Vec::from(c))
+        });
+        assert_eq!(chunks.len(), 1);
+        ChunkDecoder::decode(&chunks[0]).unwrap().payload.to_vec()
+    }
+
+    #[test]
+    fn device_info_type_byte_follows_build_id() {
+        let untyped = device_info_payload(|e, emit| e.encode_device_info("d", "1", 7, emit));
+        assert_eq!(untyped.len(), 2 + 1 + 1 + 8);
+        let typed = device_info_payload(|e, emit| {
+            e.encode_device_info_typed("d", "1", 7, DeviceType::Linux, emit)
+        });
+        assert_eq!(&typed[..untyped.len()], &untyped[..]);
+        assert_eq!(typed[untyped.len()], DeviceType::Linux as u8);
+        assert_eq!(DeviceType::from_u8(1), Some(DeviceType::Linux));
+        assert_eq!(DeviceType::from_u8(9), None);
+    }
+
+    #[test]
+    fn device_info_with_maximal_strings_keeps_build_id_and_type() {
+        let id = "i".repeat(200);
+        let version = "v".repeat(200);
+        let p = device_info_payload(|e, emit| {
+            e.encode_device_info_typed(
+                &id,
+                &version,
+                0x0102_0304_0506_0708,
+                DeviceType::Linux,
+                emit,
+            )
+        });
+        let did_len = p[0] as usize;
+        assert_eq!(did_len, 127);
+        let fw_len = p[1 + did_len] as usize;
+        let build_at = 2 + did_len + fw_len;
+        assert_eq!(p.len(), build_at + 8 + 1);
+        assert_eq!(
+            u64::from_le_bytes(p[build_at..build_at + 8].try_into().unwrap()),
+            0x0102_0304_0506_0708
+        );
+        assert_eq!(p[build_at + 8], DeviceType::Linux as u8);
     }
 
     #[test]

@@ -138,6 +138,7 @@ pub fn DeviceDetailPage(id: String) -> Element {
                         div {
                             class: "mt-6 grid grid-cols-2 md:grid-cols-4 gap-4",
                             DetailField { label: "Device Key".to_string(), value: key_display }
+                            DetailField { label: "Type".to_string(), value: device.type_label().to_string() }
                             DetailField { label: "Firmware".to_string(), value: device.firmware_version.clone() }
                             DetailField { label: "Last Seen".to_string(), value: device.last_seen.clone() }
                             DetailField { label: "First Seen".to_string(), value: device.first_seen.clone() }

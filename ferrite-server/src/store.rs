@@ -17,6 +17,8 @@ pub struct Device {
     pub tags: Option<String>,
     pub provisioned_by: Option<String>,
     pub provisioned_at: Option<String>,
+    /// `mcu` or `linux`, from the device's `DeviceInfo` chunks.
+    pub device_type: String,
 }
 
 /// A stored fault event.
@@ -446,6 +448,7 @@ impl Store {
             "ALTER TABLE firmware_artifacts ADD COLUMN manifest TEXT",
             "ALTER TABLE firmware_artifacts ADD COLUMN security_version INTEGER",
             "ALTER TABLE ota_campaigns ADD COLUMN activated_at TEXT",
+            "ALTER TABLE devices ADD COLUMN device_type TEXT NOT NULL DEFAULT 'mcu'",
         ];
         for sql in &columns {
             let _ = self.conn.execute(sql, []);
@@ -531,8 +534,16 @@ impl Store {
         Ok(rowid)
     }
 
+    pub fn set_device_type(&self, device_id: &str, device_type: &str) -> SqlResult<()> {
+        self.conn.execute(
+            "UPDATE devices SET device_type = ?2 WHERE device_id = ?1 AND device_type != ?2",
+            params![device_id, device_type],
+        )?;
+        Ok(())
+    }
+
     const DEVICE_COLUMNS: &str =
-        "id, device_id, firmware_version, build_id, first_seen, last_seen, device_key, name, status, tags, provisioned_by, provisioned_at";
+        "id, device_id, firmware_version, build_id, first_seen, last_seen, device_key, name, status, tags, provisioned_by, provisioned_at, device_type";
 
     fn device_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Device> {
         Ok(Device {
@@ -548,6 +559,7 @@ impl Store {
             tags: row.get(9)?,
             provisioned_by: row.get(10)?,
             provisioned_at: row.get(11)?,
+            device_type: row.get(12)?,
         })
     }
 
@@ -1886,7 +1898,7 @@ impl Store {
     pub fn list_group_devices(&self, group_id: i64) -> SqlResult<Vec<Device>> {
         let sql =
             "SELECT d.id, d.device_id, d.firmware_version, d.build_id, d.first_seen, d.last_seen,
-                    d.device_key, d.name, d.status, d.tags, d.provisioned_by, d.provisioned_at
+                    d.device_key, d.name, d.status, d.tags, d.provisioned_by, d.provisioned_at, d.device_type
              FROM devices d
              JOIN device_group_members m ON m.device_id = d.id
              WHERE m.group_id = ?1

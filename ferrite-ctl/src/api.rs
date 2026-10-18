@@ -19,6 +19,10 @@ pub struct ApiClient {
 pub struct Device {
     pub id: i64,
     pub device_id: String,
+    /// `mcu` or `linux`; servers before 0.2 don't send it.
+    #[serde(default)]
+    #[tabled(rename = "type", display_with = "display_or_dash")]
+    pub device_type: String,
     pub firmware_version: String,
     pub build_id: u64,
     pub first_seen: String,
@@ -170,6 +174,14 @@ fn display_option<T: std::fmt::Display>(o: &Option<T>) -> String {
     match o {
         Some(v) => v.to_string(),
         None => "-".to_string(),
+    }
+}
+
+fn display_or_dash(s: &str) -> String {
+    if s.is_empty() {
+        "-".to_string()
+    } else {
+        s.to_string()
     }
 }
 

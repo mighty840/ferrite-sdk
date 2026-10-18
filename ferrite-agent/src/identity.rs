@@ -30,8 +30,8 @@ use crate::config::Config;
 /// the version.
 pub const MAX_ID_LEN: usize = 127;
 /// ...and both together must fit one 246-byte payload with their two length
-/// bytes and the 8-byte build ID.
-const MAX_ID_PLUS_VERSION: usize = 236;
+/// bytes, the 8-byte build ID and the device type byte.
+const MAX_ID_PLUS_VERSION: usize = 235;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Identity {
@@ -266,7 +266,7 @@ IMAGE_VERSION="2.3.1"
             ),
         );
         let id = Identity::resolve(&cfg).unwrap();
-        assert_eq!(id.device_id.len() + id.firmware_version.len(), 236);
+        assert_eq!(id.device_id.len() + id.firmware_version.len(), 235);
     }
 
     #[test]
