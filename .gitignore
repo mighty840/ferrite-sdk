@@ -1,8 +1,8 @@
 # Rust
 /target/
 **/target/
-Cargo.lock
-!iotai-server/Cargo.lock
+# Cargo.lock files are committed: the workspace ships binaries (server,
+# gateway, CLI) and firmware examples, so builds must be reproducible.
 
 # Node (docs)
 docs/node_modules/

@@ -26,25 +26,25 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy – ferrite-sdk (no features)
-        run: cargo clippy -p ferrite-sdk --no-default-features -- -D warnings
+        run: cargo clippy --locked -p ferrite-sdk --no-default-features -- -D warnings
 
       - name: Clippy – ferrite-server
-        run: cargo clippy -p ferrite-server -- -D warnings
+        run: cargo clippy --locked -p ferrite-server -- -D warnings
 
       - name: Clippy – ferrite-sdk (ota-manifest)
-        run: cargo clippy -p ferrite-sdk --no-default-features --features ota-manifest -- -D warnings
+        run: cargo clippy --locked -p ferrite-sdk --no-default-features --features ota-manifest -- -D warnings
 
       - name: Test – ferrite-sdk (no default features)
-        run: cargo test -p ferrite-sdk --no-default-features -- --test-threads=1
+        run: cargo test --locked -p ferrite-sdk --no-default-features -- --test-threads=1
 
       - name: Test – ferrite-sdk (signed OTA)
-        run: cargo test -p ferrite-sdk --no-default-features --features http -- --test-threads=1 ota
+        run: cargo test --locked -p ferrite-sdk --no-default-features --features http -- --test-threads=1 ota
 
       - name: Test – ferrite-server (unit)
-        run: cargo test -p ferrite-server --lib
+        run: cargo test --locked -p ferrite-server --lib
 
       - name: Test – ferrite-server (integration)
-        run: cargo test -p ferrite-server --test integration -- --test-threads=1
+        run: cargo test --locked -p ferrite-server --test integration -- --test-threads=1
 
   test-gateway:
     name: Gateway tests
@@ -63,13 +63,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
 
       - name: Clippy – ferrite-gateway
-        run: cargo clippy -p ferrite-gateway --all-targets -- -D warnings
+        run: cargo clippy --locked -p ferrite-gateway --all-targets -- -D warnings
 
       - name: Clippy – ferrite-gateway (no features)
-        run: cargo clippy -p ferrite-gateway --no-default-features -- -D warnings
+        run: cargo clippy --locked -p ferrite-gateway --no-default-features -- -D warnings
 
       - name: Test – ferrite-gateway
-        run: cargo test -p ferrite-gateway
+        run: cargo test --locked -p ferrite-gateway
 
   test-keycloak:
     name: Keycloak integration tests
@@ -123,7 +123,7 @@ jobs:
           KEYCLOAK_CLIENT_ID: ferrite-dashboard
           FERRITE_TEST_KEYCLOAK_URL: http://localhost:8080
         run: >
-          cargo test -p ferrite-server --test integration
+          cargo test --locked -p ferrite-server --test integration
           --features keycloak-tests
           -- --test-threads=1
 
@@ -170,14 +170,14 @@ jobs:
 
       - name: Build ferrite-sdk
         run: >
-          cargo build -p ferrite-sdk
+          cargo build --locked -p ferrite-sdk
           --target ${{ matrix.target }}
           --features ${{ matrix.features }}
           --no-default-features
 
       - name: Build example
         run: >
-          cargo build
+          cargo build --locked
           --manifest-path examples/${{ matrix.example }}/Cargo.toml
           --target ${{ matrix.target }}
 

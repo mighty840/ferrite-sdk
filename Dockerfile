@@ -16,7 +16,7 @@ RUN cargo install --locked dioxus-cli@0.7.6
 WORKDIR /app
 COPY . .
 
-RUN cargo build -p ferrite-server --release
+RUN cargo build --locked -p ferrite-server --release
 RUN cd ferrite-dashboard && dx build --release
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────

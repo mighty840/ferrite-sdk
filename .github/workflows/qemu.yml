@@ -31,7 +31,7 @@ jobs:
 
       - name: Build QEMU test binary
         working-directory: tests/qemu
-        run: cargo build --target thumbv7m-none-eabi
+        run: cargo build --locked --target thumbv7m-none-eabi
 
       - name: Run QEMU integration tests
         run: >
