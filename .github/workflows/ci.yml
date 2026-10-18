@@ -40,6 +40,31 @@ jobs:
       - name: Test – ferrite-server (integration)
         run: cargo test -p ferrite-server --test integration -- --test-threads=1
 
+  test-gateway:
+    name: Gateway tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # serialport needs libudev, btleplug needs D-Bus
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
+
+      - name: Clippy – ferrite-gateway
+        run: cargo clippy -p ferrite-gateway --all-targets -- -D warnings
+
+      - name: Clippy – ferrite-gateway (no features)
+        run: cargo clippy -p ferrite-gateway --no-default-features -- -D warnings
+
+      - name: Test – ferrite-gateway
+        run: cargo test -p ferrite-gateway
+
   test-keycloak:
     name: Keycloak integration tests
     runs-on: ubuntu-latest

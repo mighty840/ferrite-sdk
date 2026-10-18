@@ -53,22 +53,26 @@ else
     echo "  WARNING: binaries not found in current directory."
     echo "  Cross-compile and copy them here before running setup:"
     echo ""
-    echo "    # On build host:"
-    echo "    cross build --release -p ferrite-server --target aarch64-unknown-linux-gnu"
-    echo "    cross build --release -p ferrite-gateway --target aarch64-unknown-linux-gnu"
-    echo "    scp target/aarch64-unknown-linux-gnu/release/{ferrite-server,ferrite-gateway} pi@raspberrypi:~/ferrite-deploy/"
+    echo "    # On build host (TARGET=armv7-unknown-linux-gnueabihf for 32-bit Pi OS):"
+    echo "    TARGET=aarch64-unknown-linux-gnu bash deploy/rpi-gateway/cross-build.sh"
+    echo "    scp target/\$TARGET/release/{ferrite-server,ferrite-gateway} pi@raspberrypi:~/ferrite-deploy/"
     echo ""
 fi
+sudo cp fix-route.sh "$INSTALL_DIR/bin/"
+sudo chmod 755 "$INSTALL_DIR/bin/fix-route.sh"
 
 # ── 5. Install systemd services ───────────────────────────────────────
 echo "[5/6] Installing systemd services"
 sudo cp ferrite-server.service /etc/systemd/system/
 sudo cp ferrite-gateway.service /etc/systemd/system/
+sudo cp ferrite-route-fix.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 # ── 6. Enable and start ───────────────────────────────────────────────
 echo "[6/6] Enabling services"
 sudo systemctl enable ferrite-server ferrite-gateway
+# Only needed when eth0 is a boards-only link (STM32H563 over Ethernet)
+sudo systemctl enable ferrite-route-fix
 
 # Add ferrite user to required groups for BLE and USB access
 sudo usermod -aG dialout "$SERVICE_USER" 2>/dev/null || true

@@ -1,0 +1,12 @@
+[Unit]
+Description=Remove eth0 default route (boards-only network)
+After=dhcpcd.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ferrite/bin/fix-route.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
