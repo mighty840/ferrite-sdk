@@ -51,7 +51,7 @@ ferrite --format json evidence list --from 2026-10-01 --to 2026-10-31 > october.
 ferrite evidence verify                              # exits non-zero if the chain is broken
 ```
 
-Over HTTP (any signed-in user):
+Over HTTP (admins and the read-only `auditor` role, see [roles](/guide/security#multi-user-rbac)):
 
 | Method | Path | Description |
 |---|---|---|

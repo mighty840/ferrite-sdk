@@ -45,27 +45,28 @@ BASIC_AUTH_PASS=s3cret     # default: admin
 
 ## Multi-user RBAC
 
-Three role levels control what authenticated users can do:
+Four roles control what authenticated users can do:
 
-| Role | Read | Create/Update | Delete | Admin paths |
-|---|---|---|---|---|
-| **Viewer** | Yes | No | No | No |
-| **Provisioner** | Yes | Yes | No | No |
-| **Admin** | Yes | Yes | Yes | Yes |
+| Role | Read | Create/Update | Delete | Admin paths | Evidence log |
+|---|---|---|---|---|---|
+| **Auditor** | Evidence log only | No | No | No | Yes |
+| **Viewer** | Yes | No | No | No | No |
+| **Provisioner** | Yes | Yes | No | No | No |
+| **Admin** | Yes | Yes | Yes | Yes | Yes |
 
-Admin paths include `/admin/*`, `/groups/*`, and `/ota/*`.
+Admin paths include `/admin/*`, `/groups/*`, and `/ota/*`. The [evidence log](/guide/evidence-log) (`/evidence/*`) is readable by admins and auditors only. The auditor role is meant for an external auditor: it can read the evidence log and nothing else.
 
 ### Adding users (Basic auth)
 
 ```bash
-BASIC_AUTH_USERS="viewer1:password1:viewer,provisioner1:password2:provisioner"
+BASIC_AUTH_USERS="viewer1:password1:viewer,provisioner1:password2:provisioner,auditor1:password3:auditor"
 ```
 
 Format: `username:password:role` pairs separated by commas.
 
 ### Adding roles (Keycloak)
 
-Create realm roles `ferrite-admin` and `ferrite-provisioner` in Keycloak and assign them to users. Users without either role default to Viewer.
+Create realm roles `ferrite-admin`, `ferrite-provisioner` and `ferrite-auditor` in Keycloak and assign them to users. A user with several gets the strongest (admin > provisioner > auditor); users with none are viewers.
 
 ## API key protection
 
