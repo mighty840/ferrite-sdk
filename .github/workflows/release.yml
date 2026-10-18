@@ -1,5 +1,10 @@
 name: Release
 
+# Push a tag like v0.1.0 to build and publish a GitHub release:
+# C static libraries + header (ferrite-ffi), Linux binaries for the server,
+# gateway and CLI, and the server image tagged with the version.
+# Nothing is published to crates.io.
+
 on:
   push:
     tags:
@@ -7,13 +12,14 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build-ffi:
-    name: "Build FFI – ${{ matrix.target }}"
+    name: "C library – ${{ matrix.target }}"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -34,21 +40,16 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build static library
-        run: >
-          cargo build -p ferrite-sdk
-          --target ${{ matrix.target }}
-          --features cortex-m
-          --no-default-features
-          --release
+        run: cargo build --locked -p ferrite-ffi --target ${{ matrix.target }} --release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: libferrite_sdk-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/libferrite_sdk.a
+          name: libferrite_ffi-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/libferrite_ffi.a
 
   header:
-    name: Generate C header
+    name: C header
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,10 +57,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install cbindgen
-        run: cargo install cbindgen
+        run: cargo install --locked cbindgen
 
       - name: Generate header
-        run: cbindgen --crate ferrite-sdk --output ferrite_sdk.h
+        run: cbindgen --config ferrite-ffi/cbindgen.toml --crate ferrite-ffi --output ferrite_sdk.h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -67,9 +68,60 @@ jobs:
           name: ferrite_sdk-header
           path: ferrite_sdk.h
 
+  host-binaries:
+    name: Linux binaries (server, gateway, CLI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # serialport needs libudev, btleplug needs D-Bus
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
+
+      - name: Build
+        run: cargo build --locked --release -p ferrite-server -p ferrite-gateway -p ferrite-cli
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          for bin in ferrite-server ferrite-gateway ferrite; do
+            tar -C target/release -czf "dist/${bin}-${GITHUB_REF_NAME}-x86_64-linux-gnu.tar.gz" "$bin"
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-binaries
+          path: dist/*
+
+  image:
+    name: Server image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Version tag only: deploy-image.yml keeps owning :latest and the demo.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/mighty840/ferrite:${{ github.ref_name }}
+
   release:
     name: Create GitHub Release
-    needs: [build-ffi, header]
+    needs: [build-ffi, header, host-binaries, image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,14 +134,18 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          for dir in artifacts/libferrite_sdk-*; do
-            target=$(basename "$dir" | sed 's/libferrite_sdk-//')
-            cp "$dir/libferrite_sdk.a" "release/libferrite_sdk-${target}.a"
+          for dir in artifacts/libferrite_ffi-*; do
+            target=$(basename "$dir" | sed 's/libferrite_ffi-//')
+            cp "$dir/libferrite_ffi.a" "release/libferrite_ffi-${target}.a"
           done
           cp artifacts/ferrite_sdk-header/ferrite_sdk.h release/
+          cp artifacts/host-binaries/* release/
+          (cd release && sha256sum -- * > SHA256SUMS)
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          # 0.x and -rc/-beta tags are pre-releases.
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, '-') }}
           files: release/*
