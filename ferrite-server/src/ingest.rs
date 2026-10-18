@@ -627,8 +627,12 @@ async fn ingest_chunks(
         if chunk.chunk_type == ChunkType::DeviceInfo {
             if let Some(info) = parse_device_info_payload(&chunk.payload) {
                 current_device_id = info.device_id.clone();
+                let previous = store.get_device_by_id(&info.device_id).ok().flatten();
                 match store.upsert_device(&info.device_id, &info.firmware_version, info.build_id) {
-                    Ok(rid) => device_rowid = Some(rid),
+                    Ok(rid) => {
+                        device_rowid = Some(rid);
+                        record_build_report(&state, &info, previous.as_ref());
+                    }
                     Err(e) => errors.push(format!("db error upserting device: {e}")),
                 }
             }
@@ -828,14 +832,40 @@ async fn ingest_chunks(
                         // The new image never confirmed and the bootloader
                         // restored this build: stop offering the failed build.
                         match store.record_ota_rollback(&current_device_id, ota.build_id) {
-                            Ok(outcome) => tracing::warn!(
-                                device = %current_device_id,
-                                running_build = ota.build_id,
-                                target_removed = outcome.target_removed,
-                                failed_in = ?outcome.failed_in_campaigns,
-                                paused = ?outcome.paused_campaigns,
-                                "OTA update rolled back on device"
-                            ),
+                            Ok(outcome) => {
+                                tracing::warn!(
+                                    device = %current_device_id,
+                                    running_build = ota.build_id,
+                                    target_removed = outcome.target_removed,
+                                    failed_in = ?outcome.failed_in_campaigns,
+                                    paused = ?outcome.paused_campaigns,
+                                    "OTA update rolled back on device"
+                                );
+                                let device_actor = format!("device:{current_device_id}");
+                                crate::evidence::record(
+                                    &state.evidence,
+                                    "device.update_rolled_back",
+                                    &device_actor,
+                                    &device_actor,
+                                    serde_json::json!({
+                                        "running_build_id": ota.build_id,
+                                        "target_removed": outcome.target_removed,
+                                        "failed_in_campaigns": outcome.failed_in_campaigns,
+                                    }),
+                                );
+                                for cid in &outcome.paused_campaigns {
+                                    crate::evidence::record(
+                                        &state.evidence,
+                                        "campaign.auto_paused",
+                                        &format!("campaign:{cid}"),
+                                        "system",
+                                        serde_json::json!({
+                                            "reason": "failure rate above failure_threshold",
+                                            "trigger_device": current_device_id,
+                                        }),
+                                    );
+                                }
+                            }
                             Err(e) => errors.push(format!("recording OTA rollback: {e}")),
                         }
                     } else if let Ok(Some(target)) =
@@ -861,11 +891,35 @@ async fn ingest_chunks(
                             {
                                 for campaign in &campaigns {
                                     if campaign.target_version == target.target_version {
+                                        let was_installed = store
+                                            .list_campaign_devices(campaign.id)
+                                            .ok()
+                                            .and_then(|ds| {
+                                                ds.into_iter()
+                                                    .find(|d| d.device_id == current_device_id)
+                                            })
+                                            .is_some_and(|d| d.status == "installed");
                                         let _ = store.update_campaign_device_status(
                                             campaign.id,
                                             &current_device_id,
                                             "installed",
                                         );
+                                        // Devices report on every upload; record the install once.
+                                        if !was_installed {
+                                            let device_actor =
+                                                format!("device:{current_device_id}");
+                                            crate::evidence::record(
+                                                &state.evidence,
+                                                "device.update_installed",
+                                                &device_actor,
+                                                &device_actor,
+                                                serde_json::json!({
+                                                    "campaign_id": campaign.id,
+                                                    "target_version": target.target_version,
+                                                    "build_id": ota.build_id,
+                                                }),
+                                            );
+                                        }
                                         // Check if all devices are done — auto-complete the campaign.
                                         if let Ok(true) =
                                             store.campaign_all_devices_done(campaign.id)
@@ -876,6 +930,15 @@ async fn ingest_chunks(
                                                 campaign_id = campaign.id,
                                                 campaign_name = %campaign.name,
                                                 "OTA campaign auto-completed: all devices installed"
+                                            );
+                                            crate::evidence::record(
+                                                &state.evidence,
+                                                "campaign.completed",
+                                                &format!("campaign:{}", campaign.id),
+                                                "system",
+                                                serde_json::json!({
+                                                    "reason": "all devices installed",
+                                                }),
                                             );
                                         }
                                     }
@@ -1415,6 +1478,9 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/reports/devices/:device_id/firmware-history",
             get(crate::reach::firmware_history),
         )
+        // Evidence log (#77)
+        .route("/evidence", get(crate::evidence::list_evidence))
+        .route("/evidence/verify", get(crate::evidence::verify_evidence))
         .route("/crashes", get(crate::crashes::list_crash_groups))
         .route("/crashes/:id", get(crate::crashes::get_crash_group_detail))
         .route("/metrics", get(list_all_metrics))
@@ -1541,6 +1607,47 @@ pub fn router(state: Arc<AppState>) -> Router {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+/// Evidence for a device's build report: the first build a device is seen
+/// with, and every change after that.
+fn record_build_report(
+    state: &AppState,
+    info: &ParsedDeviceInfo,
+    previous: Option<&crate::store::Device>,
+) {
+    let actor = format!("device:{}", info.device_id);
+    // A placeholder row (created before any DeviceInfo) isn't a real report.
+    let previous = previous.filter(|p| !(p.build_id == 0 && p.firmware_version.is_empty()));
+    match previous {
+        None => crate::evidence::record(
+            &state.evidence,
+            "device.first_seen",
+            &actor,
+            &actor,
+            serde_json::json!({
+                "firmware_version": info.firmware_version,
+                "build_id": info.build_id,
+            }),
+        ),
+        Some(prev)
+            if prev.build_id != info.build_id || prev.firmware_version != info.firmware_version =>
+        {
+            crate::evidence::record(
+                &state.evidence,
+                "device.build_changed",
+                &actor,
+                &actor,
+                serde_json::json!({
+                    "from_version": prev.firmware_version,
+                    "from_build_id": prev.build_id,
+                    "to_version": info.firmware_version,
+                    "to_build_id": info.build_id,
+                }),
+            )
+        }
+        Some(_) => {}
+    }
+}
 
 #[cfg(test)]
 mod tests {

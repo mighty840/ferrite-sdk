@@ -28,6 +28,8 @@ with a server, dashboard, CLI, edge gateway, and signed OTA updates.
 - OTA: firmware artifacts, per-device targets, campaigns (groups/tags, rollout percent, pause/rollback, failure threshold).
 - **Signed OTA:** `OTA_TRUSTED_KEYS` rejects uploads without a valid manifest signed by a trusted key; manifests are stored and served in `X-Firmware-Manifest` and `GET /ota/firmware/:id/manifest`. Devices can read their OTA target and firmware with the ingest API key.
 - Rollback reports remove the failed build's target, mark the device `failed` and pause a campaign over its failure threshold.
+- **Update-reach reports:** devices per firmware build, campaign reach (on target, unreachable, time to patch) and per-device firmware history, as JSON or CSV (`/reports/*`).
+- **Evidence log:** an append-only, hash-chained record of firmware uploads, OTA targets, the campaign lifecycle and device update outcomes, in its own `evidence.db` that retention never purges; `GET /evidence`, `GET /evidence/verify`, `--evidence-db`.
 
 ### Dashboard (`ferrite-dashboard`, Dioxus/WASM)
 - Fleet overview and topology, devices, faults, crashes, metrics charts, device comparison, CSV/JSON export, OTA campaigns and firmware.
@@ -35,6 +37,8 @@ with a server, dashboard, CLI, edge gateway, and signed OTA updates.
 ### CLI (`ferrite`)
 - Devices, faults, groups, metrics, OTA targets.
 - `ferrite ota keygen | sign | verify | upload` for signed firmware.
+- `ferrite report builds | campaign | history` for update-reach reports.
+- `ferrite evidence list | verify`; CSV output quotes fields that need it.
 
 ### Gateway (`ferrite-gateway`)
 - Bridges USB serial, BLE GATT and HTTP-ingest devices to the server with offline buffering.

@@ -7,11 +7,13 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::auth::UserClaims;
+use crate::evidence;
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -47,6 +49,7 @@ fn default_failure_threshold() -> Option<f64> {
 /// and adds them as "pending" campaign devices.
 pub async fn create_campaign(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Json(req): Json<CreateCampaignRequest>,
 ) -> impl IntoResponse {
     if req.name.is_empty() {
@@ -141,6 +144,29 @@ pub async fn create_campaign(
             );
         }
     };
+    let build_id = store
+        .get_firmware_artifact(req.firmware_id)
+        .ok()
+        .flatten()
+        .map(|f| f.build_id);
+    evidence::record(
+        &state.evidence,
+        "campaign.created",
+        &format!("campaign:{}", campaign.id),
+        &evidence::user_actor(claims.as_deref()),
+        serde_json::json!({
+            "name": campaign.name,
+            "firmware_id": req.firmware_id,
+            "target_version": campaign.target_version,
+            "target_build_id": build_id,
+            "strategy": campaign.strategy,
+            "target_group_id": req.target_group_id,
+            "target_tags": req.target_tags,
+            "rollout_percent": rollout_percent,
+            "failure_threshold": failure_threshold,
+            "devices": device_ids,
+        }),
+    );
 
     (
         StatusCode::CREATED,
@@ -194,6 +220,7 @@ pub async fn get_campaign(
 /// For "canary" strategy, sets OTA targets for the first N devices based on rollout_percent.
 pub async fn activate_campaign(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
@@ -292,6 +319,19 @@ pub async fn activate_campaign(
             Json(serde_json::json!({ "error": e.to_string() })),
         );
     }
+    evidence::record(
+        &state.evidence,
+        "campaign.activated",
+        &format!("campaign:{id}"),
+        &evidence::user_actor(claims.as_deref()),
+        serde_json::json!({
+            "firmware_id": firmware.id,
+            "target_version": campaign.target_version,
+            "target_build_id": firmware.build_id,
+            "firmware_sha256": firmware.sha256,
+            "targets_set": targets_set,
+        }),
+    );
 
     (
         StatusCode::OK,
@@ -306,6 +346,7 @@ pub async fn activate_campaign(
 /// POST /ota/campaigns/:id/pause — set campaign status to "paused".
 pub async fn pause_campaign(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
@@ -336,10 +377,19 @@ pub async fn pause_campaign(
     }
 
     match store.update_campaign_status(id, "paused") {
-        Ok(true) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "ok": true, "status": "paused" })),
-        ),
+        Ok(true) => {
+            evidence::record(
+                &state.evidence,
+                "campaign.paused",
+                &format!("campaign:{id}"),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({}),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "status": "paused" })),
+            )
+        }
         Ok(false) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "campaign not found" })),
@@ -354,6 +404,7 @@ pub async fn pause_campaign(
 /// POST /ota/campaigns/:id/rollback — set status to "rolled_back" and remove all OTA targets.
 pub async fn rollback_campaign(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
@@ -395,14 +446,23 @@ pub async fn rollback_campaign(
     };
 
     match store.update_campaign_status(id, "rolled_back") {
-        Ok(true) => (
-            StatusCode::OK,
-            Json(serde_json::json!({
-                "ok": true,
-                "status": "rolled_back",
-                "targets_removed": targets_removed,
-            })),
-        ),
+        Ok(true) => {
+            evidence::record(
+                &state.evidence,
+                "campaign.rolled_back",
+                &format!("campaign:{id}"),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({ "targets_removed": targets_removed }),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "ok": true,
+                    "status": "rolled_back",
+                    "targets_removed": targets_removed,
+                })),
+            )
+        }
         Ok(false) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "campaign not found" })),

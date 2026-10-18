@@ -14,6 +14,7 @@ ferrite-server [OPTIONS] [COMMAND]
 |---|---|---|
 | `--http <ADDR>` | `0.0.0.0:4000` | HTTP listen address (ip:port) |
 | `--db <PATH>` | `./ferrite.db` | SQLite database file path |
+| `--evidence-db <PATH>` | `evidence.db` next to `--db` | Append-only evidence log; never purged (see [Evidence log](/guide/evidence-log)) |
 | `--elf-dir <PATH>` | `./elfs` | Directory for uploaded ELF files |
 | `--addr2line <PATH>` | Auto-detect | Path to `arm-none-eabi-addr2line` binary |
 
@@ -66,6 +67,8 @@ Roles: `admin`, `provisioner`, `viewer`.
 | Variable | Default | Description |
 |---|---|---|
 | `RETENTION_DAYS` | `90` | Auto-purge data older than N days (0 = disabled) |
+
+Retention never touches the evidence log.
 
 ## HTTP API endpoints
 
@@ -144,6 +147,15 @@ Roles: `admin`, `provisioner`, `viewer`.
 | GET | `/reports/devices/:device_id/firmware-history` | User | Builds a device reported over time |
 
 All accept `?format=csv`. See [Update-reach reports](/guide/update-reach).
+
+### Evidence log
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/evidence` | User | Hash-chained release/update record (`from`, `to`, `kind`, `subject`, `limit`) |
+| GET | `/evidence/verify` | User | Recompute the chain and report the head hash |
+
+See [Evidence log](/guide/evidence-log).
 
 ### Admin
 

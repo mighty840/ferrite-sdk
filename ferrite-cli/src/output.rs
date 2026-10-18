@@ -58,13 +58,15 @@ pub fn print_items<T: Serialize + Tabled>(items: &[T], format: OutputFormat) -> 
                         let row: Vec<String> = headers
                             .iter()
                             .map(|h| {
-                                map.get(*h)
-                                    .map(|v| match v {
-                                        serde_json::Value::String(s) => s.clone(),
-                                        serde_json::Value::Null => String::new(),
-                                        other => other.to_string(),
-                                    })
-                                    .unwrap_or_default()
+                                csv_field(
+                                    &map.get(*h)
+                                        .map(|v| match v {
+                                            serde_json::Value::String(s) => s.clone(),
+                                            serde_json::Value::Null => String::new(),
+                                            other => other.to_string(),
+                                        })
+                                        .unwrap_or_default(),
+                                )
                             })
                             .collect();
                         println!("{}", row.join(","));
@@ -74,4 +76,25 @@ pub fn print_items<T: Serialize + Tabled>(items: &[T], format: OutputFormat) -> 
         }
     }
     Ok(())
+}
+
+/// Quote a CSV field per RFC 4180 when it contains a delimiter, quote or newline.
+fn csv_field(s: &str) -> String {
+    if s.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::csv_field;
+
+    #[test]
+    fn csv_field_quotes_only_when_needed() {
+        assert_eq!(csv_field("plain"), "plain");
+        assert_eq!(csv_field(r#"{"a":1,"b":2}"#), r#""{""a"":1,""b"":2}""#);
+        assert_eq!(csv_field("two\nlines"), "\"two\nlines\"");
+    }
 }

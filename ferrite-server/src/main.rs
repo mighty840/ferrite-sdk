@@ -27,6 +27,12 @@ struct Cli {
     #[arg(long, default_value = "./ferrite.db")]
     db: PathBuf,
 
+    /// Evidence log database (append-only, hash-chained, never purged).
+    /// Defaults to `evidence.db` next to `--db`. Keep it on durable storage
+    /// and back it up: it's the compliance record.
+    #[arg(long)]
+    evidence_db: Option<PathBuf>,
+
     /// Directory for uploaded ELF files
     #[arg(long, default_value = "./elfs")]
     elf_dir: PathBuf,
@@ -94,6 +100,24 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let store = Store::open(&cli.db)?;
+    let evidence_path = cli
+        .evidence_db
+        .clone()
+        .unwrap_or_else(|| cli.db.with_file_name("evidence.db"));
+    let evidence = ferrite_server::evidence::EvidenceLog::open(&evidence_path)?;
+    match evidence.verify() {
+        Ok(r) if r.valid => tracing::info!(
+            path = %evidence_path.display(),
+            entries = r.entries,
+            "Evidence log OK"
+        ),
+        Ok(r) => tracing::error!(
+            path = %evidence_path.display(),
+            first_invalid_seq = ?r.first_invalid_seq,
+            "Evidence log hash chain is BROKEN — the record was modified outside ferrite"
+        ),
+        Err(e) => tracing::error!(error = %e, "Evidence log could not be verified"),
+    }
     let symbolicator = Symbolicator::new(cli.addr2line.clone(), cli.elf_dir.clone());
 
     // SSE broadcast channel (capacity 256 — lagged receivers drop old events)
@@ -119,6 +143,7 @@ async fn main() -> anyhow::Result<()> {
         event_tx,
         counters: RequestCounters::new(),
         rate_limiter: rate_limiter.clone(),
+        evidence,
     });
 
     if config.ingest_api_key.is_none() {

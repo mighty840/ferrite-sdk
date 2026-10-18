@@ -13,13 +13,15 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
+    Extension, Json,
 };
 use ferrite_sdk::ota_manifest::SignedManifest;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::auth::UserClaims;
+use crate::evidence;
 use crate::store::NewFirmwareArtifact;
 use crate::AppState;
 
@@ -53,6 +55,7 @@ pub async fn list_ota_targets(State(state): State<Arc<AppState>>) -> impl IntoRe
 /// POST /ota/targets — set (upsert) an OTA target for a device.
 pub async fn set_ota_target(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Json(req): Json<SetOtaTargetRequest>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
@@ -62,10 +65,23 @@ pub async fn set_ota_target(
         req.target_build_id,
         req.firmware_url.as_deref(),
     ) {
-        Ok(target) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "target": target })),
-        ),
+        Ok(target) => {
+            evidence::record(
+                &state.evidence,
+                "ota.target_set",
+                &format!("device:{}", req.device_id),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({
+                    "target_version": req.target_version,
+                    "target_build_id": req.target_build_id,
+                    "firmware_url": req.firmware_url,
+                }),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "target": target })),
+            )
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string() })),
@@ -98,11 +114,21 @@ pub async fn get_ota_target(
 /// DELETE /ota/targets/:device_id — remove OTA target for a device.
 pub async fn delete_ota_target(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Path(device_id): Path<String>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
     match store.delete_ota_target(&device_id) {
-        Ok(true) => (StatusCode::OK, Json(serde_json::json!({ "ok": true }))),
+        Ok(true) => {
+            evidence::record(
+                &state.evidence,
+                "ota.target_removed",
+                &format!("device:{device_id}"),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({}),
+            );
+            (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+        }
         Ok(false) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "no OTA target for this device" })),
@@ -131,6 +157,7 @@ pub async fn delete_ota_target(
 pub async fn upload_firmware(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
+    claims: Option<Extension<UserClaims>>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     if body.len() > MAX_FIRMWARE_SIZE {
@@ -234,10 +261,30 @@ pub async fn upload_firmware(
         manifest: meta.manifest.as_deref(),
         security_version: meta.security_version,
     }) {
-        Ok(artifact) => (
-            StatusCode::OK,
-            Json(serde_json::json!({ "ok": true, "artifact": artifact })),
-        ),
+        Ok(artifact) => {
+            evidence::record(
+                &state.evidence,
+                "firmware.uploaded",
+                &format!("firmware:{}", artifact.id),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({
+                    "version": artifact.version,
+                    "build_id": artifact.build_id,
+                    "sha256": artifact.sha256,
+                    "size": artifact.size,
+                    "security_version": artifact.security_version,
+                    "signer_key_id": artifact.signer,
+                    "has_manifest": artifact.manifest.is_some(),
+                    // Signature checked against OTA_TRUSTED_KEYS at upload.
+                    "signature_verified": artifact.manifest.is_some()
+                        && !state.config.ota_trusted_keys.is_empty(),
+                }),
+            );
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "artifact": artifact })),
+            )
+        }
         Err(e) => {
             let _ = tokio::fs::remove_file(&path).await;
             reject(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -371,20 +418,28 @@ pub async fn download_manifest(
 /// DELETE /ota/firmware/:id — delete a firmware artifact.
 pub async fn delete_firmware(
     State(state): State<Arc<AppState>>,
+    claims: Option<Extension<UserClaims>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
     let store = state.store.lock().await;
-    let filename = store
-        .get_firmware_artifact(id)
-        .ok()
-        .flatten()
-        .map(|a| a.filename.clone());
+    let artifact = store.get_firmware_artifact(id).ok().flatten();
 
     match store.delete_firmware_artifact(id) {
         Ok(true) => {
-            if let Some(f) = filename {
-                let _ = tokio::fs::remove_file(state.firmware_dir.join(f)).await;
+            if let Some(a) = &artifact {
+                let _ = tokio::fs::remove_file(state.firmware_dir.join(&a.filename)).await;
             }
+            evidence::record(
+                &state.evidence,
+                "firmware.deleted",
+                &format!("firmware:{id}"),
+                &evidence::user_actor(claims.as_deref()),
+                serde_json::json!({
+                    "version": artifact.as_ref().map(|a| a.version.clone()),
+                    "build_id": artifact.as_ref().map(|a| a.build_id),
+                    "sha256": artifact.as_ref().map(|a| a.sha256.clone()),
+                }),
+            );
             (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
         }
         Ok(false) => (

@@ -132,6 +132,36 @@ pub struct FirmwareObservation {
     pub observed_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Tabled)]
+pub struct EvidenceEntry {
+    pub seq: i64,
+    pub recorded_at: String,
+    pub kind: String,
+    pub subject: String,
+    pub actor: String,
+    #[tabled(display_with = "display_json")]
+    pub details: serde_json::Value,
+    #[tabled(skip)]
+    pub prev_hash: String,
+    #[tabled(display_with = "display_short_hash")]
+    pub hash: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EvidencePage {
+    pub entries: Vec<EvidenceEntry>,
+    pub chain_valid: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceVerifyReport {
+    pub entries: i64,
+    pub valid: bool,
+    pub first_invalid_seq: Option<i64>,
+    pub head_seq: Option<i64>,
+    pub head_hash: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Display helpers for tabled
 // ---------------------------------------------------------------------------
@@ -145,6 +175,14 @@ fn display_option<T: std::fmt::Display>(o: &Option<T>) -> String {
 
 fn display_hex32(v: &u32) -> String {
     format!("0x{v:08X}")
+}
+
+fn display_json(v: &serde_json::Value) -> String {
+    v.to_string()
+}
+
+fn display_short_hash(h: &str) -> String {
+    h.chars().take(12).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -541,6 +579,31 @@ impl ApiClient {
                 .unwrap_or(serde_json::Value::Array(vec![])),
         )?;
         Ok(targets)
+    }
+
+    // -- Evidence log --
+
+    pub fn list_evidence(&self, query: &[(&str, &str)]) -> Result<EvidencePage> {
+        let resp = self
+            .http
+            .get(self.url("/evidence"))
+            .query(query)
+            .header("Authorization", &self.auth_header)
+            .send()
+            .context("failed to reach server")?;
+        let body = self.check_response(resp)?;
+        Ok(serde_json::from_value(body)?)
+    }
+
+    pub fn verify_evidence(&self) -> Result<EvidenceVerifyReport> {
+        let resp = self
+            .http
+            .get(self.url("/evidence/verify"))
+            .header("Authorization", &self.auth_header)
+            .send()
+            .context("failed to reach server")?;
+        let body = self.check_response(resp)?;
+        Ok(serde_json::from_value(body)?)
     }
 
     // -- Health (for login validation) --

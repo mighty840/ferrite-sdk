@@ -44,6 +44,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::devices::DevicesCommand,
     },
+    /// Read and verify the tamper-evident evidence log
+    Evidence {
+        #[command(subcommand)]
+        cmd: commands::evidence::EvidenceCommand,
+    },
     /// Query fault events
     Faults(commands::faults::FaultsArgs),
     /// Manage device groups
@@ -103,6 +108,9 @@ fn main() -> Result<()> {
             match cmd {
                 Commands::Devices { cmd: subcmd } => {
                     commands::devices::run(subcmd, &client, format)?;
+                }
+                Commands::Evidence { cmd: subcmd } => {
+                    commands::evidence::run(subcmd, &client, format)?;
                 }
                 Commands::Faults(args) => {
                     commands::faults::run(args, &client, format)?;

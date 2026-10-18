@@ -1,4 +1,5 @@
 pub mod devices;
+pub mod evidence;
 pub mod faults;
 pub mod groups;
 pub mod metrics;
