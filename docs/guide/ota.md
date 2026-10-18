@@ -114,6 +114,7 @@ Keeping DFU in bank 2 lets the app write it while running from bank 1.
 |---|---|
 | `FERRITE_OTA_PUBKEY` | Required. Trusted public key(s): hex or path to `ota.key.pub`, comma-separated |
 | `FERRITE_BUILD_ID` | Build ID the firmware reports; pass the same value to `ferrite ota sign --build-id`. Defaults to `SOURCE_DATE_EPOCH`, then the build time |
+| `FERRITE_FIRMWARE_VERSION` | Version the firmware reports (max 32 bytes); pass the same value to `ferrite ota sign --version`. Defaults to the crate version |
 | `FERRITE_SECURITY_VERSION` | Anti-rollback floor compiled into the firmware (default 0) |
 
 **First flash** (bootloader + app, once, over the probe):
@@ -131,9 +132,9 @@ probe-rs reset --chip STM32H563ZITx
 **Release over the air:**
 
 ```bash
-FERRITE_OTA_PUBKEY=ota.key.pub FERRITE_BUILD_ID=1002 cargo build --release
+FERRITE_OTA_PUBKEY=ota.key.pub FERRITE_BUILD_ID=1002 FERRITE_FIRMWARE_VERSION=0.3.0 cargo build --release
 arm-none-eabi-objcopy -O binary target/thumbv8m.main-none-eabihf/release/embassy-stm32h563-example app.bin
-ferrite ota sign --key ota.key --firmware app.bin --version 0.2.0 --build-id 1002 --security-version 0
+ferrite ota sign --key ota.key --firmware app.bin --version 0.3.0 --build-id 1002 --security-version 0
 ferrite ota upload --firmware app.bin
 # then create and activate a campaign for the device (dashboard or API)
 ```

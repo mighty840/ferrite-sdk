@@ -4,6 +4,9 @@
 //!   reports and that `ferrite ota sign --build-id` must use. Falls back to
 //!   `SOURCE_DATE_EPOCH`, then the build time. Set it once in the release
 //!   script and pass the same value to the signer.
+//! - `FERRITE_FIRMWARE_VERSION`: version string the firmware reports and that
+//!   `ferrite ota sign --version` must use (max 32 bytes, the manifest field
+//!   size). Defaults to the crate version.
 //! - `FERRITE_OTA_PUBKEY`: trusted Ed25519 public key(s) for OTA manifests,
 //!   comma-separated hex or paths to `.pub` files from `ferrite ota keygen`.
 //!   Required: firmware without a trust anchor could never verify an update.
@@ -26,6 +29,7 @@ fn main() {
     println!("cargo:rerun-if-changed=memory.x");
     for var in [
         "FERRITE_BUILD_ID",
+        "FERRITE_FIRMWARE_VERSION",
         "SOURCE_DATE_EPOCH",
         "FERRITE_OTA_PUBKEY",
         "FERRITE_SECURITY_VERSION",
@@ -46,7 +50,18 @@ fn main() {
                     .as_secs()
             }),
     };
-    println!("cargo:warning=ferrite build_id = {build_id} (sign with --build-id {build_id})");
+    let firmware_version = env::var("FERRITE_FIRMWARE_VERSION")
+        .unwrap_or_else(|_| env::var("CARGO_PKG_VERSION").unwrap());
+    assert!(
+        !firmware_version.is_empty()
+            && firmware_version.len() <= 32
+            && !firmware_version.contains('\0'),
+        "FERRITE_FIRMWARE_VERSION must be 1-32 bytes without NUL (manifest field size)"
+    );
+    println!(
+        "cargo:warning=ferrite firmware {firmware_version} build_id {build_id} \
+         (sign with --version {firmware_version} --build-id {build_id})"
+    );
 
     println!("cargo::rustc-check-cfg=cfg(test_hang_after_boot)");
     if env::var("FERRITE_TEST_HANG_AFTER_BOOT").as_deref() == Ok("1") {
@@ -87,6 +102,7 @@ fn main() {
         out,
         format!(
             "pub const BUILD_ID: u64 = {build_id};\n\
+             pub const FIRMWARE_VERSION: &str = {firmware_version:?};\n\
              pub const SECURITY_VERSION: u32 = {security_version};\n\
              pub const OTA_TRUSTED_KEYS: [[u8; 32]; {}] = [{}];\n",
             keys.len(),

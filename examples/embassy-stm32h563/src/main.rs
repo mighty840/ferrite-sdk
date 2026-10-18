@@ -143,8 +143,9 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(config);
 
     defmt::info!(
-        "Ferrite H563 Ethernet — device_id={} build_id={}",
+        "Ferrite H563 Ethernet — device_id={} version={} build_id={}",
         DEVICE_ID,
+        identity::FIRMWARE_VERSION,
         BUILD_ID
     );
 
@@ -154,7 +155,7 @@ async fn main(spawner: Spawner) {
 
     ferrite_sdk::init(SdkConfig {
         device_id: DEVICE_ID,
-        firmware_version: env!("CARGO_PKG_VERSION"),
+        firmware_version: identity::FIRMWARE_VERSION,
         build_id: BUILD_ID,
         ticks_fn: || embassy_time::Instant::now().as_ticks(),
         ram_regions: &[RamRegion {
