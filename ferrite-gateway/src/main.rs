@@ -1,6 +1,8 @@
 //! ferrite-gateway — edge gateway daemon that bridges BLE/USB/LoRa devices
 //! to a ferrite-server instance over HTTP.
 
+#[cfg(feature = "usb")]
+mod backoff;
 mod ble_scanner;
 mod buffer;
 mod config;
@@ -43,6 +45,11 @@ struct Cli {
     #[cfg(feature = "ble")]
     #[arg(long)]
     ble: bool,
+
+    /// Reconnect a BLE device after this many seconds without notifications
+    #[cfg(feature = "ble")]
+    #[arg(long, default_value = "120")]
+    ble_idle_timeout: u64,
 
     /// HTTP ingest port for Ethernet/WiFi devices (0 = disabled)
     #[arg(long, default_value = "4001")]
@@ -116,8 +123,9 @@ async fn main() -> Result<()> {
     #[cfg(feature = "ble")]
     if cli.ble {
         let tx = chunk_tx.clone();
+        let idle_timeout = std::time::Duration::from_secs(cli.ble_idle_timeout);
         tokio::spawn(async move {
-            if let Err(e) = ble_scanner::ble_scanner_task(tx).await {
+            if let Err(e) = ble_scanner::ble_scanner_task(tx, idle_timeout).await {
                 error!("BLE scanner failed: {}", e);
             }
         });
@@ -149,17 +157,14 @@ async fn main() -> Result<()> {
         // and uses the DeviceInfo chunk to associate all chunks with the right device.
         let mut batch = chunk.raw.clone();
         let batch_start = tokio::time::Instant::now();
-        loop {
-            match tokio::time::timeout(std::time::Duration::from_millis(200), chunk_rx.recv()).await
-            {
-                Ok(Some(next)) => {
-                    batch.extend_from_slice(&next.raw);
-                    // Cap batch time to avoid holding chunks too long
-                    if batch_start.elapsed() > std::time::Duration::from_secs(2) {
-                        break;
-                    }
-                }
-                _ => break, // Timeout or channel closed
+        // Stops on timeout or channel close.
+        while let Ok(Some(next)) =
+            tokio::time::timeout(std::time::Duration::from_millis(200), chunk_rx.recv()).await
+        {
+            batch.extend_from_slice(&next.raw);
+            // Cap batch time to avoid holding chunks too long
+            if batch_start.elapsed() > std::time::Duration::from_secs(2) {
+                break;
             }
         }
 

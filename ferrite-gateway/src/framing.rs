@@ -148,11 +148,7 @@ mod tests {
     /// Build a minimal valid chunk with the given type and payload.
     fn make_chunk(chunk_type: u8, payload: &[u8]) -> Vec<u8> {
         let payload_len = payload.len() as u16;
-        let mut buf = Vec::new();
-        buf.push(MAGIC);
-        buf.push(VERSION);
-        buf.push(chunk_type);
-        buf.push(0x00); // flags
+        let mut buf = vec![MAGIC, VERSION, chunk_type, 0x00]; // flags = 0
         buf.extend_from_slice(&payload_len.to_le_bytes());
         buf.extend_from_slice(&[0x00, 0x00]); // sequence_id
         buf.extend_from_slice(payload);

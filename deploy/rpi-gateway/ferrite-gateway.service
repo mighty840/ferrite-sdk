@@ -10,7 +10,8 @@ Group=ferrite
 WorkingDirectory=/opt/ferrite
 ExecStart=/opt/ferrite/bin/ferrite-gateway --server https://ferrite.shanifaas.com --usb-port /dev/ferrite-nucleo-l4 --usb-port /dev/ferrite-nucleo-wl --ble
 EnvironmentFile=/opt/ferrite/env/gateway.env
-Restart=on-failure
+# always: a clean exit (all receivers stopped) must come back too
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

@@ -13,7 +13,9 @@
 
 set -euo pipefail
 
-TARGET="aarch64-unknown-linux-gnu"
+# 64-bit Pi OS by default; TARGET=armv7-unknown-linux-gnueabihf for 32-bit
+# Pi OS (the demo gateway runs Raspbian buster armv7l).
+TARGET="${TARGET:-aarch64-unknown-linux-gnu}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
