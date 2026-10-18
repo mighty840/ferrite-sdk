@@ -39,6 +39,7 @@ export default defineConfig({
             { text: 'Signed OTA Updates', link: '/guide/ota' },
             { text: 'Update-Reach Reports', link: '/guide/update-reach' },
             { text: 'Evidence Log', link: '/guide/evidence-log' },
+            { text: 'Linux Agent', link: '/guide/linux-agent' },
           ],
         },
       ],

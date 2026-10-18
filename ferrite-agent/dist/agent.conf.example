@@ -1,0 +1,33 @@
+# /etc/ferrite/agent.conf: ferrite-agent configuration (TOML)
+
+# ferrite-server, or a ferrite-gateway on the local network.
+server_url = "https://ferrite.example.com"
+
+# Sent as X-API-Key; required when the server sets INGEST_API_KEY.
+# api_key = "..."
+
+# Seconds between reports.
+# interval_secs = 60
+
+# Identity normally comes from /etc/os-release and /etc/machine-id
+# (`ferrite-agent identity` shows it). Override only if you must:
+# device_id = "plc-line3-07"
+# firmware_version = "2.3.1"
+# build_id = 20261018093000
+
+# Filesystems to report: the first as disk_used_pct, others as
+# disk_<last path component>_used_pct.
+# disks = ["/", "/data"]
+
+# Boot tracking and the offline spool.
+# state_dir = "/var/lib/ferrite-agent"
+# Reports kept while offline (1440 = one day at 60 s); oldest dropped first.
+# max_spooled_reports = 1440
+
+# systemd units to watch. Each reports <key>_active (1/0) and
+# <key>_restarts. key defaults to the unit name without its suffix and
+# must keep "<key>_restarts" within 32 bytes. Keep [[units]] tables at
+# the end of the file: TOML assigns any key after them to the table.
+# [[units]]
+# name = "codesyscontrol.service"
+# key = "codesys"
