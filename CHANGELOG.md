@@ -8,8 +8,6 @@ contain breaking changes.
 ## [Unreleased]
 
 ### Added
-- **Device type:** `DeviceInfo` chunks can carry an optional device-type byte (0 = MCU, 1 = Linux). `ChunkEncoder::encode_device_info_typed` sends it, and `ferrite-agent` marks its devices as Linux. The server stores `device_type` (default `mcu`), and the dashboard shows a badge, a type filter and a detail field.
-
 ### Changed (breaking)
 - C API: the transport callback typedefs are now `ferrite_send_chunk_fn_t` and `ferrite_is_available_fn_t` (were `IotaiSendChunkFn` / `IotaiIsAvailableFn`), matching the other `ferrite_*_t` types. The Rust-side `ferrite-ffi` types drop the `Iotai` prefix too (`FerriteError`, `FerriteTransport`, …). Regenerate your header with cbindgen; the `ferrite_*_t` structs and `FERRITE_ERROR_T_*` codes are unchanged.
 - The CLI crate is now `ferrite-ctl` (directory `ferrite-ctl/`); the binary is still `ferrite`. `ferrite-cli` is taken on crates.io (#79).

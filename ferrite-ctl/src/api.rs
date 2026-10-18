@@ -607,6 +607,16 @@ impl ApiClient {
         Ok(serde_json::from_value(body)?)
     }
 
+    pub fn anchor_evidence(&self) -> Result<serde_json::Value> {
+        let resp = self
+            .http
+            .post(self.url("/evidence/anchor"))
+            .header("Authorization", &self.auth_header)
+            .send()
+            .context("failed to reach server")?;
+        self.check_response(resp)
+    }
+
     pub fn verify_evidence(&self) -> Result<EvidenceVerifyReport> {
         let resp = self
             .http

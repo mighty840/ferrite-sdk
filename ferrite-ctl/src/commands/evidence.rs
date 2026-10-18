@@ -30,6 +30,8 @@ pub enum EvidenceCommand {
     },
     /// Recompute the server's hash chain and report whether it is intact
     Verify,
+    /// Anchor the current head now (webhook / timestamp authority; admin)
+    Anchor,
 }
 
 pub fn run(cmd: &EvidenceCommand, client: &ApiClient, format: OutputFormat) -> Result<()> {
@@ -84,6 +86,21 @@ pub fn run(cmd: &EvidenceCommand, client: &ApiClient, format: OutputFormat) -> R
             }
             if !report.valid {
                 bail!("evidence chain is broken");
+            }
+        }
+        EvidenceCommand::Anchor => {
+            let outcome = client.anchor_evidence()?;
+            match format {
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&outcome)?),
+                _ => match outcome["result"].as_str() {
+                    Some("anchored") => println!(
+                        "anchored head {} {} (anchor entry {})",
+                        outcome["head_seq"],
+                        outcome["head_hash"].as_str().unwrap_or("-"),
+                        outcome["anchor_seq"]
+                    ),
+                    _ => println!("nothing new to anchor"),
+                },
             }
         }
     }

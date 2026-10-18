@@ -62,6 +62,17 @@ Roles: `admin`, `provisioner`, `viewer`, `auditor` (evidence log only).
 | `ALERT_WEBHOOK_URL` | — | Webhook URL for fault/offline alerts (Slack/Discord compatible) |
 | `ALERT_OFFLINE_MINUTES` | `10` | Minutes before a device is marked offline |
 
+### Evidence anchoring
+
+| Variable | Default | Description |
+|---|---|---|
+| `EVIDENCE_ANCHOR_TSA_URL` | — | RFC 3161 timestamp authority for the evidence head hash (e.g. `http://timestamp.digicert.com`) |
+| `EVIDENCE_ANCHOR_WEBHOOK_URL` | — | Webhook that receives the head hash as JSON |
+| `EVIDENCE_ANCHOR_WEBHOOK_TOKEN` | — | Bearer token for the webhook |
+| `EVIDENCE_ANCHOR_INTERVAL_SECS` | `0` | Seconds between scheduled anchors; `0` = only `POST /evidence/anchor` |
+
+See [Anchoring the head](/guide/evidence-log#anchoring-the-head).
+
 ### Data retention
 
 | Variable | Default | Description |
@@ -154,6 +165,7 @@ All accept `?format=csv`. See [Update-reach reports](/guide/update-reach).
 |---|---|---|---|
 | GET | `/evidence` | Admin or auditor | Hash-chained release/update record (`from`, `to`, `kind`, `subject`, `limit`) |
 | GET | `/evidence/verify` | Admin or auditor | Recompute the chain and report the head hash |
+| POST | `/evidence/anchor` | Admin | Anchor the head now (timestamp authority / webhook) |
 
 See [Evidence log](/guide/evidence-log).
 

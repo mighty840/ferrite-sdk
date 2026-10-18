@@ -207,6 +207,8 @@ pub struct AuthConfig {
     /// comma-separated hex). When non-empty, firmware uploads must carry a
     /// manifest signed by one of them.
     pub ota_trusted_keys: Vec<[u8; 32]>,
+    /// Where and how often to anchor the evidence log's head hash.
+    pub evidence_anchor: crate::evidence_anchor::EvidenceAnchorConfig,
 }
 
 impl AuthConfig {
@@ -268,6 +270,14 @@ impl AuthConfig {
             ota_trusted_keys: optional_env("OTA_TRUSTED_KEYS")
                 .map(|v| parse_ota_trusted_keys(&v))
                 .unwrap_or_default(),
+            evidence_anchor: crate::evidence_anchor::EvidenceAnchorConfig {
+                interval_secs: optional_env("EVIDENCE_ANCHOR_INTERVAL_SECS")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+                webhook_url: optional_env("EVIDENCE_ANCHOR_WEBHOOK_URL"),
+                webhook_token: optional_env("EVIDENCE_ANCHOR_WEBHOOK_TOKEN"),
+                tsa_url: optional_env("EVIDENCE_ANCHOR_TSA_URL"),
+            },
         }
     }
 }
@@ -375,6 +385,7 @@ mod tests {
             chunk_encryption_key: None,
             additional_users: vec![],
             ota_trusted_keys: vec![],
+            evidence_anchor: Default::default(),
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -399,6 +410,7 @@ mod tests {
             chunk_encryption_key: None,
             additional_users: vec![],
             ota_trusted_keys: vec![],
+            evidence_anchor: Default::default(),
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");

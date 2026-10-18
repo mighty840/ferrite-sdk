@@ -6,6 +6,7 @@ pub mod campaigns;
 pub mod config;
 pub mod crashes;
 pub mod evidence;
+pub mod evidence_anchor;
 pub mod groups;
 pub mod ingest;
 pub mod ota;

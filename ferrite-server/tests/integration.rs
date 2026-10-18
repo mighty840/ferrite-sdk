@@ -38,6 +38,10 @@ const AUTH_ENV_KEYS: &[&str] = &[
     "CHUNK_ENCRYPTION_KEY",
     "BASIC_AUTH_USERS",
     "OTA_TRUSTED_KEYS",
+    "EVIDENCE_ANCHOR_INTERVAL_SECS",
+    "EVIDENCE_ANCHOR_WEBHOOK_URL",
+    "EVIDENCE_ANCHOR_WEBHOOK_TOKEN",
+    "EVIDENCE_ANCHOR_TSA_URL",
 ];
 
 /// Spawn a ferrite-server on a random port with additional env vars set.
@@ -1312,6 +1316,144 @@ async fn device_type_comes_from_device_info() {
     };
     assert_eq!(type_of("mcu-1"), "mcu");
     assert_eq!(type_of("linux-1"), "linux");
+}
+
+/// Requests a sink received: (sink, Authorization header, body).
+type SinkLog = Arc<std::sync::Mutex<Vec<(String, String, Vec<u8>)>>>;
+
+/// A stand-in webhook receiver and timestamp authority on one port.
+async fn spawn_anchor_sinks() -> (String, SinkLog) {
+    use axum::{body::Bytes, http::HeaderMap, routing::post, Router};
+    let seen: SinkLog = Default::default();
+    let (s1, s2) = (seen.clone(), seen.clone());
+    let app = Router::new()
+        .route(
+            "/hook",
+            post(move |headers: HeaderMap, body: Bytes| async move {
+                let auth = headers
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                s1.lock()
+                    .unwrap()
+                    .push(("hook".into(), auth, body.to_vec()));
+                "ok"
+            }),
+        )
+        .route(
+            "/tsa",
+            post(move |body: Bytes| async move {
+                s2.lock()
+                    .unwrap()
+                    .push(("tsa".into(), String::new(), body.to_vec()));
+                // TimeStampResp { PKIStatusInfo { granted }, token placeholder }
+                vec![
+                    0x30u8, 0x09, 0x30, 0x03, 0x02, 0x01, 0x00, 0x30, 0x02, 0x05, 0x00,
+                ]
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}"), seen)
+}
+
+#[tokio::test]
+async fn evidence_anchor_to_webhook_and_tsa() {
+    let (sinks, seen) = spawn_anchor_sinks().await;
+    let hook = format!("{sinks}/hook");
+    let tsa = format!("{sinks}/tsa");
+    let base = spawn_server_with_env(vec![
+        ("EVIDENCE_ANCHOR_WEBHOOK_URL", hook.as_str()),
+        ("EVIDENCE_ANCHOR_WEBHOOK_TOKEN", "s3cret"),
+        ("EVIDENCE_ANCHOR_TSA_URL", tsa.as_str()),
+        ("BASIC_AUTH_USERS", "view:v1:viewer"),
+    ])
+    .await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+    let anchor = |creds: Option<&str>| {
+        let mut req = client.post(format!("{base}/evidence/anchor"));
+        req = match creds {
+            Some(c) => {
+                use base64::Engine;
+                req.header(
+                    "Authorization",
+                    format!(
+                        "Basic {}",
+                        base64::engine::general_purpose::STANDARD.encode(c)
+                    ),
+                )
+            }
+            None => req.header("Authorization", &auth),
+        };
+        req.send()
+    };
+
+    // Empty log: nothing to anchor.
+    let r: serde_json::Value = anchor(None).await.unwrap().json().await.unwrap();
+    assert_eq!(r["result"], "unchanged");
+
+    client
+        .post(format!("{base}/ota/firmware"))
+        .header("Authorization", &auth)
+        .body(vec![9; 64])
+        .send()
+        .await
+        .unwrap();
+    let r: serde_json::Value = anchor(None).await.unwrap().json().await.unwrap();
+    assert_eq!(r["result"], "anchored");
+    assert_eq!(r["head_seq"], 1);
+    assert_eq!(r["anchor_seq"], 2);
+    let head_hash = r["head_hash"].as_str().unwrap().to_string();
+
+    {
+        let seen = seen.lock().unwrap();
+        let hook = seen.iter().find(|(k, _, _)| k == "hook").unwrap();
+        assert_eq!(hook.1, "Bearer s3cret");
+        let body: serde_json::Value = serde_json::from_slice(&hook.2).unwrap();
+        assert_eq!(body["head_hash"], head_hash.as_str());
+        let tsa_req = &seen.iter().find(|(k, _, _)| k == "tsa").unwrap().2;
+        // The SHA-256 imprint in the request is the head hash itself.
+        let digest = hex::decode(&head_hash).unwrap();
+        assert!(tsa_req.windows(32).any(|w| w == digest.as_slice()));
+    }
+
+    // The anchor is in the log, and anchoring again changes nothing.
+    let log: serde_json::Value = client
+        .get(format!("{base}/evidence?kind=evidence.anchored"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let entry = &log["entries"][0];
+    assert_eq!(entry["subject"], "evidence:1");
+    assert_eq!(entry["details"]["tsa"]["status"], 0);
+    assert_eq!(entry["details"]["webhook"]["status"], 200);
+    let r: serde_json::Value = anchor(None).await.unwrap().json().await.unwrap();
+    assert_eq!(r["result"], "unchanged");
+
+    // Only admins may trigger it.
+    assert_eq!(
+        anchor(Some("view:v1")).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
+async fn evidence_anchor_without_config_is_a_client_error() {
+    let base = spawn_server().await;
+    let resp = Client::new()
+        .post(format!("{base}/evidence/anchor"))
+        .header("Authorization", basic_auth_header())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 // =========================================================================
