@@ -61,9 +61,14 @@ let policy = UpdatePolicy {
     min_security_version: SECURITY_VERSION,
 };
 
-if let OtaCheckResult::UpdateAvailable(target) = ota.check().await? {
+let ota = OtaClient::new(DEVICE_ID, BUILD_ID, "http://192.168.0.103:4001", None);
+
+// One TCP connection per request: responses aren't drained.
+if let OtaCheckResult::UpdateAvailable(target) = ota.check(&mut connect().await?).await? {
     let manifest = ota
-        .download(&target, &policy, |offset, data| update_slot.write(offset, data))
+        .download(&mut connect().await?, &target, &policy, |offset, data| {
+            update_slot.write(offset, data)
+        })
         .await?;
     // Only now: mark the update slot bootable (MCUboot / embassy-boot) and reboot.
 }
@@ -83,6 +88,10 @@ Verification is `no_std` and allocation-free. On a Cortex-M3 it adds about 11 KB
 Checks 1–4 run before the first byte is written to flash. The hash is only known at the end, so **mark the slot bootable only after `download()` returns `Ok`**.
 
 Devices authenticate to `GET /ota/targets/:device_id` and the download with `X-API-Key` when the server has an `INGEST_API_KEY`. Without one, these routes require user authentication.
+
+### Devices behind a gateway
+
+Devices that only reach `ferrite-gateway` (for example over a boards-only Ethernet link) point `OtaClient` at the gateway's HTTP ingest port. The gateway relays exactly three reads to the server with its own credentials: `GET /ota/targets/<device_id>`, `GET /ota/firmware/<id>/download` and `GET /ota/firmware/<id>/manifest`. Everything else gets a 404. The gateway passes `X-Firmware-Manifest` through unchanged; it is not trusted with integrity, since the device verifies the signature itself.
 
 ## Rollback protection
 

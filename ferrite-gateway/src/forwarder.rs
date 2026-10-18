@@ -20,20 +20,10 @@ impl Forwarder {
     pub fn new(config: &GatewayConfig) -> Self {
         let ingest_url = format!("{}/ingest/chunks", config.server_url.trim_end_matches('/'));
 
-        let auth_header = match (&config.auth_user, &config.auth_pass) {
-            (Some(user), Some(pass)) => {
-                use base64::Engine;
-                let encoded =
-                    base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
-                Some(format!("Basic {encoded}"))
-            }
-            _ => None,
-        };
-
         Self {
             client: Client::new(),
             ingest_url,
-            auth_header,
+            auth_header: config.basic_auth_header(),
             api_key: config.api_key.clone(),
             max_retries: config.max_retries,
         }

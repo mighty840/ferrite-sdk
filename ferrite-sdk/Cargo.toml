@@ -9,7 +9,9 @@ license = "MIT"
 default = []
 cortex-m = ["dep:cortex-m", "dep:cortex-m-rt"]
 defmt = ["dep:defmt"]
-embassy = ["dep:embassy-time", "dep:embassy-sync"]
+# Async transport trait + upload_async. Runtime-agnostic: no embassy crate
+# dependency, so apps can use any embassy-time/embassy-sync release.
+embassy = []
 postcard-encoding = ["dep:postcard", "dep:serde"]
 encryption = ["dep:aes", "dep:ccm"]
 usb-cdc = ["dep:embassy-usb", "embassy"]
@@ -26,8 +28,6 @@ critical-section = { workspace = true }
 cortex-m = { workspace = true, optional = true }
 cortex-m-rt = { workspace = true, optional = true, features = ["device"] }
 defmt = { workspace = true, optional = true }
-embassy-time = { workspace = true, optional = true }
-embassy-sync = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 aes = { version = "0.8", optional = true, default-features = false }

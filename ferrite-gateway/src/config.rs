@@ -50,6 +50,19 @@ impl Default for GatewayConfig {
 }
 
 impl GatewayConfig {
+    /// `Authorization: Basic …` value when basic auth credentials are set.
+    pub fn basic_auth_header(&self) -> Option<String> {
+        match (&self.auth_user, &self.auth_pass) {
+            (Some(user), Some(pass)) => {
+                use base64::Engine;
+                let encoded =
+                    base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
+                Some(format!("Basic {encoded}"))
+            }
+            _ => None,
+        }
+    }
+
     /// Load config from environment variables (with dotenvy .env support).
     pub fn from_env() -> Self {
         let _ = dotenvy::dotenv();

@@ -9,6 +9,7 @@ mod config;
 mod forwarder;
 mod framing;
 mod http_ingest;
+mod ota_relay;
 mod usb_reader;
 
 use anyhow::Result;
@@ -135,8 +136,9 @@ async fn main() -> Result<()> {
     if cli.http_ingest_port > 0 {
         let tx = chunk_tx.clone();
         let port = cli.http_ingest_port;
+        let relay = std::sync::Arc::new(ota_relay::OtaRelay::new(&config));
         tokio::spawn(async move {
-            if let Err(e) = http_ingest::http_ingest_task(port, tx).await {
+            if let Err(e) = http_ingest::http_ingest_task(port, tx, Some(relay)).await {
                 error!("HTTP ingest listener failed: {}", e);
             }
         });
