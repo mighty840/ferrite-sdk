@@ -2,7 +2,7 @@
 
 `ferrite-agent` reports an embedded Linux device to ferrite-server: which image it runs, how the system is doing, why it last rebooted, and whether the services you care about (for example the CODESYS Control runtime) are up. It is the Linux counterpart of the MCU SDK and speaks the same chunk format over `POST /ingest/chunks`. Linux devices therefore show up in the device list, metrics, OTA campaigns and update-reach reports with no server changes.
 
-It runs as an unprivileged systemd service, uses no database, and is about 2–3 MB stripped.
+It runs as an unprivileged systemd service and uses no database. On x86_64 the stripped binary is 3.7 MB with the default release profile, or 2.3 MB with `lto = true`, `opt-level = "s"`, `codegen-units = 1` and `panic = "abort"`.
 
 ## Install
 
