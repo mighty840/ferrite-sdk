@@ -9,6 +9,7 @@ contain breaking changes.
 
 ### Changed (breaking)
 - C API: the transport callback typedefs are now `ferrite_send_chunk_fn_t` and `ferrite_is_available_fn_t` (were `IotaiSendChunkFn` / `IotaiIsAvailableFn`), matching the other `ferrite_*_t` types. The Rust-side `ferrite-ffi` types drop the `Iotai` prefix too (`FerriteError`, `FerriteTransport`, …). Regenerate your header with cbindgen; the `ferrite_*_t` structs and `FERRITE_ERROR_T_*` codes are unchanged.
+- The CLI crate is now `ferrite-ctl` (directory `ferrite-ctl/`); the binary is still `ferrite`. `ferrite-cli` is taken on crates.io (#79).
 
 ## [0.1.0] — 2026-10-18 (pre-release)
 

@@ -17,7 +17,7 @@ encryption = ["dep:aes", "dep:ccm"]
 usb-cdc = ["dep:embassy-usb", "embassy"]
 http = ["dep:reqwless", "dep:embedded-io-async", "ota-manifest", "embassy"]
 # Signed OTA manifest format and verification (no_std, no alloc); also
-# used on the host by ferrite-server and ferrite-cli.
+# used on the host by ferrite-server and ferrite-ctl.
 ota-manifest = ["dep:ed25519-compact", "dep:sha2"]
 lora = ["dep:embedded-hal"]
 
