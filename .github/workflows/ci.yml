@@ -147,6 +147,16 @@ jobs:
           - target: thumbv7em-none-eabi
             example: rtic-stm32f4
             features: cortex-m
+          - target: thumbv8m.main-none-eabihf
+            example: embassy-stm32h563-bootloader
+            features: cortex-m
+          - target: thumbv8m.main-none-eabihf
+            example: embassy-stm32h563
+            features: cortex-m,http
+    env:
+      # Dummy OTA trust anchor so the H563 OTA example builds in CI.
+      FERRITE_OTA_PUBKEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      FERRITE_BUILD_ID: "1"
     steps:
       - uses: actions/checkout@v4
 

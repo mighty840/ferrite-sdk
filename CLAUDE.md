@@ -17,7 +17,9 @@ cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-
 ```bash
 # Embassy STM32 boards (probe-rs)
 cd examples/embassy-stm32l4a6   # Nucleo-L4A6ZG (USB CDC) — thumbv7em-none-eabihf
-cd examples/embassy-stm32h563   # Nucleo-H563ZI (Ethernet) — thumbv8m.main-none-eabihf
+cd examples/embassy-stm32h563   # Nucleo-H563ZI (Ethernet, signed OTA) — thumbv8m.main-none-eabihf
+                                # runs behind examples/embassy-stm32h563-bootloader (flash that first);
+                                # build needs FERRITE_OTA_PUBKEY (+ FERRITE_BUILD_ID), see docs/guide/ota.md
 probe-rs download --chip STM32L4A6ZGTx target/.../release/binary
 probe-rs reset --chip STM32L4A6ZGTx
 

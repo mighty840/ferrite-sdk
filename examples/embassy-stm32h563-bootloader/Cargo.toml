@@ -1,0 +1,24 @@
+[package]
+name = "embassy-stm32h563-bootloader"
+version = "0.1.0"
+edition = "2021"
+description = "embassy-boot bootloader for the Nucleo-H563ZI ferrite OTA example"
+license = "MIT"
+
+[dependencies]
+# "time": embassy-stm32 0.4.0 usb.rs uses embassy_time unconditionally
+embassy-stm32 = { version = "=0.4.0", features = ["stm32h563zi", "unstable-pac", "time"] }
+embassy-boot-stm32 = "=0.6.0"
+embassy-sync = "0.7.2"
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7"
+
+[profile.release]
+debug = 2
+lto = "fat"
+opt-level = "s"
+codegen-units = 1
+
+[profile.dev]
+debug = 2
+opt-level = "s"
