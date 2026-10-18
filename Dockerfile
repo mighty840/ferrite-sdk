@@ -40,7 +40,7 @@ COPY --from=builder --chown=ferrite:ferrite \
 COPY --from=builder --chown=ferrite:ferrite \
     /app/docker/entrypoint.sh ./entrypoint.sh
 
-RUN mkdir -p data elfs firmware
+RUN mkdir -p data
 
 EXPOSE 4000
 ENV RUST_LOG=info

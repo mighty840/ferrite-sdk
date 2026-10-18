@@ -41,23 +41,27 @@ The server auto-detects `arm-none-eabi-addr2line` on your PATH. You can also spe
 
 ## Docker
 
-```dockerfile
-FROM rust:1.80 AS builder
-WORKDIR /src
-COPY . .
-RUN cargo build -p ferrite-server --release
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y libsqlite3-0 && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /src/target/release/ferrite-server /usr/local/bin/
-EXPOSE 4000
-ENTRYPOINT ["ferrite-server", "--http", "0.0.0.0:4000"]
-```
+The image `ghcr.io/mighty840/ferrite` bundles the server and the dashboard. It's built from the repository's `Dockerfile`.
 
 ```bash
-docker build -t ferrite-server .
-docker run -p 4000:4000 -v $(pwd)/data:/data ferrite-server --db /data/ferrite.db --elf-dir /data/elfs
+docker run -p 4000:4000 -v ferrite-data:/home/ferrite/data \
+  -e BASIC_AUTH_USER=admin -e BASIC_AUTH_PASS=change-me \
+  ghcr.io/mighty840/ferrite:latest
 ```
+
+Everything the server writes lives under `/home/ferrite/data`, so mount a volume there:
+
+| Path | Contents |
+|---|---|
+| `ferrite.db` | Devices, faults, metrics, OTA targets, campaigns |
+| `firmware/` | Uploaded OTA images |
+| `elfs/` | Uploaded ELF files for symbolication |
+
+Configure the server with the [environment variables](/server/configuration#environment-variables). One variable belongs to the image itself:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_RESET_INTERVAL` | `0` | **Demo only.** Every N seconds, stop the server, delete `ferrite.db`, `firmware/` and `elfs/`, and start again. `0` disables it |
 
 ## Verify
 
