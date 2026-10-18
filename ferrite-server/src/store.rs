@@ -125,6 +125,91 @@ pub struct RollbackOutcome {
     pub paused_campaigns: Vec<i64>,
 }
 
+// ---- Update-reach report types ----
+
+/// Median of sorted values; the mean of the two middle values for an even
+/// count, rounded.
+fn median(sorted: &[i64]) -> Option<i64> {
+    let n = sorted.len();
+    match n {
+        0 => None,
+        _ if n % 2 == 1 => Some(sorted[n / 2]),
+        _ => Some(((sorted[n / 2 - 1] + sorted[n / 2]) as f64 / 2.0).round() as i64),
+    }
+}
+
+/// Devices running one firmware build.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BuildCount {
+    pub firmware_version: String,
+    pub build_id: u64,
+    pub devices: i64,
+    /// Devices seen within the online window.
+    pub online: i64,
+    pub last_seen: Option<String>,
+}
+
+/// One build a device reported, and when it was first seen.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FirmwareObservation {
+    pub build_id: u64,
+    pub firmware_version: String,
+    pub observed_at: String,
+}
+
+/// A campaign device with its update evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CampaignReachDevice {
+    pub device_id: String,
+    /// Campaign status: pending, downloading, installed, failed.
+    pub status: String,
+    pub status_updated_at: String,
+    pub current_build_id: Option<u64>,
+    pub current_version: Option<String>,
+    pub last_seen: Option<String>,
+    /// Currently reports the campaign's target build.
+    pub on_target: bool,
+    /// Seen within the online window.
+    pub reachable: bool,
+    /// Already on the target build before the campaign was activated.
+    pub patched_before_campaign: bool,
+    /// First report of the target build after activation.
+    pub installed_at: Option<String>,
+    /// Seconds from activation to `installed_at`.
+    pub time_to_patch_secs: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TimeToPatch {
+    pub count: usize,
+    pub min_secs: Option<i64>,
+    pub median_secs: Option<i64>,
+    pub max_secs: Option<i64>,
+}
+
+/// Update-reach evidence for one campaign.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CampaignReach {
+    pub campaign_id: i64,
+    pub name: String,
+    pub status: String,
+    pub target_version: String,
+    pub target_build_id: u64,
+    pub created_at: String,
+    pub activated_at: Option<String>,
+    pub targeted: usize,
+    pub on_target: usize,
+    pub installed: usize,
+    pub failed: usize,
+    /// Not on target and not failed.
+    pub pending: usize,
+    /// Not on target and not seen within the online window.
+    pub unreachable: usize,
+    pub percent_on_target: f64,
+    pub time_to_patch: TimeToPatch,
+    pub devices: Vec<CampaignReachDevice>,
+}
+
 /// A campaign with aggregated device status counts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampaignSummary {
@@ -360,10 +445,24 @@ impl Store {
             "ALTER TABLE fault_events ADD COLUMN crash_group_id INTEGER REFERENCES crash_groups(id)",
             "ALTER TABLE firmware_artifacts ADD COLUMN manifest TEXT",
             "ALTER TABLE firmware_artifacts ADD COLUMN security_version INTEGER",
+            "ALTER TABLE ota_campaigns ADD COLUMN activated_at TEXT",
         ];
         for sql in &columns {
             let _ = self.conn.execute(sql, []);
         }
+        // Every build a device has reported, for update-reach reports and
+        // time-to-patch. Written when a device reports a different build.
+        let _ = self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS device_firmware_history (
+                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                 device_id        TEXT NOT NULL,
+                 build_id         INTEGER NOT NULL,
+                 firmware_version TEXT NOT NULL,
+                 observed_at      TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             CREATE INDEX IF NOT EXISTS idx_fw_history_device
+                 ON device_firmware_history(device_id, observed_at);",
+        );
         // Index on device_key for lookups
         let _ = self.conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_key ON devices(device_key)",
@@ -374,12 +473,30 @@ impl Store {
     // ---- Device CRUD ----
 
     /// Upsert a device by device_id. Returns the row id.
+    ///
+    /// A new device, or a different build than last reported, is also
+    /// recorded in `device_firmware_history`.
     pub fn upsert_device(
         &self,
         device_id: &str,
         firmware_version: &str,
         build_id: u64,
     ) -> SqlResult<i64> {
+        let previous: Option<(i64, String)> = self
+            .conn
+            .query_row(
+                "SELECT build_id, firmware_version FROM devices WHERE device_id = ?1",
+                params![device_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if previous.as_ref() != Some(&(build_id as i64, firmware_version.to_string())) {
+            self.conn.execute(
+                "INSERT INTO device_firmware_history (device_id, build_id, firmware_version)
+                 VALUES (?1, ?2, ?3)",
+                params![device_id, build_id as i64, firmware_version],
+            )?;
+        }
         self.conn.execute(
             "INSERT INTO devices (device_id, firmware_version, build_id)
              VALUES (?1, ?2, ?3)
@@ -1292,7 +1409,10 @@ impl Store {
 
     pub fn update_campaign_status(&self, id: i64, status: &str) -> SqlResult<bool> {
         let changed = self.conn.execute(
-            "UPDATE ota_campaigns SET status = ?2, updated_at = datetime('now') WHERE id = ?1",
+            "UPDATE ota_campaigns SET status = ?2, updated_at = datetime('now'),
+                 activated_at = CASE WHEN ?2 = 'active' THEN COALESCE(activated_at, datetime('now'))
+                                     ELSE activated_at END
+             WHERE id = ?1",
             params![id, status],
         )?;
         Ok(changed > 0)
@@ -1475,6 +1595,179 @@ impl Store {
              )",
             params![campaign_id],
         )
+    }
+
+    // ---- Update-reach reports ----
+
+    /// Devices per firmware build, optionally limited to a group or tag.
+    /// A device counts as online if seen within `online_minutes`.
+    pub fn build_distribution(
+        &self,
+        group_id: Option<i64>,
+        tag: Option<&str>,
+        online_minutes: u64,
+    ) -> SqlResult<Vec<BuildCount>> {
+        let cutoff = format!("-{online_minutes} minutes");
+        let mut stmt = self.conn.prepare(
+            "SELECT d.firmware_version, d.build_id, COUNT(*),
+                    SUM(CASE WHEN d.last_seen >= datetime('now', ?1) THEN 1 ELSE 0 END),
+                    MAX(d.last_seen)
+             FROM devices d
+             WHERE (?2 IS NULL OR d.id IN
+                       (SELECT device_id FROM device_group_members WHERE group_id = ?2))
+               AND (?3 IS NULL OR ',' || REPLACE(COALESCE(d.tags, ''), ' ', '') || ','
+                       LIKE '%,' || ?3 || ',%')
+             GROUP BY d.firmware_version, d.build_id
+             ORDER BY COUNT(*) DESC, d.firmware_version",
+        )?;
+        let rows = stmt.query_map(params![cutoff, group_id, tag], |row| {
+            Ok(BuildCount {
+                firmware_version: row.get(0)?,
+                build_id: row.get::<_, i64>(1)? as u64,
+                devices: row.get(2)?,
+                online: row.get(3)?,
+                last_seen: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Every build a device has reported, oldest first.
+    pub fn firmware_history(&self, device_id: &str) -> SqlResult<Vec<FirmwareObservation>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT build_id, firmware_version, observed_at
+             FROM device_firmware_history WHERE device_id = ?1
+             ORDER BY observed_at, id",
+        )?;
+        let rows = stmt.query_map(params![device_id], |row| {
+            Ok(FirmwareObservation {
+                build_id: row.get::<_, i64>(0)? as u64,
+                firmware_version: row.get(1)?,
+                observed_at: row.get(2)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Update-reach evidence for a campaign: who runs the target build,
+    /// who is unreachable, and how long patching took.
+    pub fn campaign_reach(
+        &self,
+        campaign_id: i64,
+        online_minutes: u64,
+    ) -> SqlResult<Option<CampaignReach>> {
+        let Some(campaign) = self.get_campaign(campaign_id)? else {
+            return Ok(None);
+        };
+        let activated_at: Option<String> = self.conn.query_row(
+            "SELECT activated_at FROM ota_campaigns WHERE id = ?1",
+            params![campaign_id],
+            |row| row.get(0),
+        )?;
+        let target_build_id = self
+            .get_firmware_artifact(campaign.firmware_id)?
+            .map(|f| f.build_id as u64)
+            .unwrap_or(0);
+        let cutoff = format!("-{online_minutes} minutes");
+        // Patching is measured from activation; before that, from creation.
+        let since = activated_at
+            .clone()
+            .unwrap_or_else(|| campaign.created_at.clone());
+
+        let mut stmt = self.conn.prepare(
+            "SELECT cd.device_id, cd.status, cd.updated_at,
+                    d.build_id, d.firmware_version, d.last_seen,
+                    d.last_seen >= datetime('now', ?2),
+                    (SELECT MIN(h.observed_at) FROM device_firmware_history h
+                      WHERE h.device_id = cd.device_id AND h.build_id = ?3
+                        AND h.observed_at >= ?4),
+                    (SELECT MIN(h.observed_at) FROM device_firmware_history h
+                      WHERE h.device_id = cd.device_id AND h.build_id = ?3
+                        AND h.observed_at < ?4)
+             FROM ota_campaign_devices cd
+             LEFT JOIN devices d ON d.device_id = cd.device_id
+             WHERE cd.campaign_id = ?1
+             ORDER BY cd.device_id",
+        )?;
+        let devices = stmt
+            .query_map(
+                params![campaign_id, cutoff, target_build_id as i64, since],
+                |row| {
+                    let current_build_id = row.get::<_, Option<i64>>(3)?.map(|b| b as u64);
+                    let installed_at: Option<String> = row.get(7)?;
+                    let before: Option<String> = row.get(8)?;
+                    let on_target = current_build_id == Some(target_build_id);
+                    Ok(CampaignReachDevice {
+                        device_id: row.get(0)?,
+                        status: row.get(1)?,
+                        status_updated_at: row.get(2)?,
+                        current_build_id,
+                        current_version: row.get(4)?,
+                        last_seen: row.get(5)?,
+                        on_target,
+                        reachable: row.get::<_, Option<bool>>(6)?.unwrap_or(false),
+                        patched_before_campaign: on_target
+                            && before.is_some()
+                            && installed_at.is_none(),
+                        installed_at,
+                        time_to_patch_secs: None,
+                    })
+                },
+            )?
+            .collect::<SqlResult<Vec<_>>>()?;
+
+        let mut devices = devices;
+        for d in &mut devices {
+            if let Some(at) = &d.installed_at {
+                d.time_to_patch_secs = Some(self.conn.query_row(
+                    "SELECT CAST(ROUND((julianday(?1) - julianday(?2)) * 86400) AS INTEGER)",
+                    params![at, since],
+                    |row| row.get(0),
+                )?);
+            }
+        }
+
+        let mut ttp: Vec<i64> = devices
+            .iter()
+            .filter_map(|d| d.time_to_patch_secs)
+            .collect();
+        ttp.sort_unstable();
+        let targeted = devices.len();
+        let on_target = devices.iter().filter(|d| d.on_target).count();
+        let failed = devices
+            .iter()
+            .filter(|d| !d.on_target && d.status == "failed")
+            .count();
+        Ok(Some(CampaignReach {
+            campaign_id,
+            name: campaign.name,
+            status: campaign.status,
+            target_version: campaign.target_version,
+            target_build_id,
+            created_at: campaign.created_at,
+            activated_at,
+            targeted,
+            on_target,
+            installed: devices.iter().filter(|d| d.status == "installed").count(),
+            failed,
+            pending: targeted - on_target - failed,
+            unreachable: devices
+                .iter()
+                .filter(|d| !d.on_target && !d.reachable)
+                .count(),
+            percent_on_target: if targeted == 0 {
+                0.0
+            } else {
+                (on_target as f64 * 1000.0 / targeted as f64).round() / 10.0
+            },
+            time_to_patch: TimeToPatch {
+                count: ttp.len(),
+                min_secs: ttp.first().copied(),
+                median_secs: median(&ttp),
+                max_secs: ttp.last().copied(),
+            },
+            devices,
+        }))
     }
 
     // ---- Data retention purge ----
@@ -2135,6 +2428,203 @@ mod tests {
         let outcome = store.record_ota_rollback("a", 300).unwrap();
         assert!(!outcome.target_removed);
         assert!(store.get_ota_target_for_device("a").unwrap().is_some());
+    }
+
+    // ---- Update-reach report tests ----
+
+    fn fw_artifact(store: &Store, build_id: i64) -> FirmwareArtifact {
+        store
+            .insert_firmware_artifact(&NewFirmwareArtifact {
+                version: "2.0.0",
+                build_id,
+                sha256: "abc",
+                size: 1,
+                filename: "fw.bin",
+                signer: None,
+                manifest: None,
+                security_version: None,
+            })
+            .unwrap()
+    }
+
+    /// Move a device's history and last_seen into the past (SQLite time strings).
+    fn set_times(store: &Store, device_id: &str, build_id: i64, observed: &str, last_seen: &str) {
+        store
+            .conn
+            .execute(
+                "UPDATE device_firmware_history SET observed_at = ?3
+                 WHERE device_id = ?1 AND build_id = ?2",
+                params![device_id, build_id, observed],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE devices SET last_seen = ?2 WHERE device_id = ?1",
+                params![device_id, last_seen],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn median_of_patch_times() {
+        assert_eq!(median(&[]), None);
+        assert_eq!(median(&[7]), Some(7));
+        assert_eq!(median(&[4, 21]), Some(13));
+        assert_eq!(median(&[1, 2, 100]), Some(2));
+    }
+
+    #[test]
+    fn firmware_history_records_only_changes() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_device("d1", "1.0.0", 100).unwrap();
+        store.upsert_device("d1", "1.0.0", 100).unwrap();
+        store.upsert_device("d1", "1.1.0", 110).unwrap();
+        store.upsert_device("d1", "1.1.0", 110).unwrap();
+        // A placeholder from touch_device gets its real build recorded later.
+        store.touch_device("d2").unwrap();
+        store.upsert_device("d2", "1.0.0", 100).unwrap();
+
+        let h1 = store.firmware_history("d1").unwrap();
+        assert_eq!(
+            h1.iter().map(|o| o.build_id).collect::<Vec<_>>(),
+            vec![100, 110]
+        );
+        assert_eq!(store.firmware_history("d2").unwrap().len(), 1);
+        assert!(store.firmware_history("nope").unwrap().is_empty());
+    }
+
+    #[test]
+    fn build_distribution_with_filters() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_device("a", "1.0.0", 100).unwrap();
+        store.upsert_device("b", "1.0.0", 100).unwrap();
+        store.upsert_device("c", "2.0.0", 200).unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE devices SET last_seen = '2020-01-01 00:00:00' WHERE device_id = 'b'",
+                [],
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE devices SET tags = 'factory-a, line1' WHERE device_id IN ('a','c')",
+                [],
+            )
+            .unwrap();
+        let g = store.create_group("eu", None).unwrap();
+        store.add_device_to_group(g.id, "c").unwrap();
+
+        let all = store.build_distribution(None, None, 10).unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(
+            (all[0].build_id, all[0].devices, all[0].online),
+            (100, 2, 1)
+        );
+        assert_eq!(
+            (all[1].build_id, all[1].devices, all[1].online),
+            (200, 1, 1)
+        );
+
+        let group = store.build_distribution(Some(g.id), None, 10).unwrap();
+        assert_eq!(group.len(), 1);
+        assert_eq!(group[0].build_id, 200);
+
+        let tagged = store.build_distribution(None, Some("line1"), 10).unwrap();
+        assert_eq!(tagged.iter().map(|b| b.devices).sum::<i64>(), 2);
+        // Whole-tag match only.
+        assert!(store
+            .build_distribution(None, Some("line"), 10)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn campaign_reach_counts_and_time_to_patch() {
+        let store = Store::open_in_memory().unwrap();
+        let fw = fw_artifact(&store, 200);
+        for d in ["patched", "early", "stale", "broken", "waiting"] {
+            store.upsert_device(d, "1.0.0", 100).unwrap();
+        }
+        // "early" already ran the target build before the campaign.
+        store.upsert_device("early", "2.0.0", 200).unwrap();
+        set_times(
+            &store,
+            "early",
+            200,
+            "2026-01-01 09:00:00",
+            "2099-01-01 00:00:00",
+        );
+
+        let c = store
+            .create_campaign("v2", fw.id, "2.0.0", "immediate", None, None, 100, 5.0)
+            .unwrap();
+        let ids: Vec<String> = ["patched", "early", "stale", "broken", "waiting"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        store.add_devices_to_campaign(c.id, &ids).unwrap();
+        store.update_campaign_status(c.id, "active").unwrap();
+        store
+            .conn
+            .execute(
+                "UPDATE ota_campaigns SET activated_at = '2026-01-01 10:00:00' WHERE id = ?1",
+                params![c.id],
+            )
+            .unwrap();
+        // Re-activating (e.g. after pause) keeps the first activation time.
+        store.update_campaign_status(c.id, "paused").unwrap();
+        store.update_campaign_status(c.id, "active").unwrap();
+
+        // "patched" reports the target 15 minutes after activation.
+        store.upsert_device("patched", "2.0.0", 200).unwrap();
+        set_times(
+            &store,
+            "patched",
+            200,
+            "2026-01-01 10:15:00",
+            "2099-01-01 00:00:00",
+        );
+        store
+            .update_campaign_device_status(c.id, "patched", "installed")
+            .unwrap();
+        // "stale" hasn't been seen for ages.
+        set_times(
+            &store,
+            "stale",
+            100,
+            "2025-12-01 00:00:00",
+            "2025-12-01 00:00:00",
+        );
+        store
+            .update_campaign_device_status(c.id, "broken", "failed")
+            .unwrap();
+
+        let r = store.campaign_reach(c.id, 10).unwrap().unwrap();
+        assert_eq!(r.activated_at.as_deref(), Some("2026-01-01 10:00:00"));
+        assert_eq!(r.target_build_id, 200);
+        assert_eq!(r.targeted, 5);
+        assert_eq!(r.on_target, 2); // patched + early
+        assert_eq!(r.installed, 1);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.pending, 2); // stale + waiting
+        assert_eq!(r.unreachable, 1); // stale
+        assert_eq!(r.percent_on_target, 40.0);
+        assert_eq!(r.time_to_patch.count, 1);
+        assert_eq!(r.time_to_patch.median_secs, Some(900));
+
+        let by_id = |id: &str| r.devices.iter().find(|d| d.device_id == id).unwrap();
+        assert_eq!(
+            by_id("patched").installed_at.as_deref(),
+            Some("2026-01-01 10:15:00")
+        );
+        assert!(by_id("early").patched_before_campaign);
+        assert_eq!(by_id("early").time_to_patch_secs, None);
+        assert!(!by_id("stale").reachable);
+
+        assert!(store.campaign_reach(9999, 10).unwrap().is_none());
     }
 
     // ---- OTA Campaign tests ----

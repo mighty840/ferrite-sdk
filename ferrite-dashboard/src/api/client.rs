@@ -422,6 +422,44 @@ impl ApiClient {
         }
     }
 
+    /// GET a path and return the body as text (e.g. a CSV report).
+    pub async fn get_text(&self, path: &str) -> Result<String, ApiError> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .build_get(&url)
+            .send()
+            .await
+            .map_err(|e| ApiError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => resp
+                .text()
+                .await
+                .map_err(|e| ApiError::Parse(e.to_string())),
+            401 => Err(ApiError::Unauthorized),
+            404 => Err(ApiError::NotFound),
+            code => Err(ApiError::Server(format!("HTTP {code}"))),
+        }
+    }
+
+    /// Update reach of a campaign, plus the raw JSON for export.
+    pub async fn get_campaign_reach(&self, id: i64) -> Result<(CampaignReach, String), ApiError> {
+        let text = self.get_text(&format!("/reports/campaigns/{id}")).await?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| ApiError::Parse(e.to_string()))?;
+        let reach: CampaignReach = serde_json::from_value(value["reach"].clone())
+            .map_err(|e| ApiError::Parse(e.to_string()))?;
+        let pretty = serde_json::to_string_pretty(&value["reach"]).unwrap_or(text);
+        Ok((reach, pretty))
+    }
+
+    /// Devices per firmware build across the fleet.
+    pub async fn fleet_builds(&self) -> Result<Vec<BuildCount>, ApiError> {
+        let text = self.get_text("/reports/fleet/builds").await?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| ApiError::Parse(e.to_string()))?;
+        serde_json::from_value(value["builds"].clone()).map_err(|e| ApiError::Parse(e.to_string()))
+    }
+
     pub async fn list_campaign_devices(&self, id: i64) -> Result<Vec<CampaignDevice>, ApiError> {
         let url = format!("{}/ota/campaigns/{}/devices", self.base_url, id);
         let resp = self

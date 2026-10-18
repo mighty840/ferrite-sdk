@@ -1,6 +1,6 @@
 use crate::api::types::*;
 use crate::auth::AuthState;
-use crate::components::{ErrorDisplay, Loading};
+use crate::components::{ErrorDisplay, ExportButtons, Loading};
 use crate::Route;
 use dioxus::prelude::*;
 
@@ -23,6 +23,15 @@ pub fn OtaPage() -> Element {
         client.list_firmware().await
     });
 
+    // Update reach (#78): which builds the fleet runs.
+    let builds_resource = use_resource(move || async move {
+        let _tick = poll_tick();
+        let client = crate::api::client::authenticated_client(&auth_state());
+        let builds = client.fleet_builds().await?;
+        let csv = client.get_text("/reports/fleet/builds?format=csv").await?;
+        Ok::<_, ApiError>((builds, csv))
+    });
+
     let campaigns_binding = campaigns_resource.read();
     let firmware_binding = firmware_resource.read();
 
@@ -35,6 +44,11 @@ pub fn OtaPage() -> Element {
     let firmware_list: Vec<FirmwareArtifact> = match &*firmware_binding {
         Some(Ok(f)) => f.clone(),
         _ => vec![],
+    };
+
+    let fleet_builds = match &*builds_resource.read() {
+        Some(Ok(b)) => Some(b.clone()),
+        _ => None,
     };
 
     let active_count = campaigns.iter().filter(|c| c.status == "active").count();
@@ -72,6 +86,57 @@ pub fn OtaPage() -> Element {
                 StatCard { label: "Total Campaigns", value: format!("{}", campaigns.len()), color: "ferrite" }
                 StatCard { label: "Active", value: format!("{}", active_count), color: "green" }
                 StatCard { label: "Completed", value: format!("{}", completed_count), color: "blue" }
+            }
+
+            // Fleet builds
+            if let Some((builds, csv)) = fleet_builds.clone() {
+                div {
+                    class: "bg-surface-900 rounded-xl border border-surface-700 mb-6",
+                    div {
+                        class: "px-5 py-4 border-b border-surface-700 flex items-center justify-between",
+                        div {
+                            h2 { class: "text-sm font-semibold text-gray-200", "Fleet builds" }
+                            p { class: "text-xs text-gray-500 mt-0.5",
+                                "{builds.iter().map(|b| b.devices).sum::<i64>()} device(s) across {builds.len()} build(s)"
+                            }
+                        }
+                        ExportButtons {
+                            csv_data: csv,
+                            json_data: serde_json::to_string_pretty(&builds).unwrap_or_default(),
+                            filename_base: "fleet-builds".to_string(),
+                        }
+                    }
+                    if builds.is_empty() {
+                        div { class: "p-6 text-center text-sm text-gray-500", "No devices have reported yet" }
+                    } else {
+                        div { class: "overflow-x-auto",
+                            table { class: "w-full text-sm",
+                                thead {
+                                    tr { class: "border-b border-surface-700",
+                                        th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Version" }
+                                        th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Build" }
+                                        th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Devices" }
+                                        th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Online" }
+                                        th { class: "px-5 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider", "Last seen" }
+                                    }
+                                }
+                                tbody {
+                                    for b in builds.iter() {
+                                        tr { class: "border-b border-surface-800",
+                                            td { class: "px-5 py-3 font-mono text-xs text-gray-200", "{b.firmware_version}" }
+                                            td { class: "px-5 py-3 font-mono text-xs text-gray-400", "{b.build_id}" }
+                                            td { class: "px-5 py-3 font-mono text-xs text-gray-200", "{b.devices}" }
+                                            td { class: "px-5 py-3 font-mono text-xs text-green-400", "{b.online}" }
+                                            td { class: "px-5 py-3 font-mono text-xs text-gray-500",
+                                                "{b.last_seen.as_deref().unwrap_or(\"–\")}"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Campaigns table

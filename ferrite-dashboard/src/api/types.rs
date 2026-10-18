@@ -282,3 +282,64 @@ impl std::fmt::Display for ApiError {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Update-reach reports (#78)
+// ---------------------------------------------------------------------------
+
+/// Devices running one build (`GET /reports/fleet/builds`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BuildCount {
+    pub firmware_version: String,
+    pub build_id: u64,
+    pub devices: i64,
+    pub online: i64,
+    pub last_seen: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TimeToPatch {
+    pub count: usize,
+    pub min_secs: Option<i64>,
+    pub median_secs: Option<i64>,
+    pub max_secs: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReachDevice {
+    pub device_id: String,
+    pub status: String,
+    pub current_version: Option<String>,
+    pub current_build_id: Option<u64>,
+    pub on_target: bool,
+    pub reachable: bool,
+    pub patched_before_campaign: bool,
+    pub installed_at: Option<String>,
+    pub time_to_patch_secs: Option<i64>,
+}
+
+/// Update reach of a campaign (`GET /reports/campaigns/:id`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CampaignReach {
+    pub target_build_id: u64,
+    pub activated_at: Option<String>,
+    pub targeted: usize,
+    pub on_target: usize,
+    pub failed: usize,
+    pub pending: usize,
+    pub unreachable: usize,
+    pub percent_on_target: f64,
+    pub time_to_patch: TimeToPatch,
+    pub devices: Vec<ReachDevice>,
+}
+
+/// Compact duration: `45s`, `15m`, `2h 03m`, `3d 04h`.
+pub fn format_duration_secs(secs: i64) -> String {
+    let s = secs.max(0);
+    match s {
+        0..=59 => format!("{s}s"),
+        60..=3599 => format!("{}m", s / 60),
+        3600..=86399 => format!("{}h {:02}m", s / 3600, (s % 3600) / 60),
+        _ => format!("{}d {:02}h", s / 86400, (s % 86400) / 3600),
+    }
+}

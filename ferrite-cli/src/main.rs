@@ -58,6 +58,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::ota::OtaCommand,
     },
+    /// Update-reach reports: builds in the fleet, campaign reach, device history
+    Report {
+        #[command(subcommand)]
+        cmd: commands::report::ReportCommand,
+    },
 }
 
 fn main() -> Result<()> {
@@ -110,6 +115,9 @@ fn main() -> Result<()> {
                 }
                 Commands::Ota { cmd: subcmd } => {
                     commands::ota::run(subcmd, &client, format)?;
+                }
+                Commands::Report { cmd: subcmd } => {
+                    commands::report::run(subcmd, &client, format)?;
                 }
                 Commands::Login { .. } => unreachable!(),
             }

@@ -3,6 +3,7 @@ pub mod faults;
 pub mod groups;
 pub mod metrics;
 pub mod ota;
+pub mod report;
 
 use chrono::Utc;
 
