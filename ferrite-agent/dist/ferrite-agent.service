@@ -10,8 +10,12 @@ ExecStart=/usr/bin/ferrite-agent --config /etc/ferrite/agent.conf run
 Restart=always
 RestartSec=10
 
-# Unprivileged. State (boot tracking, offline spool) in /var/lib/ferrite-agent.
-DynamicUser=yes
+# Unprivileged system user from ferrite-agent.sysusers. Not DynamicUser:
+# without nss-systemd (Raspbian 10, many minimal images) D-Bus can't resolve
+# dynamic UIDs and denies `systemctl show`, which silently drops unit metrics.
+# State (boot tracking, offline spool) lives in /var/lib/ferrite-agent.
+User=ferrite-agent
+Group=ferrite-agent
 StateDirectory=ferrite-agent
 
 NoNewPrivileges=yes

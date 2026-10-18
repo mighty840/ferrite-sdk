@@ -6,6 +6,8 @@ Reports an embedded Linux device to ferrite-server: image identity, system metri
 cargo build -p ferrite-agent --release
 sudo install -m 0755 target/release/ferrite-agent /usr/bin/
 sudo install -D -m 0644 ferrite-agent/dist/agent.conf.example /etc/ferrite/agent.conf   # then edit
+sudo install -D -m 0644 ferrite-agent/dist/ferrite-agent.sysusers /usr/lib/sysusers.d/ferrite-agent.conf
+sudo systemd-sysusers                             # creates the ferrite-agent system user
 sudo install -m 0644 ferrite-agent/dist/ferrite-agent.service /etc/systemd/system/
 sudo systemctl enable --now ferrite-agent
 ferrite-agent identity     # what the server will see

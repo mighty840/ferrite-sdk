@@ -1,0 +1,2 @@
+# Install as /usr/lib/sysusers.d/ferrite-agent.conf, then run systemd-sysusers.
+u ferrite-agent - "ferrite device agent" /var/lib/ferrite-agent

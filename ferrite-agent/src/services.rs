@@ -46,20 +46,37 @@ pub fn count_coredumps(dir: &Path, boot_id: &str) -> Option<u32> {
     Some(n as u32)
 }
 
-fn warn_once(unit: &str) {
+/// Log `message` once per distinct `key` for the life of the process.
+fn warn_once(key: &str, message: &str) {
     static WARNED: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let mut warned = WARNED.lock().unwrap_or_else(|e| e.into_inner());
-    if !warned.iter().any(|u| u == unit) {
-        tracing::warn!(unit, "unit not found; not reported");
-        warned.push(unit.to_string());
+    if !warned.iter().any(|k| k == key) {
+        tracing::warn!("{message}");
+        warned.push(key.to_string());
     }
 }
 
 fn systemctl(args: &[&str]) -> Option<String> {
-    let out = Command::new("systemctl").args(args).output().ok()?;
-    out.status
-        .success()
-        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    let out = match Command::new("systemctl").args(args).output() {
+        Ok(out) => out,
+        Err(e) => {
+            warn_once(
+                "systemctl-missing",
+                &format!("cannot run systemctl ({e}); unit metrics are not reported"),
+            );
+            return None;
+        }
+    };
+    if !out.status.success() {
+        // e.g. "Access denied" when D-Bus cannot resolve a DynamicUser UID.
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        warn_once(
+            &format!("systemctl-{}", args.first().unwrap_or(&"")),
+            &format!("systemctl {} failed: {}", args.join(" "), stderr.trim()),
+        );
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 pub fn sample(cfg: &Config) -> Vec<Sample> {
@@ -74,7 +91,10 @@ pub fn sample(cfg: &Config) -> Vec<Sample> {
             "--property=NRestarts",
         ]) {
             let Some((active, restarts)) = parse_unit_show(&text) else {
-                warn_once(&unit.name);
+                warn_once(
+                    &unit.name,
+                    &format!("unit {} not found; not reported", unit.name),
+                );
                 continue;
             };
             out.push((
