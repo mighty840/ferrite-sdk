@@ -48,14 +48,14 @@ jobs:
         run: cargo test --locked -p ferrite-server --test integration -- --test-threads=1
 
       - name: Clippy – ferrite-agent
-        run: cargo clippy -p ferrite-agent --all-targets -- -D warnings
+        run: cargo clippy --locked -p ferrite-agent --all-targets -- -D warnings
 
       # 32-bit ARM Linux, plain HTTP (no rustls, so no cross C compiler needed)
       - name: Clippy – ferrite-agent (armv7, no TLS)
-        run: cargo clippy -p ferrite-agent --no-default-features --target armv7-unknown-linux-gnueabihf -- -D warnings
+        run: cargo clippy --locked -p ferrite-agent --no-default-features --target armv7-unknown-linux-gnueabihf -- -D warnings
 
       - name: Test – ferrite-agent
-        run: cargo test -p ferrite-agent
+        run: cargo test --locked -p ferrite-agent
 
   test-gateway:
     name: Gateway tests
