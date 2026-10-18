@@ -2,7 +2,7 @@
 
 `ferrite-agent` reports an embedded Linux device to ferrite-server: which image it runs, how the system is doing, why it last rebooted, and whether the services you care about (for example the CODESYS Control runtime) are up. It is the Linux counterpart of the MCU SDK and speaks the same chunk format over `POST /ingest/chunks`. Linux devices therefore show up in the device list, metrics, OTA campaigns and update-reach reports with no server changes.
 
-It runs as an unprivileged systemd service and uses no database. On x86_64 the stripped binary is 3.7 MB with the default release profile, or 2.3 MB with `lto = true`, `opt-level = "s"`, `codegen-units = 1` and `panic = "abort"`.
+It runs as an unprivileged systemd service (a static `ferrite-agent` system user) and uses no database. On x86_64 the stripped binary is 3.7 MB with the default release profile, or 2.3 MB with `lto = true`, `opt-level = "s"`, `codegen-units = 1` and `panic = "abort"`.
 
 ## Install
 
@@ -10,10 +10,14 @@ It runs as an unprivileged systemd service and uses no database. On x86_64 the s
 cargo build -p ferrite-agent --release            # or cross-compile, see below
 sudo install -m 0755 target/release/ferrite-agent /usr/bin/
 sudo install -D -m 0644 ferrite-agent/dist/agent.conf.example /etc/ferrite/agent.conf
+sudo install -D -m 0644 ferrite-agent/dist/ferrite-agent.sysusers /usr/lib/sysusers.d/ferrite-agent.conf
+sudo systemd-sysusers                             # creates the ferrite-agent system user
 sudo install -m 0644 ferrite-agent/dist/ferrite-agent.service /etc/systemd/system/
 sudoedit /etc/ferrite/agent.conf                  # set server_url (and api_key)
 sudo systemctl enable --now ferrite-agent
 ```
+
+The unit deliberately avoids `DynamicUser=`: on images without `nss-systemd` in `/etc/nsswitch.conf` (Raspbian 10, many minimal builds), D-Bus can't resolve dynamic UIDs and refuses `systemctl show`, so unit metrics would be missing. If `systemd-sysusers` isn't available, create the user with `useradd --system --home-dir /var/lib/ferrite-agent --shell /usr/sbin/nologin ferrite-agent`.
 
 A Yocto layer (`meta-ferrite`, [#85](https://github.com/mighty840/ferrite-sdk/issues/85)) will package the same files.
 
