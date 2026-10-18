@@ -7,7 +7,7 @@ contain breaking changes.
 
 ## [Unreleased]
 
-## [0.1.0] — unreleased (pre-release)
+## [0.1.0] — 2026-10-18 (pre-release)
 
 First tagged release. Firmware observability for Cortex-M and RISC-V MCUs,
 with a server, dashboard, CLI, edge gateway, and signed OTA updates.
