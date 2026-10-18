@@ -35,7 +35,7 @@ SECTIONS {
         __end_block_addr = .;
         KEEP(*(.end_block));
     } > FLASH
-} INSERT AFTER .uninit;
+} INSERT BEFORE .uninit;
 
 SECTIONS {
     .uninit.ferrite (NOLOAD) : {
@@ -45,7 +45,7 @@ SECTIONS {
         _ferrite_retained_end = .;
         . = ALIGN(4);
     } > RETAINED
-} INSERT AFTER .uninit;
+} INSERT BEFORE .uninit;
 
 PROVIDE(start_to_end = __end_block_addr - __start_block_addr);
 PROVIDE(end_to_start = __start_block_addr - __end_block_addr);
