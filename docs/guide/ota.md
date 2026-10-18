@@ -93,6 +93,57 @@ Devices authenticate to `GET /ota/targets/:device_id` and the download with `X-A
 
 Devices that only reach `ferrite-gateway` (for example over a boards-only Ethernet link) point `OtaClient` at the gateway's HTTP ingest port. The gateway relays exactly three reads to the server with its own credentials: `GET /ota/targets/<device_id>`, `GET /ota/firmware/<id>/download` and `GET /ota/firmware/<id>/manifest`. Everything else gets a 404. The gateway passes `X-Firmware-Manifest` through unchanged; it is not trusted with integrity, since the device verifies the signature itself.
 
+## Example: STM32H563 with embassy-boot
+
+`examples/embassy-stm32h563-bootloader` and `examples/embassy-stm32h563` are a complete bootloader + app pair for the Nucleo-H563ZI. The app polls the gateway's OTA relay, writes verified images to the update slot, and confirms them after a self-test.
+
+**Flash layout** (both crates' `memory.x`, 8 KB sectors):
+
+| Partition | Address | Size |
+|---|---|---|
+| Bootloader | `0x08000000` | 48 KB |
+| Bootloader state | `0x0800C000` | 8 KB |
+| ACTIVE (app) | `0x08010000` | 256 KB, bank 1 |
+| DFU (update slot) | `0x08100000` | 264 KB, bank 2 |
+
+Keeping DFU in bank 2 lets the app write it while running from bank 1.
+
+**Build-time inputs** (read by the app's `build.rs`):
+
+| Variable | Meaning |
+|---|---|
+| `FERRITE_OTA_PUBKEY` | Required. Trusted public key(s): hex or path to `ota.key.pub`, comma-separated |
+| `FERRITE_BUILD_ID` | Build ID the firmware reports; pass the same value to `ferrite ota sign --build-id`. Defaults to `SOURCE_DATE_EPOCH`, then the build time |
+| `FERRITE_SECURITY_VERSION` | Anti-rollback floor compiled into the firmware (default 0) |
+
+**First flash** (bootloader + app, once, over the probe):
+
+```bash
+cd examples/embassy-stm32h563-bootloader && cargo build --release
+probe-rs download --chip STM32H563ZITx target/thumbv8m.main-none-eabihf/release/embassy-stm32h563-bootloader
+
+cd ../embassy-stm32h563
+FERRITE_OTA_PUBKEY=../../ota.key.pub FERRITE_BUILD_ID=1001 cargo build --release
+probe-rs download --chip STM32H563ZITx target/thumbv8m.main-none-eabihf/release/embassy-stm32h563-example
+probe-rs reset --chip STM32H563ZITx
+```
+
+**Release over the air:**
+
+```bash
+FERRITE_OTA_PUBKEY=ota.key.pub FERRITE_BUILD_ID=1002 cargo build --release
+arm-none-eabi-objcopy -O binary target/thumbv8m.main-none-eabihf/release/embassy-stm32h563-example app.bin
+ferrite ota sign --key ota.key --firmware app.bin --version 0.2.0 --build-id 1002 --security-version 0
+ferrite ota upload --firmware app.bin
+# then create and activate a campaign for the device (dashboard or API)
+```
+
+**Confirm and rollback.** After an update the bootloader swaps the new image in and boots it with the state "swap". The app confirms (`mark_booted`) only after Ethernet is up and one upload through the gateway succeeded. Until then any reset swaps the old image back. The app runs an independent watchdog (20 s), so a hung or crashing image resets itself and is rolled back without anyone touching the board. Each upload carries an OTA-request chunk with the build ID, so the server marks the device `installed` in its campaign once the new build reports in.
+
+**After a rollback** the previous image boots in embassy-boot's "revert" state. It doesn't poll for updates until it has told the server, setting the rolled-back flag in its OTA-request chunk on the next upload. The server then removes the device's OTA target, so the failed build isn't offered again, and marks the device `failed` in its active campaigns. A campaign whose failure rate exceeds its `failure_threshold` (percent, default 5) is paused, and its remaining targets are removed. Once the report has gone through, the device leaves the revert state and resumes update checks. Without this, a device would reinstall the same bad build after every rollback.
+
+To see a rollback, build an update with `FERRITE_TEST_HANG_AFTER_BOOT=1` (test builds only): it hangs before confirming, the watchdog fires, the board comes back on the previous build, and the campaign shows the device as failed.
+
 ## Rollback protection
 
 `build_id` is a timestamp or hash and has no order, so rollback protection uses a separate counter, `security_version`. A device compiled with `SECURITY_VERSION = 3` rejects every manifest below 3, including validly signed old releases with known vulnerabilities. Increase it in releases that fix security issues.

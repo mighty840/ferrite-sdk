@@ -942,3 +942,100 @@ mod signed_ota {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 }
+
+// =========================================================================
+// OTA rollback reports (#76)
+// =========================================================================
+
+#[tokio::test]
+async fn rolled_back_device_is_failed_and_no_longer_offered_the_build() {
+    use ferrite_sdk::chunks::encoder::{ChunkEncoder, OTA_FLAG_ROLLED_BACK};
+
+    let base = spawn_server().await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+
+    let post_chunks = |chunks: Vec<u8>| {
+        client
+            .post(format!("{base}/ingest/chunks"))
+            .header("Content-Type", "application/octet-stream")
+            .body(chunks)
+            .send()
+    };
+    let mut enc = ChunkEncoder::new();
+    let mut body = Vec::new();
+    enc.encode_device_info("dev-rb", "2.0.0", 200, |c| body.extend_from_slice(c));
+    assert_eq!(post_chunks(body).await.unwrap().status(), StatusCode::OK);
+
+    // Unsigned firmware is fine here (no OTA_TRUSTED_KEYS configured).
+    let fw: serde_json::Value = client
+        .post(format!("{base}/ota/firmware"))
+        .header("Authorization", &auth)
+        .header("X-Firmware-Version", "3.0.0")
+        .header("X-Build-Id", "300")
+        .body(vec![0xAB; 64])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let fw_id = fw["artifact"]["id"].as_i64().unwrap();
+    let campaign: serde_json::Value = client
+        .post(format!("{base}/ota/campaigns"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({"name": "v3", "firmware_id": fw_id, "target_version": "3.0.0"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cid = campaign["campaign"]["id"].as_i64().unwrap();
+    client
+        .post(format!("{base}/ota/campaigns/{cid}/activate"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    let target = client
+        .get(format!("{base}/ota/targets/dev-rb"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(target.status(), StatusCode::OK);
+
+    // The device comes back on build 200 and reports the rollback.
+    let mut body = Vec::new();
+    enc.encode_device_info("dev-rb", "2.0.0", 200, |c| body.extend_from_slice(c));
+    enc.encode_ota_request_with_flags(200, 256, OTA_FLAG_ROLLED_BACK, |c| {
+        body.extend_from_slice(c)
+    });
+    assert_eq!(post_chunks(body).await.unwrap().status(), StatusCode::OK);
+
+    let target = client
+        .get(format!("{base}/ota/targets/dev-rb"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        target.status(),
+        StatusCode::NOT_FOUND,
+        "failed build still offered"
+    );
+
+    let summary: serde_json::Value = client
+        .get(format!("{base}/ota/campaigns/{cid}"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(summary["campaign"]["failed"], 1);
+    // 1 of 1 failed exceeds the default 5% threshold.
+    assert_eq!(summary["campaign"]["campaign"]["status"], "paused");
+}
