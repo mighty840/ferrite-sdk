@@ -31,8 +31,14 @@ jobs:
       - name: Clippy – ferrite-server
         run: cargo clippy -p ferrite-server -- -D warnings
 
+      - name: Clippy – ferrite-sdk (ota-manifest)
+        run: cargo clippy -p ferrite-sdk --no-default-features --features ota-manifest -- -D warnings
+
       - name: Test – ferrite-sdk (no default features)
         run: cargo test -p ferrite-sdk --no-default-features -- --test-threads=1
+
+      - name: Test – ferrite-sdk (signed OTA)
+        run: cargo test -p ferrite-sdk --no-default-features --features http -- --test-threads=1 ota
 
       - name: Test – ferrite-server (unit)
         run: cargo test -p ferrite-server --lib

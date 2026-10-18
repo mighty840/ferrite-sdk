@@ -37,6 +37,7 @@ const AUTH_ENV_KEYS: &[&str] = &[
     "ALERT_OFFLINE_MINUTES",
     "CHUNK_ENCRYPTION_KEY",
     "BASIC_AUTH_USERS",
+    "OTA_TRUSTED_KEYS",
 ];
 
 /// Spawn a ferrite-server on a random port with additional env vars set.
@@ -739,4 +740,205 @@ async fn ota_targets_require_auth() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+// =========================================================================
+// Signed OTA manifests (#75)
+// =========================================================================
+
+mod signed_ota {
+    use super::*;
+    use ed25519_compact::{KeyPair, Seed};
+    use ferrite_sdk::ota_manifest::{key_id, signing_message, Manifest, SignedManifest};
+    use sha2::{Digest, Sha256};
+
+    const IMAGE: &[u8] = &[0x42; 256];
+
+    fn keypair(seed: u8) -> KeyPair {
+        KeyPair::from_seed(Seed::new([seed; 32]))
+    }
+
+    fn manifest_hex(kp: &KeyPair, image: &[u8], build_id: u64) -> String {
+        let mut version = heapless::String::new();
+        version.push_str("3.1.0").unwrap();
+        let manifest = Manifest {
+            build_id,
+            security_version: 2,
+            image_size: image.len() as u32,
+            sha256: Sha256::digest(image).into(),
+            version,
+            key_id: key_id(&kp.pk),
+        };
+        let body = manifest.encode_body();
+        let sig = kp.sk.sign(signing_message(&body), None);
+        let signed = SignedManifest::new(body, *sig).unwrap();
+        String::from_utf8(signed.to_hex().to_vec()).unwrap()
+    }
+
+    async fn upload(
+        base: &str,
+        manifest: Option<&str>,
+        image: &[u8],
+    ) -> (StatusCode, serde_json::Value) {
+        let mut req = Client::new()
+            .post(format!("{base}/ota/firmware"))
+            .header("Authorization", basic_auth_header())
+            .header("X-Firmware-Version", "header-version")
+            .body(image.to_vec());
+        if let Some(m) = manifest {
+            req = req.header("X-Firmware-Manifest", m);
+        }
+        let resp = req.send().await.unwrap();
+        let status = resp.status();
+        (status, resp.json().await.unwrap())
+    }
+
+    async fn spawn_with_trusted(kp: &KeyPair, extra: Vec<(&str, &str)>) -> String {
+        let key = hex::encode(*kp.pk);
+        let mut env = vec![("OTA_TRUSTED_KEYS", key.as_str())];
+        env.extend(extra);
+        spawn_server_with_env(env).await
+    }
+
+    #[tokio::test]
+    async fn signed_upload_is_stored_and_served() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![]).await;
+        let manifest = manifest_hex(&kp, IMAGE, 77);
+
+        let (status, body) = upload(&base, Some(&manifest), IMAGE).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let artifact = &body["artifact"];
+        // Metadata comes from the signed manifest, not the free-text header.
+        assert_eq!(artifact["version"], "3.1.0");
+        assert_eq!(artifact["build_id"], 77);
+        assert_eq!(artifact["security_version"], 2);
+        assert_eq!(artifact["signer"], hex::encode(key_id(&kp.pk)));
+        let id = artifact["id"].as_i64().unwrap();
+
+        let client = Client::new();
+        let resp = client
+            .get(format!("{base}/ota/firmware/{id}/download"))
+            .header("Authorization", basic_auth_header())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()["x-firmware-manifest"].to_str().unwrap(),
+            manifest
+        );
+        assert_eq!(resp.bytes().await.unwrap().as_ref(), IMAGE);
+
+        let resp = client
+            .get(format!("{base}/ota/firmware/{id}/manifest"))
+            .header("Authorization", basic_auth_header())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(hex::encode(resp.bytes().await.unwrap()), manifest);
+    }
+
+    #[tokio::test]
+    async fn unsigned_upload_rejected_when_keys_configured() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![]).await;
+        let (status, body) = upload(&base, None, IMAGE).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["error"]
+            .as_str()
+            .unwrap()
+            .contains("signed manifest required"));
+    }
+
+    #[tokio::test]
+    async fn manifest_from_untrusted_key_rejected() {
+        let trusted = keypair(1);
+        let attacker = keypair(2);
+        let base = spawn_with_trusted(&trusted, vec![]).await;
+        let (status, _) = upload(&base, Some(&manifest_hex(&attacker, IMAGE, 1)), IMAGE).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn manifest_for_other_image_rejected() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![]).await;
+        let manifest = manifest_hex(&kp, IMAGE, 1);
+        let (status, body) = upload(&base, Some(&manifest), &[0x43; 256]).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["error"].as_str().unwrap().contains("does not match"));
+    }
+
+    #[tokio::test]
+    async fn malformed_manifest_rejected() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![]).await;
+        let (status, _) = upload(&base, Some("deadbeef"), IMAGE).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unsigned_upload_allowed_without_trusted_keys() {
+        let base = spawn_server().await;
+        let (status, body) = upload(&base, None, IMAGE).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["artifact"]["version"], "header-version");
+        assert!(body["artifact"]["manifest"].is_null());
+    }
+
+    #[tokio::test]
+    async fn device_reads_ota_with_ingest_key_only() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![("INGEST_API_KEY", "device-key")]).await;
+        let (_, body) = upload(&base, Some(&manifest_hex(&kp, IMAGE, 5)), IMAGE).await;
+        let id = body["artifact"]["id"].as_i64().unwrap();
+        let client = Client::new();
+
+        let get = |path: String, key: Option<&'static str>| {
+            let mut req = client.get(format!("{base}{path}"));
+            if let Some(k) = key {
+                req = req.header("X-API-Key", k);
+            }
+            req.send()
+        };
+
+        let ok = get(format!("/ota/firmware/{id}/download"), Some("device-key"))
+            .await
+            .unwrap();
+        assert_eq!(ok.status(), StatusCode::OK);
+        assert!(ok.headers().contains_key("x-firmware-manifest"));
+
+        let wrong = get(format!("/ota/firmware/{id}/download"), Some("nope"))
+            .await
+            .unwrap();
+        assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+        let none = get(format!("/ota/firmware/{id}/download"), None)
+            .await
+            .unwrap();
+        assert_eq!(none.status(), StatusCode::UNAUTHORIZED);
+
+        // The key only opens the device-facing reads, not management routes.
+        let list = get("/ota/firmware".into(), Some("device-key"))
+            .await
+            .unwrap();
+        assert_eq!(list.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn device_ota_reads_need_user_auth_without_ingest_key() {
+        let kp = keypair(1);
+        let base = spawn_with_trusted(&kp, vec![]).await;
+        let (_, body) = upload(&base, Some(&manifest_hex(&kp, IMAGE, 5)), IMAGE).await;
+        let id = body["artifact"]["id"].as_i64().unwrap();
+        let resp = Client::new()
+            .get(format!("{base}/ota/firmware/{id}/download"))
+            .header("X-API-Key", "anything")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
 }

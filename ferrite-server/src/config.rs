@@ -193,6 +193,10 @@ pub struct AuthConfig {
     pub chunk_encryption_key: Option<[u8; 16]>,
     /// Additional basic auth users with roles.
     pub additional_users: Vec<BasicAuthUser>,
+    /// Ed25519 public keys allowed to sign OTA manifests (`OTA_TRUSTED_KEYS`,
+    /// comma-separated hex). When non-empty, firmware uploads must carry a
+    /// manifest signed by one of them.
+    pub ota_trusted_keys: Vec<[u8; 32]>,
 }
 
 impl AuthConfig {
@@ -251,8 +255,33 @@ impl AuthConfig {
                 .unwrap_or(10),
             chunk_encryption_key,
             additional_users: parse_basic_auth_users(),
+            ota_trusted_keys: optional_env("OTA_TRUSTED_KEYS")
+                .map(|v| parse_ota_trusted_keys(&v))
+                .unwrap_or_default(),
         }
     }
+}
+
+/// Parse comma-separated hex Ed25519 public keys.
+///
+/// Panics on a malformed key: a typo in the trust anchor must stop startup,
+/// not silently fall back to accepting unsigned firmware.
+pub fn parse_ota_trusted_keys(value: &str) -> Vec<[u8; 32]> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let bytes = hex::decode(s)
+                .unwrap_or_else(|_| panic!("OTA_TRUSTED_KEYS: {s:?} is not valid hex"));
+            <[u8; 32]>::try_from(bytes.as_slice()).unwrap_or_else(|_| {
+                panic!(
+                    "OTA_TRUSTED_KEYS: key must be 64 hex chars (32 bytes), got {}",
+                    s.len()
+                )
+            })
+        })
+        .collect()
 }
 
 /// Response for `GET /auth/mode` — lets the dashboard discover auth config.
@@ -324,6 +353,7 @@ mod tests {
             alert_offline_minutes: 10,
             chunk_encryption_key: None,
             additional_users: vec![],
+            ota_trusted_keys: vec![],
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -347,6 +377,7 @@ mod tests {
             alert_offline_minutes: 10,
             chunk_encryption_key: None,
             additional_users: vec![],
+            ota_trusted_keys: vec![],
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");
@@ -354,5 +385,25 @@ mod tests {
             resp.authority.as_deref(),
             Some("http://localhost:8080/realms/ferrite")
         );
+    }
+
+    #[test]
+    fn ota_trusted_keys_parse() {
+        let k1 = "11".repeat(32);
+        let k2 = "AB".repeat(32);
+        let keys = parse_ota_trusted_keys(&format!("{k1}, {k2},"));
+        assert_eq!(keys, vec![[0x11; 32], [0xAB; 32]]);
+    }
+
+    #[test]
+    #[should_panic(expected = "64 hex chars")]
+    fn ota_trusted_keys_wrong_length_panics() {
+        parse_ota_trusted_keys("abcd");
+    }
+
+    #[test]
+    #[should_panic(expected = "not valid hex")]
+    fn ota_trusted_keys_bad_hex_panics() {
+        parse_ota_trusted_keys(&"zz".repeat(32));
     }
 }

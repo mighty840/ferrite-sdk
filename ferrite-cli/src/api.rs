@@ -396,6 +396,34 @@ impl ApiClient {
         Ok(target)
     }
 
+    /// Upload a firmware image; returns the stored artifact as JSON.
+    pub fn upload_firmware(
+        &self,
+        image: Vec<u8>,
+        manifest_hex: Option<&str>,
+        version: Option<&str>,
+        build_id: Option<u64>,
+    ) -> Result<serde_json::Value> {
+        let mut req = self
+            .http
+            .post(self.url("/ota/firmware"))
+            .header("Authorization", &self.auth_header)
+            .header("Content-Type", "application/octet-stream")
+            .body(image);
+        if let Some(m) = manifest_hex {
+            req = req.header("X-Firmware-Manifest", m);
+        }
+        if let Some(v) = version {
+            req = req.header("X-Firmware-Version", v);
+        }
+        if let Some(b) = build_id {
+            req = req.header("X-Build-Id", b.to_string());
+        }
+        let resp = req.send().context("failed to reach server")?;
+        let body = self.check_response(resp)?;
+        Ok(body.get("artifact").cloned().unwrap_or_default())
+    }
+
     pub fn get_ota_target(&self, device_id: &str) -> Result<OtaTarget> {
         let resp = self
             .http

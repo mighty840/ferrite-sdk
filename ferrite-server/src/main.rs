@@ -81,6 +81,17 @@ async fn main() -> anyhow::Result<()> {
 
     // Load auth config from environment (leaked for 'static lifetime)
     let config: &'static AuthConfig = Box::leak(Box::new(AuthConfig::from_env()));
+    if config.ota_trusted_keys.is_empty() {
+        tracing::warn!(
+            "OTA_TRUSTED_KEYS not set: firmware uploads are not signature-checked \
+             (devices still reject images without a valid manifest)"
+        );
+    } else {
+        tracing::info!(
+            "OTA: {} trusted signing key(s)",
+            config.ota_trusted_keys.len()
+        );
+    }
 
     let store = Store::open(&cli.db)?;
     let symbolicator = Symbolicator::new(cli.addr2line.clone(), cli.elf_dir.clone());

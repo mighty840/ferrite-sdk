@@ -3,6 +3,9 @@
 //! - `/ingest/chunks` routes: optionally checked with `X-API-Key` if configured
 //! - `/ingest/elf` routes: always require authentication (user auth or API key)
 //! - `/auth/*` routes: never checked (auth discovery + login endpoints)
+//! - Device-facing OTA reads (`GET /ota/targets/:device_id`,
+//!   `GET /ota/firmware/:id/{download,manifest}`): `X-API-Key` when an ingest
+//!   key is configured, otherwise user auth
 //! - All other routes (`/devices`, etc.): require user auth
 
 use axum::{
@@ -83,6 +86,19 @@ pub async fn require_auth(
         return next.run(req).await;
     }
 
+    // Devices poll their OTA target and download firmware with the ingest
+    // API key, like /ingest/chunks. Without a configured key these stay
+    // behind user auth, so firmware is never readable anonymously. The
+    // image itself is authenticated by its signed manifest, not by this check.
+    if req.method() == Method::GET && is_device_ota_path(&path) {
+        if let Some(required_key) = &state.config.ingest_api_key {
+            let api_key = auth::extract_api_key_header(req.headers());
+            if auth::validate_ingest_api_key(api_key, required_key).is_ok() {
+                return next.run(req).await;
+            }
+        }
+    }
+
     // All other routes require user authentication
     let auth_header = auth::extract_auth_header(req.headers());
     match auth::validate_request(auth_header, state.config).await {
@@ -133,5 +149,36 @@ pub async fn require_auth(
             )
                 .into_response()
         }
+    }
+}
+
+/// `/ota/targets/<device_id>` or `/ota/firmware/<id>/{download,manifest}`.
+fn is_device_ota_path(path: &str) -> bool {
+    let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    matches!(
+        segments.as_slice(),
+        ["ota", "targets", id] if !id.is_empty()
+    ) || matches!(
+        segments.as_slice(),
+        ["ota", "firmware", id, "download" | "manifest"] if !id.is_empty()
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_device_ota_path;
+
+    #[test]
+    fn device_ota_paths() {
+        assert!(is_device_ota_path("/ota/targets/dev-1"));
+        assert!(is_device_ota_path("/ota/firmware/3/download"));
+        assert!(is_device_ota_path("/ota/firmware/3/manifest"));
+
+        assert!(!is_device_ota_path("/ota/targets"));
+        assert!(!is_device_ota_path("/ota/targets/"));
+        assert!(!is_device_ota_path("/ota/firmware"));
+        assert!(!is_device_ota_path("/ota/firmware/3"));
+        assert!(!is_device_ota_path("/ota/campaigns/1"));
+        assert!(!is_device_ota_path("/ota/targets/dev-1/extra"));
     }
 }

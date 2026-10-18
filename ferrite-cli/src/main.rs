@@ -53,7 +53,7 @@ enum Commands {
     },
     /// Query metrics
     Metrics(commands::metrics::MetricsArgs),
-    /// Manage OTA firmware targets
+    /// OTA: targets, signing keys, manifests, firmware upload
     Ota {
         #[command(subcommand)]
         cmd: commands::ota::OtaCommand,
