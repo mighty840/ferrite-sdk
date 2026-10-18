@@ -85,6 +85,7 @@ async fn spawn_server_with_env(env_overrides: Vec<(&str, &str)>) -> String {
             event_tx,
             counters: ferrite_server::prometheus::RequestCounters::new(),
             rate_limiter: None,
+            evidence: ferrite_server::evidence::EvidenceLog::open_in_memory().unwrap(),
         });
 
         let app = ferrite_server::ingest::router(state);
@@ -1038,6 +1039,163 @@ async fn rolled_back_device_is_failed_and_no_longer_offered_the_build() {
     assert_eq!(summary["campaign"]["failed"], 1);
     // 1 of 1 failed exceeds the default 5% threshold.
     assert_eq!(summary["campaign"]["campaign"]["status"], "paused");
+
+    // Both the rollback and the automatic pause are in the evidence log.
+    let evidence: serde_json::Value = client
+        .get(format!("{base}/evidence?subject=device:dev-rb"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let kinds: Vec<&str> = evidence["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        vec!["device.first_seen", "device.update_rolled_back"]
+    );
+    let paused: serde_json::Value = client
+        .get(format!("{base}/evidence?kind=campaign.auto_paused"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(paused["entries"][0]["subject"], format!("campaign:{cid}"));
+}
+
+// =========================================================================
+// Evidence log (#77)
+// =========================================================================
+
+#[tokio::test]
+async fn evidence_log_records_release_and_update_story() {
+    use ferrite_sdk::chunks::encoder::ChunkEncoder;
+
+    let base = spawn_server().await;
+    let client = Client::new();
+    let auth = basic_auth_header();
+    let mut enc = ChunkEncoder::new();
+    let mut report = |version: &str, build: u64| {
+        let mut body = Vec::new();
+        enc.encode_device_info("ev-1", version, build, |c| body.extend_from_slice(c));
+        enc.encode_ota_request(build, 256, |c| body.extend_from_slice(c));
+        client
+            .post(format!("{base}/ingest/chunks"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body)
+            .send()
+    };
+    report("1.0.0", 100).await.unwrap();
+    report("1.0.0", 100).await.unwrap(); // unchanged: no new entry
+
+    let fw: serde_json::Value = client
+        .post(format!("{base}/ota/firmware"))
+        .header("Authorization", &auth)
+        .header("X-Firmware-Version", "2.0.0")
+        .header("X-Build-Id", "200")
+        .body(vec![9; 32])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let campaign: serde_json::Value = client
+        .post(format!("{base}/ota/campaigns"))
+        .header("Authorization", &auth)
+        .json(&serde_json::json!({
+            "name": "fix", "firmware_id": fw["artifact"]["id"], "target_version": "2.0.0"
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cid = campaign["campaign"]["id"].as_i64().unwrap();
+    client
+        .post(format!("{base}/ota/campaigns/{cid}/activate"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    report("2.0.0", 200).await.unwrap();
+    report("2.0.0", 200).await.unwrap(); // installed only once
+
+    let body: serde_json::Value = client
+        .get(format!("{base}/evidence"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let entries = body["entries"].as_array().unwrap();
+    let kinds: Vec<&str> = entries
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            "device.first_seen",
+            "firmware.uploaded",
+            "campaign.created",
+            "campaign.activated",
+            "device.build_changed",
+            "device.update_installed",
+            "campaign.completed",
+        ]
+    );
+    assert!(body["chain_valid"].as_bool().unwrap());
+    assert_eq!(body["head_seq"], 7);
+    // User actions carry the user, device events the device.
+    assert_ne!(entries[1]["actor"], "api");
+    assert_eq!(entries[4]["actor"], "device:ev-1");
+    assert_eq!(entries[4]["details"]["from_build_id"], 100);
+    assert_eq!(entries[3]["details"]["target_build_id"], 200);
+
+    let filtered: serde_json::Value = client
+        .get(format!(
+            "{base}/evidence?kind=campaign&subject=campaign:{cid}"
+        ))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(filtered["entries"].as_array().unwrap().len(), 3);
+
+    let verify: serde_json::Value = client
+        .get(format!("{base}/evidence/verify"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(verify["valid"], true);
+    assert_eq!(verify["entries"], 7);
+
+    let anon = Client::new()
+        .get(format!("{base}/evidence"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
 }
 
 // =========================================================================

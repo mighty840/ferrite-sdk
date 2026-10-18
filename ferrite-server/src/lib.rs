@@ -5,6 +5,7 @@ pub mod backup;
 pub mod campaigns;
 pub mod config;
 pub mod crashes;
+pub mod evidence;
 pub mod groups;
 pub mod ingest;
 pub mod ota;
@@ -29,4 +30,6 @@ pub struct AppState {
     pub event_tx: broadcast::Sender<sse::SsePayload>,
     pub counters: prometheus::RequestCounters,
     pub rate_limiter: Option<Arc<rate_limit::RateLimiter>>,
+    /// Append-only, hash-chained compliance record (separate database).
+    pub evidence: evidence::EvidenceLog,
 }

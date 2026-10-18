@@ -38,6 +38,7 @@ export default defineConfig({
             { text: 'Security & Encryption', link: '/guide/security' },
             { text: 'Signed OTA Updates', link: '/guide/ota' },
             { text: 'Update-Reach Reports', link: '/guide/update-reach' },
+            { text: 'Evidence Log', link: '/guide/evidence-log' },
           ],
         },
       ],
