@@ -7,6 +7,9 @@ contain breaking changes.
 
 ## [Unreleased]
 
+### Changed (breaking)
+- C API: the transport callback typedefs are now `ferrite_send_chunk_fn_t` and `ferrite_is_available_fn_t` (were `IotaiSendChunkFn` / `IotaiIsAvailableFn`), matching the other `ferrite_*_t` types. The Rust-side `ferrite-ffi` types drop the `Iotai` prefix too (`FerriteError`, `FerriteTransport`, …). Regenerate your header with cbindgen; the `ferrite_*_t` structs and `FERRITE_ERROR_T_*` codes are unchanged.
+
 ## [0.1.0] — 2026-10-18 (pre-release)
 
 First tagged release. Firmware observability for Cortex-M and RISC-V MCUs,
@@ -64,5 +67,5 @@ with a server, dashboard, CLI, edge gateway, and signed OTA updates.
 
 ### Known limitations
 - Not published to crates.io yet: the `ferrite` and `ferrite-cli` names are taken there (#79).
-- The C API still uses the `Iotai*` type prefix from the project's former name.
+- The C API still uses the `Iotai*` prefix for its two callback typedefs (renamed in the next release).
 - OTA for BLE devices (nRF5340/MCUboot) is not done yet (#92).

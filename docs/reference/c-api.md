@@ -275,17 +275,17 @@ On success, clears all uploaded data from the SDK buffers. On transport error, d
 ### `ferrite_transport_t`
 
 ```c
-typedef int32_t (*ferrite_send_chunk_fn)(
+typedef int32_t (*ferrite_send_chunk_fn_t)(
     const uint8_t *data,
     uint32_t       len,
     void          *ctx
 );
 
-typedef bool (*ferrite_is_available_fn)(void *ctx);
+typedef bool (*ferrite_is_available_fn_t)(void *ctx);
 
 typedef struct {
-    ferrite_send_chunk_fn   send_chunk;    // Required
-    ferrite_is_available_fn is_available;  // Optional (NULL = always available)
+    ferrite_send_chunk_fn_t   send_chunk;    // Required
+    ferrite_is_available_fn_t is_available;  // Optional (NULL = always available)
     void                 *ctx;           // Opaque context forwarded to callbacks
 } ferrite_transport_t;
 ```

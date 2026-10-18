@@ -25,9 +25,9 @@ mod sink {
     static mut STAGING_POS: usize = 0;
 
     #[defmt::global_logger]
-    struct IotaiDefmtSink;
+    struct FerriteDefmtSink;
 
-    unsafe impl defmt::Logger for IotaiDefmtSink {
+    unsafe impl defmt::Logger for FerriteDefmtSink {
         fn acquire() {
             // Prevent reentrant logging
             if LOGGING_ACTIVE.swap(true, Ordering::Acquire) {

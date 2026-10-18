@@ -16,7 +16,7 @@ use ferrite_sdk::upload::{UploadManager, UploadStats};
 /// Error codes returned by all FFI functions.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IotaiError {
+pub enum FerriteError {
     Ok = 0,
     NotInitialized = -1,
     AlreadyInit = -2,
@@ -27,15 +27,15 @@ pub enum IotaiError {
     Transport = -7,
 }
 
-impl From<ferrite_sdk::SdkError> for IotaiError {
+impl From<ferrite_sdk::SdkError> for FerriteError {
     fn from(e: ferrite_sdk::SdkError) -> Self {
         match e {
-            ferrite_sdk::SdkError::NotInitialized => IotaiError::NotInitialized,
-            ferrite_sdk::SdkError::AlreadyInitialized => IotaiError::AlreadyInit,
-            ferrite_sdk::SdkError::BufferFull => IotaiError::BufferFull,
-            ferrite_sdk::SdkError::KeyTooLong => IotaiError::KeyTooLong,
-            ferrite_sdk::SdkError::EncodingFailed => IotaiError::Encoding,
-            _ => IotaiError::Encoding,
+            ferrite_sdk::SdkError::NotInitialized => FerriteError::NotInitialized,
+            ferrite_sdk::SdkError::AlreadyInitialized => FerriteError::AlreadyInit,
+            ferrite_sdk::SdkError::BufferFull => FerriteError::BufferFull,
+            ferrite_sdk::SdkError::KeyTooLong => FerriteError::KeyTooLong,
+            ferrite_sdk::SdkError::EncodingFailed => FerriteError::Encoding,
+            _ => FerriteError::Encoding,
         }
     }
 }
@@ -47,27 +47,27 @@ impl From<ferrite_sdk::SdkError> for IotaiError {
 /// Callback to send a single chunk.
 /// `data` points to chunk bytes, `len` is the byte count.
 /// Returns 0 on success, non-zero on error.
-pub type IotaiSendChunkFn =
+pub type FerriteSendChunkFn =
     Option<unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32>;
 
 /// Callback to query transport availability.
 /// Returns `true` (non-zero) if the link is ready.
-pub type IotaiIsAvailableFn = Option<unsafe extern "C" fn(ctx: *mut core::ffi::c_void) -> bool>;
+pub type FerriteIsAvailableFn = Option<unsafe extern "C" fn(ctx: *mut core::ffi::c_void) -> bool>;
 
 // ---------------------------------------------------------------------------
-// IotaiTransport — C-visible transport descriptor
+// FerriteTransport — C-visible transport descriptor
 // ---------------------------------------------------------------------------
 
 /// Transport descriptor passed from C.
 /// The caller owns the `ctx` pointer and the function pointers must remain
 /// valid for the duration of any `ferrite_upload` call.
 #[repr(C)]
-pub struct IotaiTransport {
+pub struct FerriteTransport {
     /// Required: sends a single chunk.  Returns 0 on success.
-    pub send_chunk: IotaiSendChunkFn,
+    pub send_chunk: FerriteSendChunkFn,
     /// Optional: returns whether the transport is available.
     /// If NULL the transport is assumed to always be available.
-    pub is_available: IotaiIsAvailableFn,
+    pub is_available: FerriteIsAvailableFn,
     /// Opaque context pointer forwarded to every callback.
     pub ctx: *mut core::ffi::c_void,
 }
@@ -76,17 +76,17 @@ pub struct IotaiTransport {
 // and context pointer are safe to call/access from any context the FFI
 // functions are invoked from.  On bare-metal Cortex-M there is only one
 // core, so Send+Sync are trivially satisfied.
-unsafe impl Send for IotaiTransport {}
-unsafe impl Sync for IotaiTransport {}
+unsafe impl Send for FerriteTransport {}
+unsafe impl Sync for FerriteTransport {}
 
 // ---------------------------------------------------------------------------
-// IotaiRamRegion — C-visible RAM region
+// FerriteRamRegion — C-visible RAM region
 // ---------------------------------------------------------------------------
 
 /// A valid RAM address range for fault-handler stack snapshot validation.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct IotaiRamRegion {
+pub struct FerriteRamRegion {
     pub start: u32,
     pub end: u32,
 }
@@ -96,7 +96,7 @@ pub struct IotaiRamRegion {
 // ---------------------------------------------------------------------------
 
 /// Internal adapter that implements `ChunkTransport` by forwarding to C
-/// function pointers stored in an `IotaiTransport`.
+/// function pointers stored in a `ferrite_transport_t`.
 struct FfiTransport {
     send_chunk_fn:
         unsafe extern "C" fn(data: *const u8, len: u32, ctx: *mut core::ffi::c_void) -> i32,
@@ -139,30 +139,30 @@ impl ChunkTransport for FfiTransport {
 /// * `firmware_version` – NUL-terminated firmware version string.
 /// * `build_id`         – First 8 bytes of the ELF `.build_id`.
 /// * `ticks_fn`         – Function returning the current monotonic tick count.
-/// * `ram_regions`      – Pointer to an array of `IotaiRamRegion`.
+/// * `ram_regions`      – Pointer to an array of `ferrite_ram_region_t`.
 /// * `ram_region_count` – Number of elements in the array.
 ///
-/// Returns `IotaiError::Ok` on success.
+/// Returns `FERRITE_ERROR_T_OK` on success.
 #[no_mangle]
 pub unsafe extern "C" fn ferrite_sdk_init(
     device_id: *const c_char,
     firmware_version: *const c_char,
     build_id: u64,
     ticks_fn: Option<extern "C" fn() -> u64>,
-    ram_regions: *const IotaiRamRegion,
+    ram_regions: *const FerriteRamRegion,
     ram_region_count: u32,
-) -> IotaiError {
+) -> FerriteError {
     // Validate required pointers.
     if device_id.is_null() || firmware_version.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
 
     if ticks_fn.is_none() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
 
     if ferrite_sdk::sdk::is_initialized() {
-        return IotaiError::AlreadyInit;
+        return FerriteError::AlreadyInit;
     }
 
     // Convert C strings to &'static str.
@@ -173,13 +173,13 @@ pub unsafe extern "C" fn ferrite_sdk_init(
     let fw_ver = cstr_to_str(firmware_version);
 
     // Build the RAM regions slice.
-    let regions: &[IotaiRamRegion] = if ram_regions.is_null() || ram_region_count == 0 {
+    let regions: &[FerriteRamRegion] = if ram_regions.is_null() || ram_region_count == 0 {
         &[]
     } else {
         slice::from_raw_parts(ram_regions, ram_region_count as usize)
     };
 
-    // Convert IotaiRamRegion to RamRegion.
+    // Convert FerriteRamRegion to RamRegion.
     // We support up to 4 regions (same as the SDK limit).
     static mut RAM_REGION_BUF: [RamRegion; 4] = [RamRegion { start: 0, end: 0 }; 4];
     let count = regions.len().min(4);
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn ferrite_sdk_init(
 
     ferrite_sdk::sdk::init(config);
 
-    IotaiError::Ok
+    FerriteError::Ok
 }
 
 /// Convert a C NUL-terminated string to a `&'static str`.
@@ -245,23 +245,23 @@ unsafe fn cstr_to_str(ptr: *const c_char) -> &'static str {
 ///
 /// `reason` maps to `RebootReason` discriminants (0 = Unknown, 1 = PowerOnReset, ...).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_record_reboot_reason(reason: u8) -> IotaiError {
+pub unsafe extern "C" fn ferrite_record_reboot_reason(reason: u8) -> FerriteError {
     if !ferrite_sdk::sdk::is_initialized() {
-        return IotaiError::NotInitialized;
+        return FerriteError::NotInitialized;
     }
     ferrite_sdk::reboot_reason::record_reboot_reason(RebootReason::from(reason));
-    IotaiError::Ok
+    FerriteError::Ok
 }
 
 /// Retrieve the reboot reason recorded by the previous boot.
 ///
 /// On success the reason discriminant is written to `*out_reason` and
-/// `IotaiError::Ok` is returned.  If no valid record exists the function
+/// `FERRITE_ERROR_T_OK` is returned.  If no valid record exists the function
 /// still returns `Ok` but writes `0` (Unknown).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_last_reboot_reason(out_reason: *mut u8) -> IotaiError {
+pub unsafe extern "C" fn ferrite_last_reboot_reason(out_reason: *mut u8) -> FerriteError {
     if out_reason.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
     match ferrite_sdk::reboot_reason::last_reboot_reason() {
         Some(r) => {
@@ -271,7 +271,7 @@ pub unsafe extern "C" fn ferrite_last_reboot_reason(out_reason: *mut u8) -> Iota
             *out_reason = RebootReason::Unknown as u8;
         }
     }
-    IotaiError::Ok
+    FerriteError::Ok
 }
 
 // ---------------------------------------------------------------------------
@@ -282,20 +282,20 @@ pub unsafe extern "C" fn ferrite_last_reboot_reason(out_reason: *mut u8) -> Iota
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_increment(key: *const c_char, delta: u32) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_increment(key: *const c_char, delta: u32) -> FerriteError {
     if key.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
     if !ferrite_sdk::sdk::is_initialized() {
-        return IotaiError::NotInitialized;
+        return FerriteError::NotInitialized;
     }
 
     let key_str = cstr_to_str(key);
     let ticks = ferrite_sdk::metrics::ticks();
     match ferrite_sdk::sdk::try_with_sdk(|state| state.metrics.increment(key_str, delta, ticks)) {
-        Ok(Ok(())) => IotaiError::Ok,
-        Ok(Err(e)) => IotaiError::from(e),
-        Err(e) => IotaiError::from(e),
+        Ok(Ok(())) => FerriteError::Ok,
+        Ok(Err(e)) => FerriteError::from(e),
+        Err(e) => FerriteError::from(e),
     }
 }
 
@@ -303,20 +303,20 @@ pub unsafe extern "C" fn ferrite_metric_increment(key: *const c_char, delta: u32
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_gauge(key: *const c_char, value: f32) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_gauge(key: *const c_char, value: f32) -> FerriteError {
     if key.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
     if !ferrite_sdk::sdk::is_initialized() {
-        return IotaiError::NotInitialized;
+        return FerriteError::NotInitialized;
     }
 
     let key_str = cstr_to_str(key);
     let ticks = ferrite_sdk::metrics::ticks();
     match ferrite_sdk::sdk::try_with_sdk(|state| state.metrics.gauge(key_str, value, ticks)) {
-        Ok(Ok(())) => IotaiError::Ok,
-        Ok(Err(e)) => IotaiError::from(e),
-        Err(e) => IotaiError::from(e),
+        Ok(Ok(())) => FerriteError::Ok,
+        Ok(Err(e)) => FerriteError::from(e),
+        Err(e) => FerriteError::from(e),
     }
 }
 
@@ -324,20 +324,20 @@ pub unsafe extern "C" fn ferrite_metric_gauge(key: *const c_char, value: f32) ->
 ///
 /// `key` is a NUL-terminated C string (max 32 characters).
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_metric_observe(key: *const c_char, value: f32) -> IotaiError {
+pub unsafe extern "C" fn ferrite_metric_observe(key: *const c_char, value: f32) -> FerriteError {
     if key.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
     if !ferrite_sdk::sdk::is_initialized() {
-        return IotaiError::NotInitialized;
+        return FerriteError::NotInitialized;
     }
 
     let key_str = cstr_to_str(key);
     let ticks = ferrite_sdk::metrics::ticks();
     match ferrite_sdk::sdk::try_with_sdk(|state| state.metrics.observe(key_str, value, ticks)) {
-        Ok(Ok(())) => IotaiError::Ok,
-        Ok(Err(e)) => IotaiError::from(e),
-        Err(e) => IotaiError::from(e),
+        Ok(Ok(())) => FerriteError::Ok,
+        Ok(Err(e)) => FerriteError::from(e),
+        Err(e) => FerriteError::from(e),
     }
 }
 
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn ferrite_metric_observe(key: *const c_char, value: f32) 
 /// C-visible fault record returned by `ferrite_last_fault`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct IotaiFaultRecord {
+pub struct FerriteFaultRecord {
     /// `true` if a valid fault was present.
     pub valid: bool,
     /// Fault type (0 = HardFault, 1 = MemFault, 2 = BusFault, 3 = UsageFault).
@@ -382,7 +382,7 @@ pub struct IotaiFaultRecord {
     pub bfar: u32,
 }
 
-impl IotaiFaultRecord {
+impl FerriteFaultRecord {
     /// Create a zeroed (invalid) fault record.
     pub const fn zeroed() -> Self {
         Self {
@@ -451,21 +451,21 @@ impl IotaiFaultRecord {
 /// The fault record is written to `*out`.  If no valid fault is present
 /// `out->valid` will be `false`.
 #[no_mangle]
-pub unsafe extern "C" fn ferrite_last_fault(out: *mut IotaiFaultRecord) -> IotaiError {
+pub unsafe extern "C" fn ferrite_last_fault(out: *mut FerriteFaultRecord) -> FerriteError {
     if out.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
 
     match ferrite_sdk::fault::last_fault() {
         Some(record) => {
-            *out = IotaiFaultRecord::from_sdk(&record);
+            *out = FerriteFaultRecord::from_sdk(&record);
         }
         None => {
-            *out = IotaiFaultRecord::zeroed();
+            *out = FerriteFaultRecord::zeroed();
         }
     }
 
-    IotaiError::Ok
+    FerriteError::Ok
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +475,7 @@ pub unsafe extern "C" fn ferrite_last_fault(out: *mut IotaiFaultRecord) -> Iotai
 /// Statistics returned by `ferrite_upload`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct IotaiUploadStats {
+pub struct FerriteUploadStats {
     pub chunks_sent: u32,
     pub bytes_sent: u32,
     pub fault_uploaded: bool,
@@ -483,7 +483,7 @@ pub struct IotaiUploadStats {
     pub trace_bytes_uploaded: u32,
 }
 
-impl IotaiUploadStats {
+impl FerriteUploadStats {
     pub const fn zeroed() -> Self {
         Self {
             chunks_sent: 0,
@@ -510,15 +510,15 @@ impl IotaiUploadStats {
 /// On success, upload statistics are written to `*out_stats` (may be NULL if
 /// the caller does not need them).
 ///
-/// On transport error `IotaiError::Transport` is returned and buffered data
+/// On transport error `FERRITE_ERROR_T_TRANSPORT` is returned and buffered data
 /// is retained for the next attempt.
 #[no_mangle]
 pub unsafe extern "C" fn ferrite_upload(
-    transport: *const IotaiTransport,
-    out_stats: *mut IotaiUploadStats,
-) -> IotaiError {
+    transport: *const FerriteTransport,
+    out_stats: *mut FerriteUploadStats,
+) -> FerriteError {
     if transport.is_null() {
-        return IotaiError::NullPtr;
+        return FerriteError::NullPtr;
     }
 
     let t = &*transport;
@@ -526,7 +526,7 @@ pub unsafe extern "C" fn ferrite_upload(
     // The send_chunk callback is mandatory.
     let send_fn = match t.send_chunk {
         Some(f) => f,
-        None => return IotaiError::NullPtr,
+        None => return FerriteError::NullPtr,
     };
 
     let mut adapter = FfiTransport {
@@ -538,14 +538,14 @@ pub unsafe extern "C" fn ferrite_upload(
     match UploadManager::upload(&mut adapter) {
         Ok(stats) => {
             if !out_stats.is_null() {
-                *out_stats = IotaiUploadStats::from_sdk(&stats);
+                *out_stats = FerriteUploadStats::from_sdk(&stats);
             }
-            IotaiError::Ok
+            FerriteError::Ok
         }
-        Err(ferrite_sdk::upload::UploadError::NotInitialized) => IotaiError::NotInitialized,
-        Err(ferrite_sdk::upload::UploadError::TransportUnavailable) => IotaiError::Transport,
-        Err(ferrite_sdk::upload::UploadError::TransportError(_)) => IotaiError::Transport,
-        Err(ferrite_sdk::upload::UploadError::EncodingError) => IotaiError::Encoding,
+        Err(ferrite_sdk::upload::UploadError::NotInitialized) => FerriteError::NotInitialized,
+        Err(ferrite_sdk::upload::UploadError::TransportUnavailable) => FerriteError::Transport,
+        Err(ferrite_sdk::upload::UploadError::TransportError(_)) => FerriteError::Transport,
+        Err(ferrite_sdk::upload::UploadError::EncodingError) => FerriteError::Encoding,
     }
 }
 
