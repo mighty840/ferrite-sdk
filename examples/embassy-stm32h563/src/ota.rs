@@ -10,12 +10,14 @@
 //!    and one successful upload). Until then the bootloader state stays
 //!    "swap": any reset, including the watchdog firing on a hung image,
 //!    makes the bootloader swap the old image back.
+//! 5. After such a rollback the old image boots in the "revert" state. It
+//!    reports the rollback (OTA-request flag) so the server stops offering
+//!    the failed build, and doesn't poll for updates until that report went
+//!    through; otherwise it would reinstall the same bad build forever.
 
 use core::cell::RefCell;
 
-use embassy_boot_stm32::{
-    AlignedBuffer, BlockingFirmwareUpdater, FirmwareUpdaterConfig, State,
-};
+use embassy_boot_stm32::{AlignedBuffer, BlockingFirmwareUpdater, FirmwareUpdaterConfig, State};
 use embassy_net::tcp::TcpSocket;
 use embassy_net::{IpEndpoint, Stack};
 use embassy_stm32::flash::{Blocking, Flash, WRITE_SIZE};
@@ -46,21 +48,53 @@ pub struct Ota<DFU: NorFlash, STATE: NorFlash> {
     updater: BlockingFirmwareUpdater<'static, DFU, STATE>,
     /// Running a freshly swapped image that hasn't been confirmed yet.
     pending_confirm: bool,
+    /// Booted after the bootloader rolled back an update; not yet reported.
+    rollback_unreported: bool,
 }
 
 impl<DFU: NorFlash, STATE: NorFlash> Ota<DFU, STATE> {
     fn from_updater(mut updater: BlockingFirmwareUpdater<'static, DFU, STATE>) -> Self {
         let state = updater.get_state();
         let pending_confirm = matches!(state, Ok(State::Swap));
-        match state {
+        let rollback_unreported = matches!(state, Ok(State::Revert));
+        match &state {
             Ok(State::Swap) => defmt::warn!("OTA: new image, unconfirmed (reset now = rollback)"),
             Ok(State::Revert) => defmt::warn!("OTA: previous update was rolled back"),
             Ok(_) => {}
-            Err(_) => defmt::error!("OTA: cannot read bootloader state"),
+            Err(e) => defmt::error!(
+                "OTA: cannot read bootloader state: {}",
+                defmt::Debug2Format(e)
+            ),
         }
         Self {
             updater,
             pending_confirm,
+            rollback_unreported,
+        }
+    }
+
+    /// Flags for this upload's OTA-request chunk.
+    pub fn report_flags(&self) -> u8 {
+        if self.rollback_unreported {
+            ferrite_sdk::chunks::encoder::OTA_FLAG_ROLLED_BACK
+        } else {
+            0
+        }
+    }
+
+    /// Call after an upload carrying [`Self::report_flags`] succeeded: the
+    /// server has seen the rollback, so leave the "revert" state.
+    pub fn rollback_reported(&mut self) {
+        if !self.rollback_unreported {
+            return;
+        }
+        match self.updater.mark_booted() {
+            Ok(()) => {
+                self.rollback_unreported = false;
+                defmt::info!("OTA: rollback reported, resuming update checks");
+                let _ = ferrite_sdk::metric_increment!("ota_rolled_back");
+            }
+            Err(_) => defmt::error!("OTA: mark_booted after rollback failed"),
         }
     }
 
@@ -93,8 +127,10 @@ impl<DFU: NorFlash, STATE: NorFlash> Ota<DFU, STATE> {
         device_id: &'static str,
         pet: &mut impl FnMut(),
     ) {
-        // Don't stack a second update on an unconfirmed one.
-        if self.pending_confirm {
+        // Don't stack a second update on an unconfirmed one, and don't
+        // reinstall a build that was just rolled back before the server
+        // knows about it.
+        if self.pending_confirm || self.rollback_unreported {
             return;
         }
         let client = OtaClient::new(device_id, BUILD_ID, relay_url, None);

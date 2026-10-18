@@ -5,6 +5,10 @@ use crate::metrics::MetricEntry;
 use crate::trace::TraceBuffer;
 
 /// Encodes SDK data into binary chunks for transport.
+/// OTA-request flag: the bootloader rolled back the last update (the new
+/// image never confirmed), so the server should stop offering that build.
+pub const OTA_FLAG_ROLLED_BACK: u8 = 0x01;
+
 pub struct ChunkEncoder {
     sequence: u16,
 }
@@ -218,18 +222,31 @@ impl ChunkEncoder {
     ///   [0..8]  build_id      (u64 LE)
     ///   [8..10] max_chunk_size (u16 LE) — largest chunk the device can receive
     ///   [10]    ota_capable    (u8, 1 = yes)
-    ///   [11]    reserved
+    ///   [11]    flags          (u8, see `OTA_FLAG_*`; 0 on older devices)
     ///   [12..14] reserved
     pub fn encode_ota_request<F: FnMut(&[u8])>(
         &mut self,
         build_id: u64,
         max_chunk_size: u16,
+        emit: F,
+    ) {
+        self.encode_ota_request_with_flags(build_id, max_chunk_size, 0, emit);
+    }
+
+    /// [`Self::encode_ota_request`] with status flags, e.g.
+    /// [`OTA_FLAG_ROLLED_BACK`] after the bootloader reverted an update.
+    pub fn encode_ota_request_with_flags<F: FnMut(&[u8])>(
+        &mut self,
+        build_id: u64,
+        max_chunk_size: u16,
+        flags: u8,
         mut emit: F,
     ) {
         let mut payload = [0u8; 14];
         payload[0..8].copy_from_slice(&build_id.to_le_bytes());
         payload[8..10].copy_from_slice(&max_chunk_size.to_le_bytes());
         payload[10] = 1; // ota_capable = true
+        payload[11] = flags;
 
         let mut out = [0u8; 256];
         let n = self.encode(ChunkType::OtaRequest, &payload, true, &mut out);
@@ -407,6 +424,21 @@ mod tests {
         let decoded = ChunkDecoder::decode(&chunks[0]).unwrap();
         assert_eq!(decoded.chunk_type, ChunkType::Metrics);
         assert_eq!(decoded.payload[0], 1); // entry count
+    }
+
+    #[test]
+    fn ota_request_carries_flags() {
+        let mut encoder = ChunkEncoder::new();
+        let mut payload = [0u8; 14];
+        encoder.encode_ota_request_with_flags(7, 256, OTA_FLAG_ROLLED_BACK, |chunk| {
+            payload.copy_from_slice(&chunk[8..22]);
+        });
+        assert_eq!(payload[11], OTA_FLAG_ROLLED_BACK);
+        assert_eq!(u64::from_le_bytes(payload[0..8].try_into().unwrap()), 7);
+
+        let mut plain = [0u8; 14];
+        encoder.encode_ota_request(7, 256, |chunk| plain.copy_from_slice(&chunk[8..22]));
+        assert_eq!(plain[11], 0);
     }
 
     #[test]

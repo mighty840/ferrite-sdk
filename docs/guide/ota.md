@@ -140,7 +140,9 @@ ferrite ota upload --firmware app.bin
 
 **Confirm and rollback.** After an update the bootloader swaps the new image in and boots it with the state "swap". The app confirms (`mark_booted`) only after Ethernet is up and one upload through the gateway succeeded. Until then any reset swaps the old image back. The app runs an independent watchdog (20 s), so a hung or crashing image resets itself and is rolled back without anyone touching the board. Each upload carries an OTA-request chunk with the build ID, so the server marks the device `installed` in its campaign once the new build reports in.
 
-To see a rollback, build an update with `FERRITE_TEST_HANG_AFTER_BOOT=1` (test builds only): it hangs before confirming, the watchdog fires, and the board comes back on the previous build.
+**After a rollback** the previous image boots in embassy-boot's "revert" state. It doesn't poll for updates until it has told the server, setting the rolled-back flag in its OTA-request chunk on the next upload. The server then removes the device's OTA target, so the failed build isn't offered again, and marks the device `failed` in its active campaigns. A campaign whose failure rate exceeds its `failure_threshold` (percent, default 5) is paused, and its remaining targets are removed. Once the report has gone through, the device leaves the revert state and resumes update checks. Without this, a device would reinstall the same bad build after every rollback.
+
+To see a rollback, build an update with `FERRITE_TEST_HANG_AFTER_BOOT=1` (test builds only): it hangs before confirming, the watchdog fires, the board comes back on the previous build, and the campaign shows the device as failed.
 
 ## Rollback protection
 

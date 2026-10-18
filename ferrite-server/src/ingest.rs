@@ -487,7 +487,12 @@ struct ParsedOtaRequest {
     build_id: u64,
     max_chunk_size: u16,
     ota_capable: bool,
+    /// The bootloader rolled back the last update (SDK `OTA_FLAG_ROLLED_BACK`).
+    rolled_back: bool,
 }
+
+/// OTA-request flag bit, mirrors `ferrite_sdk::chunks::encoder::OTA_FLAG_ROLLED_BACK`.
+const OTA_FLAG_ROLLED_BACK: u8 = 0x01;
 
 fn parse_ota_request_payload(payload: &[u8]) -> Option<ParsedOtaRequest> {
     if payload.len() < 14 {
@@ -499,11 +504,13 @@ fn parse_ota_request_payload(payload: &[u8]) -> Option<ParsedOtaRequest> {
     ]);
     let max_chunk_size = u16::from_le_bytes([payload[8], payload[9]]);
     let ota_capable = payload[10] != 0;
+    let rolled_back = payload[11] & OTA_FLAG_ROLLED_BACK != 0;
 
     Some(ParsedOtaRequest {
         build_id,
         max_chunk_size,
         ota_capable,
+        rolled_back,
     })
 }
 
@@ -814,10 +821,26 @@ async fn ingest_chunks(
                         build_id = ota.build_id,
                         max_chunk_size = ota.max_chunk_size,
                         ota_capable = ota.ota_capable,
+                        rolled_back = ota.rolled_back,
                         "OTA request received"
                     );
-                    // Check if there's an OTA target for this device
-                    if let Ok(Some(target)) = store.get_ota_target_for_device(&current_device_id) {
+                    if ota.rolled_back {
+                        // The new image never confirmed and the bootloader
+                        // restored this build: stop offering the failed build.
+                        match store.record_ota_rollback(&current_device_id, ota.build_id) {
+                            Ok(outcome) => tracing::warn!(
+                                device = %current_device_id,
+                                running_build = ota.build_id,
+                                target_removed = outcome.target_removed,
+                                failed_in = ?outcome.failed_in_campaigns,
+                                paused = ?outcome.paused_campaigns,
+                                "OTA update rolled back on device"
+                            ),
+                            Err(e) => errors.push(format!("recording OTA rollback: {e}")),
+                        }
+                    } else if let Ok(Some(target)) =
+                        store.get_ota_target_for_device(&current_device_id)
+                    {
                         if target.target_build_id as u64 != ota.build_id {
                             tracing::info!(
                                 device = %current_device_id,

@@ -67,7 +67,8 @@ const INGEST_PATH: &str = "/ingest/chunks";
 
 const MAC_ADDR: [u8; 6] = [0x02, 0xFE, 0x77, 0x1E, 0x00, 0x01];
 
-/// Telemetry loop period; uploads every 6th tick (30 s), OTA poll every 12th.
+/// Telemetry loop period; uploads every 6th tick (30 s), OTA poll every
+/// 12th, offset so a fresh boot reports (and confirms) before it polls.
 const TICK: Duration = Duration::from_secs(5);
 /// Longer than the slowest stretch between pets (OTA download chunks, TCP
 /// timeouts), shorter than anyone's patience with a hung image.
@@ -255,8 +256,10 @@ async fn main(spawner: Spawner) {
             let mut transport = BufferingTransport::new();
             match UploadManager::upload(&mut transport) {
                 Ok(_) => {
-                    // Lets the server mark this build "installed" in a campaign.
-                    encoder.encode_ota_request(BUILD_ID, 256, |chunk| {
+                    // Lets the server mark this build "installed" in a campaign,
+                    // or (with the rollback flag) stop offering a failed one.
+                    let flags = ota.report_flags();
+                    encoder.encode_ota_request_with_flags(BUILD_ID, 256, flags, |chunk| {
                         let _ = transport.send_chunk(chunk);
                     });
                     let mut ok = 0u32;
@@ -273,17 +276,22 @@ async fn main(spawner: Spawner) {
                         }
                     }
                     defmt::info!("upload: {}/{} chunks sent", ok, transport.chunks.len());
-                    // Self-test passed: network up and the server path works.
-                    if ok > 0 && ok as usize == transport.chunks.len() && ota.pending_confirm() {
-                        ota.confirm();
+                    if ok > 0 && ok as usize == transport.chunks.len() {
+                        // Self-test passed: network up and the server path works.
+                        if ota.pending_confirm() {
+                            ota.confirm();
+                        }
+                        if flags != 0 {
+                            ota.rollback_reported();
+                        }
                     }
                 }
                 Err(e) => defmt::warn!("encode failed: {:?}", defmt::Debug2Format(&e)),
             }
         }
 
-        // Poll for updates every 60s (12 × 5s)
-        if counter % 12 == 3 {
+        // Poll for updates every 60s (12 × 5s), first after the first upload
+        if counter % 12 == 9 {
             ota.poll_and_update(stack, gateway, GATEWAY_URL, DEVICE_ID, &mut || wdg.pet())
                 .await;
         }

@@ -114,6 +114,17 @@ pub struct OtaCampaignDevice {
     pub updated_at: String,
 }
 
+/// What the server did after a device reported a rolled-back update.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RollbackOutcome {
+    /// The device's OTA target was removed, so it won't be offered the build again.
+    pub target_removed: bool,
+    /// Active campaigns in which the device was marked `failed`.
+    pub failed_in_campaigns: Vec<i64>,
+    /// Campaigns paused because failures exceeded their `failure_threshold`.
+    pub paused_campaigns: Vec<i64>,
+}
+
 /// A campaign with aggregated device status counts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampaignSummary {
@@ -1385,6 +1396,51 @@ impl Store {
         rows.collect()
     }
 
+    /// Handle a device report that the bootloader rolled back its last
+    /// update (the new image never confirmed). Stops offering the failed
+    /// build: removes the device's OTA target if it names a different build
+    /// than the one now running, marks the device `failed` in its active
+    /// campaigns, and pauses a campaign whose failure rate exceeds its
+    /// `failure_threshold` (percent).
+    pub fn record_ota_rollback(
+        &self,
+        device_id: &str,
+        running_build_id: u64,
+    ) -> SqlResult<RollbackOutcome> {
+        let mut outcome = RollbackOutcome::default();
+        let failed_target = self
+            .get_ota_target_for_device(device_id)?
+            .filter(|t| t.target_build_id as u64 != running_build_id);
+        if failed_target.is_some() {
+            outcome.target_removed = self.delete_ota_target(device_id)?;
+        }
+
+        for campaign in self.find_active_campaigns_for_device(device_id)? {
+            let marked = self.conn.execute(
+                "UPDATE ota_campaign_devices SET status = 'failed', updated_at = datetime('now')
+                 WHERE campaign_id = ?1 AND device_id = ?2 AND status NOT IN ('installed', 'failed')",
+                params![campaign.id, device_id],
+            )?;
+            if marked == 0 {
+                continue;
+            }
+            outcome.failed_in_campaigns.push(campaign.id);
+
+            let (failed, total): (i64, i64) = self.conn.query_row(
+                "SELECT COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0), COUNT(*)
+                 FROM ota_campaign_devices WHERE campaign_id = ?1",
+                params![campaign.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if total > 0 && (failed as f64 * 100.0 / total as f64) > campaign.failure_threshold {
+                self.update_campaign_status(campaign.id, "paused")?;
+                self.delete_ota_targets_for_campaign(campaign.id)?;
+                outcome.paused_campaigns.push(campaign.id);
+            }
+        }
+        Ok(outcome)
+    }
+
     /// Find active campaigns that include a given device.
     pub fn find_active_campaigns_for_device(&self, device_id: &str) -> SqlResult<Vec<OtaCampaign>> {
         let sql =
@@ -2020,6 +2076,65 @@ mod tests {
         // Verify faults for crash group.
         let faults = store.list_faults_for_crash_group(cg, 100, 0).unwrap();
         assert_eq!(faults.len(), 2);
+    }
+
+    #[test]
+    fn rollback_marks_failed_removes_target_and_pauses_over_threshold() {
+        let store = Store::open_in_memory().unwrap();
+        let fw = store
+            .insert_firmware_artifact(&NewFirmwareArtifact {
+                version: "3.0.0",
+                build_id: 300,
+                sha256: "abc",
+                size: 1,
+                filename: "fw.bin",
+                signer: None,
+                manifest: None,
+                security_version: None,
+            })
+            .unwrap();
+        for d in ["a", "b", "c"] {
+            store.upsert_device(d, "2.0.0", 200).unwrap();
+        }
+        // 40% threshold: one failure of three (33%) keeps going, two (67%) pause.
+        let c = store
+            .create_campaign("v3", fw.id, "3.0.0", "immediate", None, None, 100, 40.0)
+            .unwrap();
+        let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        store.add_devices_to_campaign(c.id, &ids).unwrap();
+        store.update_campaign_status(c.id, "active").unwrap();
+        for d in &ids {
+            store
+                .set_ota_target(d, "3.0.0", 300, Some("/ota/firmware/1/download"))
+                .unwrap();
+        }
+
+        let first = store.record_ota_rollback("a", 200).unwrap();
+        assert!(first.target_removed);
+        assert_eq!(first.failed_in_campaigns, vec![c.id]);
+        assert!(first.paused_campaigns.is_empty());
+        assert!(store.get_ota_target_for_device("a").unwrap().is_none());
+        assert!(store.get_ota_target_for_device("b").unwrap().is_some());
+
+        // Reporting again is harmless.
+        let again = store.record_ota_rollback("a", 200).unwrap();
+        assert_eq!(again, RollbackOutcome::default());
+
+        let second = store.record_ota_rollback("b", 200).unwrap();
+        assert_eq!(second.paused_campaigns, vec![c.id]);
+        assert_eq!(store.get_campaign(c.id).unwrap().unwrap().status, "paused");
+        // Pausing stops the rollout for everyone, including untouched "c".
+        assert!(store.get_ota_target_for_device("c").unwrap().is_none());
+    }
+
+    #[test]
+    fn rollback_keeps_target_for_the_running_build() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_device("a", "3.0.0", 300).unwrap();
+        store.set_ota_target("a", "3.0.0", 300, None).unwrap();
+        let outcome = store.record_ota_rollback("a", 300).unwrap();
+        assert!(!outcome.target_removed);
+        assert!(store.get_ota_target_for_device("a").unwrap().is_some());
     }
 
     // ---- OTA Campaign tests ----
