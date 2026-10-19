@@ -11,6 +11,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, Any, CorsLayer};
 
+use ferrite_sdk::chunks::DeviceType;
+
 use crate::sse::SsePayload;
 use crate::AppState;
 
@@ -415,6 +417,8 @@ struct ParsedDeviceInfo {
     device_id: String,
     firmware_version: String,
     build_id: u64,
+    /// Optional byte after the build ID; absent on MCUs and older devices.
+    device_type: Option<DeviceType>,
 }
 
 fn parse_device_info_payload(payload: &[u8]) -> Option<ParsedDeviceInfo> {
@@ -456,11 +460,14 @@ fn parse_device_info_payload(payload: &[u8]) -> Option<ParsedDeviceInfo> {
         payload[pos + 6],
         payload[pos + 7],
     ]);
+    pos += 8;
+    let device_type = payload.get(pos).copied().and_then(DeviceType::from_u8);
 
     Some(ParsedDeviceInfo {
         device_id,
         firmware_version,
         build_id,
+        device_type,
     })
 }
 
@@ -632,6 +639,11 @@ async fn ingest_chunks(
                     Ok(rid) => {
                         device_rowid = Some(rid);
                         record_build_report(&state, &info, previous.as_ref());
+                        if let Some(t) = info.device_type {
+                            if let Err(e) = store.set_device_type(&info.device_id, t.as_str()) {
+                                errors.push(format!("db error setting device type: {e}"));
+                            }
+                        }
                     }
                     Err(e) => errors.push(format!("db error upserting device: {e}")),
                 }

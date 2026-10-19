@@ -75,7 +75,7 @@ The device ID hashes the machine ID because systemd asks applications not to exp
 
 ## What gets reported
 
-Every report is one batch of chunks: `DeviceInfo`, a `RebootReason` on the first report after a reboot, a `Heartbeat` and the metrics.
+Every report is one batch of chunks: `DeviceInfo` (marked as a Linux device, so the dashboard shows a Linux badge), a `RebootReason` on the first report after a reboot, a `Heartbeat` and the metrics.
 
 | Metric | Type | Meaning |
 |---|---|---|
@@ -115,5 +115,4 @@ Spooled metrics carry the device's uptime as their timestamp. The server stamps 
 ## Not yet covered
 
 - Crash details (process, signal, backtrace) from systemd-coredump. Only the count is reported until the server gains a Linux crash record.
-- A device-type field on the server, so Linux devices can be told apart from MCUs.
 - Image updates. Use RAUC or SWUpdate; [#87](https://github.com/mighty840/ferrite-sdk/issues/87) tracks driving them from ferrite campaigns.

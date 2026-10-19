@@ -52,6 +52,10 @@ pub fn DeviceCard(device: Device) -> Element {
                             p {
                                 class: "text-[10px] text-gray-500 font-mono uppercase tracking-wider",
                                 "{key_display}"
+                                span {
+                                    class: "ml-2 px-1.5 py-0.5 rounded bg-surface-750 text-gray-400",
+                                    "{device.type_label()}"
+                                }
                             }
                         }
                     }

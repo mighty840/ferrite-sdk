@@ -1266,6 +1266,54 @@ async fn evidence_is_for_admins_and_auditors_only() {
     );
 }
 
+#[tokio::test]
+async fn device_type_comes_from_device_info() {
+    use ferrite_sdk::chunks::{ChunkEncoder, DeviceType};
+
+    let base = spawn_server().await;
+    let client = Client::new();
+    let mut enc = ChunkEncoder::new();
+    let mut send = |device: &str, device_type: Option<DeviceType>| {
+        let mut body = Vec::new();
+        match device_type {
+            Some(t) => {
+                enc.encode_device_info_typed(device, "1", 1, t, |c| body.extend_from_slice(c))
+            }
+            None => enc.encode_device_info(device, "1", 1, |c| body.extend_from_slice(c)),
+        }
+        client
+            .post(format!("{base}/ingest/chunks"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body)
+            .send()
+    };
+    send("mcu-1", None).await.unwrap();
+    send("linux-1", Some(DeviceType::Linux)).await.unwrap();
+    // A later report without the byte (e.g. relayed by an old gateway) keeps it.
+    send("linux-1", None).await.unwrap();
+
+    let devices: serde_json::Value = client
+        .get(format!("{base}/devices"))
+        .header("Authorization", basic_auth_header())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let type_of = |id: &str| {
+        devices["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["device_id"] == id)
+            .unwrap()["device_type"]
+            .clone()
+    };
+    assert_eq!(type_of("mcu-1"), "mcu");
+    assert_eq!(type_of("linux-1"), "linux");
+}
+
 // =========================================================================
 // Update-reach reports (#78)
 // =========================================================================

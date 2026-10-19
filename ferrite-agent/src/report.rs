@@ -3,7 +3,7 @@
 //! Every batch starts with a `DeviceInfo` chunk, so the server attributes it
 //! correctly even when it arrives late from the offline spool.
 
-use ferrite_sdk::chunks::ChunkEncoder;
+use ferrite_sdk::chunks::{ChunkEncoder, DeviceType};
 use ferrite_sdk::metrics::{MetricEntry, MetricValue};
 
 use crate::boot::Reboot;
@@ -26,10 +26,11 @@ pub fn encode(encoder: &mut ChunkEncoder, report: &Report) -> Vec<u8> {
     let mut out = Vec::new();
     let mut emit = |chunk: &[u8]| out.extend_from_slice(chunk);
 
-    encoder.encode_device_info(
+    encoder.encode_device_info_typed(
         &report.identity.device_id,
         &report.identity.firmware_version,
         report.identity.build_id,
+        DeviceType::Linux,
         &mut emit,
     );
     if let Some(r) = report.reboot {
@@ -133,13 +134,15 @@ mod tests {
         assert_eq!(types[2], ChunkType::Heartbeat);
         assert!(types[3..].iter().all(|t| *t == ChunkType::Metrics));
 
-        // DeviceInfo: len-prefixed id, len-prefixed version, u64 build id.
+        // DeviceInfo: len-prefixed id, len-prefixed version, u64 build id, type.
         let info = &chunks[0].1;
         assert_eq!(&info[1..1 + info[0] as usize], b"linux-0011223344556677");
+        let n = info.len();
         assert_eq!(
-            u64::from_le_bytes(info[info.len() - 8..].try_into().unwrap()),
+            u64::from_le_bytes(info[n - 9..n - 1].try_into().unwrap()),
             20261018093000
         );
+        assert_eq!(info[n - 1], DeviceType::Linux as u8);
         // RebootReason: reason, extra, boot_sequence, uptime.
         assert_eq!(chunks[1].1[0], RebootReason::WatchdogTimeout as u8);
         assert_eq!(u32::from_le_bytes(chunks[1].1[2..6].try_into().unwrap()), 4);

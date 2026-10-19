@@ -232,9 +232,12 @@ Offset  Size  Field
 1+D     1     fw_version_len      u8 (max 127)
 2+D     V     firmware_version    UTF-8 bytes (V = fw_version_len)
 2+D+V   8     build_id            u64 LE
+10+D+V  1     device_type         u8, optional: 0 = MCU, 1 = Linux
 ```
 
-**Total payload:** `2 + D + V + 8` bytes. Flags: `LAST = 1`.
+**Total payload:** `2 + D + V + 8` bytes, plus 1 with `device_type`. Flags: `LAST = 1`.
+
+`device_type` is optional. Devices that omit it are MCUs, and servers before 0.2 ignore it. A later `DeviceInfo` without the byte doesn't change a stored type. The encoder (`encode_device_info_typed`) shortens the firmware version if needed, so the build ID and type always fit the 246-byte payload limit.
 
 ### 0x07 -- OtaRequest
 

@@ -14,9 +14,24 @@ pub struct Device {
     pub tags: Option<String>,
     pub provisioned_by: Option<String>,
     pub provisioned_at: Option<String>,
+    /// `mcu` or `linux`; servers before 0.2 don't send it.
+    #[serde(default = "default_device_type")]
+    pub device_type: String,
+}
+
+fn default_device_type() -> String {
+    "mcu".into()
 }
 
 impl Device {
+    /// Short label for the device kind, e.g. for a badge.
+    pub fn type_label(&self) -> &'static str {
+        match self.device_type.as_str() {
+            "linux" => "Linux",
+            _ => "MCU",
+        }
+    }
+
     /// Format device_key as "XX-YYYYYY" hex, or "N/A" if not set.
     pub fn key_display(&self) -> String {
         match self.device_key {
