@@ -14,6 +14,7 @@ contain breaking changes.
 - **Auditor role:** `auditor` (basic auth) / `ferrite-auditor` (Keycloak) reads the evidence log and nothing else. The evidence log (`/evidence/*`) is now limited to admins and auditors; viewers and provisioners lose access.
 
 ### Fixed
+- Gateway: the BLE scanner retries with backoff when it can't start (e.g. at boot, before BlueZ is ready) or when BlueZ goes away, instead of stopping for good until the gateway restarts. The Pi unit is ordered after `bluetooth.service`.
 - `ChunkEncoder::encode_device_info` could index past its buffer when the device ID and firmware version were both near 127 bytes; the version is now shortened to fit.
 
 ## [0.1.0] — 2026-10-18 (pre-release)
