@@ -116,7 +116,8 @@ pub async fn require_auth(
             let is_delete = method == Method::DELETE;
             let is_admin_path = path.starts_with("/admin")
                 || path.starts_with("/groups")
-                || path.starts_with("/ota");
+                || path.starts_with("/ota")
+                || path.starts_with("/evidence");
             let is_evidence = path == "/evidence" || path.starts_with("/evidence/");
 
             if is_evidence && !claims.role.can_read_evidence() {

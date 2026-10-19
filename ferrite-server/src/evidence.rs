@@ -51,6 +51,14 @@ pub struct VerifyReport {
     pub head_hash: Option<String>,
 }
 
+/// The newest entry, see [`EvidenceLog::head`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct Head {
+    pub seq: i64,
+    pub hash: String,
+    pub kind: String,
+}
+
 /// Filter for [`EvidenceLog::list`].
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct EvidenceFilter {
@@ -97,6 +105,23 @@ impl EvidenceLog {
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    /// The newest entry's sequence number, hash and kind.
+    pub fn head(&self) -> SqlResult<Option<Head>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.query_row(
+            "SELECT seq, hash, kind FROM evidence_log ORDER BY seq DESC LIMIT 1",
+            [],
+            |row| {
+                Ok(Head {
+                    seq: row.get(0)?,
+                    hash: row.get(1)?,
+                    kind: row.get(2)?,
+                })
+            },
+        )
+        .optional()
     }
 
     /// Append an event and return the stored entry.

@@ -154,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve => {
             // Start background retention purge task (#29)
             ferrite_server::retention::spawn_retention_task(state.clone());
+            ferrite_server::evidence_anchor::spawn_anchor_task(state.clone());
 
             // Start alerting offline-check task (#28)
             ferrite_server::alerting::spawn_offline_check_task(state.clone());

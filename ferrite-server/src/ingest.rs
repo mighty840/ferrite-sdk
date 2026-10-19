@@ -1493,6 +1493,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         // Evidence log (#77)
         .route("/evidence", get(crate::evidence::list_evidence))
         .route("/evidence/verify", get(crate::evidence::verify_evidence))
+        .route("/evidence/anchor", post(crate::evidence_anchor::anchor_now))
         .route("/crashes", get(crate::crashes::list_crash_groups))
         .route("/crashes/:id", get(crate::crashes::get_crash_group_detail))
         .route("/metrics", get(list_all_metrics))
