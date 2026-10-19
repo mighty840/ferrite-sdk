@@ -17,6 +17,7 @@ use axum::{
 use std::sync::Arc;
 
 use crate::auth;
+use crate::config::UserRole;
 use crate::AppState;
 
 pub async fn require_auth(
@@ -54,6 +55,11 @@ pub async fn require_auth(
             // Fall back to user auth
             let auth_header = auth::extract_auth_header(req.headers());
             return match auth::validate_request(auth_header, state.config).await {
+                Ok(claims) if claims.role == UserRole::Auditor => (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: the auditor role can only read the evidence log",
+                )
+                    .into_response(),
                 Ok(claims) => {
                     let mut req = req;
                     req.extensions_mut().insert(claims);
@@ -111,6 +117,23 @@ pub async fn require_auth(
             let is_admin_path = path.starts_with("/admin")
                 || path.starts_with("/groups")
                 || path.starts_with("/ota");
+            let is_evidence = path == "/evidence" || path.starts_with("/evidence/");
+
+            if is_evidence && !claims.role.can_read_evidence() {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: admin or auditor role required",
+                )
+                    .into_response();
+            }
+
+            if claims.role == UserRole::Auditor && !(is_evidence && method == Method::GET) {
+                return (
+                    StatusCode::FORBIDDEN,
+                    "Insufficient permissions: the auditor role can only read the evidence log",
+                )
+                    .into_response();
+            }
 
             if is_delete && !claims.role.can_admin() {
                 return (

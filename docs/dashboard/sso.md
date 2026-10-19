@@ -47,6 +47,7 @@ Create these **realm roles** for role-based access control:
 |---|---|
 | `ferrite-admin` | Full access: read, write, delete, admin paths |
 | `ferrite-provisioner` | Read + create/update devices and groups |
+| `ferrite-auditor` | Read the evidence log (`/evidence`) only; no dashboard data |
 | *(no role)* | Viewer: read-only access |
 
 Assign roles to users in the Keycloak admin console.

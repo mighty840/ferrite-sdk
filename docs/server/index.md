@@ -12,7 +12,7 @@
 - **Metrics storage** — counter, gauge, and histogram metrics with timestamps
 - **Reboot tracking** — reboot events with reason codes and boot sequence numbers
 - **Dual-mode authentication** — Keycloak OIDC or HTTP Basic auth, auto-detected
-- **Role-based access control** — Viewer, Provisioner, and Admin roles
+- **Role-based access control** — Viewer, Provisioner, Admin, and evidence-only Auditor roles
 - **Device groups** — organize devices into fleets by location, project, or tag
 - **OTA firmware updates** — set target firmware versions per device with download URLs
 - **Server-Sent Events** — real-time event stream for dashboards and integrations

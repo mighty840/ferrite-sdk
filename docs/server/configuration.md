@@ -43,7 +43,7 @@ ferrite-server [OPTIONS] [COMMAND]
 
 **`BASIC_AUTH_USERS` format:** `user1:pass1:role,user2:pass2:role`
 
-Roles: `admin`, `provisioner`, `viewer`.
+Roles: `admin`, `provisioner`, `viewer`, `auditor` (evidence log only).
 
 ### API security
 
@@ -152,8 +152,8 @@ All accept `?format=csv`. See [Update-reach reports](/guide/update-reach).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/evidence` | User | Hash-chained release/update record (`from`, `to`, `kind`, `subject`, `limit`) |
-| GET | `/evidence/verify` | User | Recompute the chain and report the head hash |
+| GET | `/evidence` | Admin or auditor | Hash-chained release/update record (`from`, `to`, `kind`, `subject`, `limit`) |
+| GET | `/evidence/verify` | Admin or auditor | Recompute the chain and report the head hash |
 
 See [Evidence log](/guide/evidence-log).
 

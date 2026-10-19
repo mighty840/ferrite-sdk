@@ -1198,6 +1198,74 @@ async fn evidence_log_records_release_and_update_story() {
     assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
 }
 
+#[tokio::test]
+async fn evidence_is_for_admins_and_auditors_only() {
+    use base64::Engine;
+    let base = spawn_server_with_env(vec![(
+        "BASIC_AUTH_USERS",
+        "audit:a1:auditor,view:v1:viewer,prov:p1:provisioner",
+    )])
+    .await;
+    let client = Client::new();
+    let as_user = |creds: &str| {
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(creds)
+        )
+    };
+    let status = |method: reqwest::Method, path: &str, creds: &str| {
+        let req = client
+            .request(method, format!("{base}{path}"))
+            .header("Authorization", as_user(creds));
+        async move { req.send().await.unwrap().status() }
+    };
+    use reqwest::Method;
+
+    // Evidence: admin and auditor yes, viewer and provisioner no.
+    assert_eq!(
+        status(Method::GET, "/evidence", "admin:admin").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        status(Method::GET, "/evidence", "audit:a1").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        status(Method::GET, "/evidence/verify", "audit:a1").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        status(Method::GET, "/evidence", "view:v1").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(Method::GET, "/evidence", "prov:p1").await,
+        StatusCode::FORBIDDEN
+    );
+
+    // The auditor sees nothing else and writes nothing.
+    assert_eq!(
+        status(Method::GET, "/devices", "audit:a1").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(Method::GET, "/ota/firmware", "audit:a1").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(Method::GET, "/reports/fleet/builds", "audit:a1").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(Method::POST, "/ingest/elf", "audit:a1").await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        status(Method::GET, "/devices", "view:v1").await,
+        StatusCode::OK
+    );
+}
+
 // =========================================================================
 // Update-reach reports (#78)
 // =========================================================================

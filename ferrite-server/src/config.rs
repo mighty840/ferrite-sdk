@@ -95,6 +95,9 @@ pub struct BasicAuthConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
+    /// Reads the evidence log (`/evidence`) and nothing else, e.g. an
+    /// external auditor. Declared first so it ranks below every other role.
+    Auditor = -1,
     /// Read-only dashboard access.
     Viewer = 0,
     /// Can register/provision devices but not delete or change settings.
@@ -108,6 +111,7 @@ impl UserRole {
         match s.to_lowercase().as_str() {
             "admin" => Self::Admin,
             "provisioner" => Self::Provisioner,
+            "auditor" => Self::Auditor,
             _ => Self::Viewer,
         }
     }
@@ -117,6 +121,7 @@ impl UserRole {
             Self::Admin => "admin",
             Self::Provisioner => "provisioner",
             Self::Viewer => "viewer",
+            Self::Auditor => "auditor",
         }
     }
 
@@ -128,6 +133,11 @@ impl UserRole {
     /// Check if this role can perform destructive operations (delete, settings).
     pub fn can_admin(&self) -> bool {
         *self == Self::Admin
+    }
+
+    /// The evidence log is for admins and auditors only.
+    pub fn can_read_evidence(&self) -> bool {
+        matches!(self, Self::Admin | Self::Auditor)
     }
 }
 
@@ -315,6 +325,17 @@ impl AuthConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auditor_role_is_outside_the_write_hierarchy() {
+        let a = UserRole::parse("Auditor");
+        assert_eq!(a, UserRole::Auditor);
+        assert_eq!(a.as_str(), "auditor");
+        assert!(!a.can_write() && !a.can_admin());
+        assert!(a.can_read_evidence() && UserRole::Admin.can_read_evidence());
+        assert!(!UserRole::Viewer.can_read_evidence());
+        assert!(!UserRole::Provisioner.can_read_evidence());
+    }
 
     #[test]
     fn keycloak_endpoints() {

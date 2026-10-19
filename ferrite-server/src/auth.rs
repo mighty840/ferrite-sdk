@@ -150,15 +150,27 @@ struct RealmAccess {
 
 /// Extract the highest ferrite role from Keycloak realm roles.
 fn extract_keycloak_role(claims: &KeycloakClaims) -> UserRole {
-    if let Some(ref access) = claims.realm_access {
-        if access.roles.iter().any(|r| r == "ferrite-admin") {
-            return UserRole::Admin;
-        }
-        if access.roles.iter().any(|r| r == "ferrite-provisioner") {
-            return UserRole::Provisioner;
-        }
+    claims
+        .realm_access
+        .as_ref()
+        .map_or(UserRole::Viewer, |access| {
+            role_from_realm_roles(access.roles.iter().map(String::as_str))
+        })
+}
+
+/// `ferrite-admin` > `ferrite-provisioner` > `ferrite-auditor`; anything
+/// else is a viewer.
+fn role_from_realm_roles<'a>(roles: impl Iterator<Item = &'a str> + Clone) -> UserRole {
+    let has = |name: &str| roles.clone().any(|r| r == name);
+    if has("ferrite-admin") {
+        UserRole::Admin
+    } else if has("ferrite-provisioner") {
+        UserRole::Provisioner
+    } else if has("ferrite-auditor") {
+        UserRole::Auditor
+    } else {
+        UserRole::Viewer
     }
-    UserRole::Viewer
 }
 
 // ---------------------------------------------------------------------------
@@ -240,19 +252,9 @@ pub async fn validate_keycloak_token(
     // Extract role from userinfo (Keycloak may include realm_access)
     let role = info["realm_access"]["roles"]
         .as_array()
-        .map(|roles| {
-            if roles.iter().any(|r| r.as_str() == Some("ferrite-admin")) {
-                UserRole::Admin
-            } else if roles
-                .iter()
-                .any(|r| r.as_str() == Some("ferrite-provisioner"))
-            {
-                UserRole::Provisioner
-            } else {
-                UserRole::Viewer
-            }
-        })
-        .unwrap_or(UserRole::Viewer);
+        .map_or(UserRole::Viewer, |roles| {
+            role_from_realm_roles(roles.iter().filter_map(|r| r.as_str()))
+        });
 
     Ok(UserClaims {
         sub: info["sub"].as_str().unwrap_or("unknown").to_string(),
@@ -399,5 +401,18 @@ mod tests {
         let result = validate_basic_auth("Basic cHJvdjE6cGFzczI=", &config, &users);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().role, UserRole::Provisioner);
+    }
+
+    #[test]
+    fn realm_roles_map_by_precedence() {
+        let role = |names: &[&str]| role_from_realm_roles(names.iter().copied());
+        assert_eq!(role(&["ferrite-auditor"]), UserRole::Auditor);
+        assert_eq!(
+            role(&["ferrite-auditor", "ferrite-provisioner"]),
+            UserRole::Provisioner
+        );
+        assert_eq!(role(&["ferrite-admin", "ferrite-auditor"]), UserRole::Admin);
+        assert_eq!(role(&["offline_access"]), UserRole::Viewer);
+        assert_eq!(role(&[]), UserRole::Viewer);
     }
 }
