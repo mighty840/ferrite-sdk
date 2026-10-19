@@ -56,7 +56,8 @@ The workspace contains five crates:
 - [ ] No new panics in production code paths
 - [ ] New public API items have doc comments
 - [ ] Wire format changes are documented in `reference/chunk-format.md`
+- [ ] Every commit is signed off (`git commit -s`, see [DCO](#license))
 
 ## License
 
-Contributions are accepted under the MIT OR Apache-2.0 dual license.
+ferrite is MIT-licensed. Contributions are accepted under the same licence and need a `Signed-off-by` line on every commit, certifying the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`). A CI check enforces it.
