@@ -89,13 +89,13 @@ typedef struct {
  * `data` points to chunk bytes, `len` is the byte count.
  * Returns 0 on success, non-zero on error.
  */
-typedef int32_t (*IotaiSendChunkFn)(const uint8_t *data, uint32_t len, void *ctx);
+typedef int32_t (*ferrite_send_chunk_fn_t)(const uint8_t *data, uint32_t len, void *ctx);
 
 /**
  * Callback to query transport availability.
  * Returns `true` (non-zero) if the link is ready.
  */
-typedef bool (*IotaiIsAvailableFn)(void *ctx);
+typedef bool (*ferrite_is_available_fn_t)(void *ctx);
 
 /**
  * Transport descriptor passed from C.
@@ -106,12 +106,12 @@ typedef struct {
   /**
    * Required: sends a single chunk.  Returns 0 on success.
    */
-  IotaiSendChunkFn send_chunk;
+  ferrite_send_chunk_fn_t send_chunk;
   /**
    * Optional: returns whether the transport is available.
    * If NULL the transport is assumed to always be available.
    */
-  IotaiIsAvailableFn is_available;
+  ferrite_is_available_fn_t is_available;
   /**
    * Opaque context pointer forwarded to every callback.
    */
@@ -137,10 +137,10 @@ typedef struct {
  * * `firmware_version` – NUL-terminated firmware version string.
  * * `build_id`         – First 8 bytes of the ELF `.build_id`.
  * * `ticks_fn`         – Function returning the current monotonic tick count.
- * * `ram_regions`      – Pointer to an array of `IotaiRamRegion`.
+ * * `ram_regions`      – Pointer to an array of `ferrite_ram_region_t`.
  * * `ram_region_count` – Number of elements in the array.
  *
- * Returns `IotaiError::Ok` on success.
+ * Returns `FERRITE_ERROR_T_OK` on success.
  */
 ferrite_error_t ferrite_sdk_init(const char *device_id,
                                  const char *firmware_version,
@@ -160,7 +160,7 @@ ferrite_error_t ferrite_record_reboot_reason(uint8_t reason);
  * Retrieve the reboot reason recorded by the previous boot.
  *
  * On success the reason discriminant is written to `*out_reason` and
- * `IotaiError::Ok` is returned.  If no valid record exists the function
+ * `FERRITE_ERROR_T_OK` is returned.  If no valid record exists the function
  * still returns `Ok` but writes `0` (Unknown).
  */
 ferrite_error_t ferrite_last_reboot_reason(uint8_t *out_reason);
@@ -200,7 +200,7 @@ ferrite_error_t ferrite_last_fault(ferrite_fault_record_t *out);
  * On success, upload statistics are written to `*out_stats` (may be NULL if
  * the caller does not need them).
  *
- * On transport error `IotaiError::Transport` is returned and buffered data
+ * On transport error `FERRITE_ERROR_T_TRANSPORT` is returned and buffered data
  * is retained for the next attempt.
  */
 ferrite_error_t ferrite_upload(const ferrite_transport_t *transport,

@@ -14,19 +14,21 @@ trailer = """
 
 [export]
 include = [
-    "IotaiError",
-    "IotaiTransport",
-    "IotaiRamRegion",
-    "IotaiFaultRecord",
-    "IotaiUploadStats",
+    "FerriteError",
+    "FerriteTransport",
+    "FerriteRamRegion",
+    "FerriteFaultRecord",
+    "FerriteUploadStats",
 ]
 
 [export.rename]
-"IotaiError" = "ferrite_error_t"
-"IotaiTransport" = "ferrite_transport_t"
-"IotaiRamRegion" = "ferrite_ram_region_t"
-"IotaiFaultRecord" = "ferrite_fault_record_t"
-"IotaiUploadStats" = "ferrite_upload_stats_t"
+"FerriteError" = "ferrite_error_t"
+"FerriteTransport" = "ferrite_transport_t"
+"FerriteRamRegion" = "ferrite_ram_region_t"
+"FerriteFaultRecord" = "ferrite_fault_record_t"
+"FerriteUploadStats" = "ferrite_upload_stats_t"
+"FerriteSendChunkFn" = "ferrite_send_chunk_fn_t"
+"FerriteIsAvailableFn" = "ferrite_is_available_fn_t"
 
 [enum]
 rename_variants = "ScreamingSnakeCase"

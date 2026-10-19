@@ -89,7 +89,7 @@ typedef struct {
  * @param ctx   Opaque context pointer (passed through from ferrite_transport_t).
  * @return 0 on success, non-zero on error.
  */
-typedef int32_t (*ferrite_send_chunk_fn)(const uint8_t *data, uint32_t len, void *ctx);
+typedef int32_t (*ferrite_send_chunk_fn_t)(const uint8_t *data, uint32_t len, void *ctx);
 
 /**
  * Callback to query transport availability.
@@ -97,11 +97,11 @@ typedef int32_t (*ferrite_send_chunk_fn)(const uint8_t *data, uint32_t len, void
  * @param ctx  Opaque context pointer.
  * @return true if the transport link is ready.
  */
-typedef bool (*ferrite_is_available_fn)(void *ctx);
+typedef bool (*ferrite_is_available_fn_t)(void *ctx);
 
 typedef struct {
-    ferrite_send_chunk_fn  send_chunk;    /* Required */
-    ferrite_is_available_fn is_available; /* Optional (NULL = always available) */
+    ferrite_send_chunk_fn_t  send_chunk;    /* Required */
+    ferrite_is_available_fn_t is_available; /* Optional (NULL = always available) */
     void                 *ctx;          /* Opaque context forwarded to callbacks */
 } ferrite_transport_t;
 
