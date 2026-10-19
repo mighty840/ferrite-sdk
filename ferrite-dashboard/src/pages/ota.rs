@@ -192,7 +192,7 @@ pub fn OtaPage() -> Element {
                 div {
                     class: "px-5 py-4 border-b border-surface-700",
                     h2 { class: "text-sm font-semibold text-gray-200", "Firmware Artifacts" }
-                    p { class: "mt-0.5 text-xs text-gray-500", "Upload new firmware via the ferrite-cli or API" }
+                    p { class: "mt-0.5 text-xs text-gray-500", "Upload new firmware via the ferrite CLI or API" }
                 }
                 if firmware_list.is_empty() {
                     div {

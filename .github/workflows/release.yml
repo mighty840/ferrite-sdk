@@ -83,7 +83,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
 
       - name: Build
-        run: cargo build --locked --release -p ferrite-server -p ferrite-gateway -p ferrite-cli
+        run: cargo build --locked --release -p ferrite-server -p ferrite-gateway -p ferrite-ctl
 
       - name: Package
         run: |

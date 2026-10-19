@@ -9,7 +9,7 @@ members = [
   "ferrite-dashboard",
   "ferrite-provision",
   "ferrite-gateway",
-  "ferrite-cli",
+  "ferrite-ctl",
   "ferrite-agent",
 ]
 exclude = [
