@@ -1,6 +1,6 @@
 [Unit]
 Description=Ferrite Gateway — BLE/USB/LoRa edge bridge
-After=network.target ferrite-server.service bluetooth.target
+After=network.target ferrite-server.service bluetooth.target bluetooth.service
 Wants=ferrite-server.service
 
 [Service]

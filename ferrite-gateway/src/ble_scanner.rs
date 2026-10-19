@@ -25,6 +25,7 @@ mod inner {
     use uuid::Uuid;
 
     use super::is_ferrite_advertisement;
+    use crate::backoff::Backoff;
     use crate::framing::{ChunkFramer, DecodedChunk};
 
     /// Ferrite BLE service UUID (custom 128-bit).
@@ -46,10 +47,49 @@ mod inner {
     /// A connection that drops, or whose notifications go quiet for
     /// `idle_timeout`, is torn down and the device is picked up again on the
     /// next discovery event or periodic re-check.
+    ///
+    /// Runs until the chunk channel closes. If the adapter can't be opened or
+    /// scanning can't start (e.g. right after boot, before BlueZ is ready), or
+    /// BlueZ goes away mid-scan, it retries with backoff instead of giving up.
     pub async fn ble_scanner_task(
         tx: mpsc::Sender<DecodedChunk>,
         idle_timeout: Duration,
     ) -> Result<()> {
+        let mut backoff = Backoff::new(Duration::from_secs(2), Duration::from_secs(60));
+        loop {
+            match scan_session(&tx, idle_timeout, &mut backoff).await {
+                Ok(SessionEnd::ChannelClosed) => {
+                    warn!("Chunk channel closed, stopping BLE scanner");
+                    return Ok(());
+                }
+                Ok(SessionEnd::EventsEnded) => {
+                    warn!("BLE event stream ended (bluetoothd restarted?); restarting scan");
+                }
+                // First failure at WARN, repeats at DEBUG so a missing or
+                // blocked adapter doesn't flood the journal.
+                Err(e) if backoff.failures() == 0 => warn!("BLE scanner: {:#}; retrying", e),
+                Err(e) => debug!("BLE scanner: {:#}; retrying", e),
+            }
+            if tx.is_closed() {
+                return Ok(());
+            }
+            tokio::time::sleep(backoff.next_delay()).await;
+        }
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum SessionEnd {
+        ChannelClosed,
+        EventsEnded,
+    }
+
+    /// One scan: open the adapter, start discovery, handle events until the
+    /// stream ends or the channel closes.
+    async fn scan_session(
+        tx: &mpsc::Sender<DecodedChunk>,
+        idle_timeout: Duration,
+        backoff: &mut Backoff,
+    ) -> Result<SessionEnd> {
         let manager = Manager::new().await?;
         let adapters = manager.adapters().await?;
         let adapter = adapters
@@ -60,20 +100,23 @@ mod inner {
         info!("Starting BLE scan on adapter");
 
         adapter.start_scan(ScanFilter::default()).await?;
-
         let mut events = adapter.events().await?;
+        if backoff.failures() > 0 {
+            info!("BLE scan running again");
+        }
+        backoff.reset();
         let active: ActiveSet = Arc::new(Mutex::new(HashSet::new()));
         let mut rescan = tokio::time::interval(RESCAN_INTERVAL);
 
         loop {
             tokio::select! {
                 event = events.next() => {
-                    let Some(event) = event else { break };
+                    let Some(event) = event else { return Ok(SessionEnd::EventsEnded) };
                     // Not DeviceUpdated: it fires on every RSSI change of every
                     // nearby device; the periodic re-check covers reconnects.
                     match event {
                         CentralEvent::DeviceDiscovered(id) => {
-                            consider(&adapter, id, &active, &tx, idle_timeout).await;
+                            consider(&adapter, id, &active, tx, idle_timeout).await;
                         }
                         CentralEvent::DeviceDisconnected(id) => {
                             debug!("BLE device disconnected: {:?}", id);
@@ -83,7 +126,7 @@ mod inner {
                 }
                 _ = rescan.tick() => {
                     if tx.is_closed() {
-                        break;
+                        return Ok(SessionEnd::ChannelClosed);
                     }
                     // BlueZ can stop discovery on its own; restarting an
                     // active scan is harmless.
@@ -91,13 +134,11 @@ mod inner {
                         debug!("BLE start_scan: {}", e);
                     }
                     for peripheral in adapter.peripherals().await.unwrap_or_default() {
-                        consider(&adapter, peripheral.id(), &active, &tx, idle_timeout).await;
+                        consider(&adapter, peripheral.id(), &active, tx, idle_timeout).await;
                     }
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Spawn a handler for `id` if it is a ferrite device without one.
