@@ -246,7 +246,7 @@ The server listens for binary chunk data on `POST /ingest/chunks`. Point your de
 Upload your ELF file for symbolication:
 
 ```bash
-curl -X POST http://localhost:4000/ingest/elf \
+curl -X POST http://localhost:4000/ingest/elf -u admin:admin \
   -H "X-Firmware-Version: 0.1.0" \
   --data-binary @target/thumbv7em-none-eabihf/release/my-firmware
 ```

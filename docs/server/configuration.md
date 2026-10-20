@@ -97,7 +97,7 @@ Retention never touches the evidence log.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/ingest/chunks` | API key (if configured) | Accept binary chunks |
-| POST | `/ingest/elf` | Required | Upload ELF for symbolication (max 50 MB) |
+| POST | `/ingest/elf` | Provisioner+ or API key | Upload ELF for symbolication (max 50 MB) |
 
 ### Device management
 
@@ -197,11 +197,12 @@ Accepts a raw binary body containing one or more concatenated wire-format chunks
 
 ### `POST /ingest/elf`
 
-Accepts a raw binary ELF file (max 50 MB). Requires authentication.
+Accepts a raw binary ELF file (max 50 MB). Requires a provisioner or admin user, or the ingest API key when `INGEST_API_KEY` is set.
 
 **Headers:**
 - `X-Firmware-Version` (recommended): Version string for the ELF file
-- `Authorization`: Bearer token or Basic auth
+- `Authorization`: Bearer token or Basic auth (provisioner or admin), or
+- `X-API-Key`: the ingest API key
 
 ```bash
 curl -X POST http://localhost:4000/ingest/elf \

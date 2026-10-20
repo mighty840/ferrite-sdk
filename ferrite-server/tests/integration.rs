@@ -224,6 +224,36 @@ async fn elf_upload_with_api_key_succeeds() {
     assert_eq!(resp.status(), StatusCode::OK);
 }
 
+#[tokio::test]
+async fn elf_upload_needs_provisioner_or_admin() {
+    use base64::Engine;
+    let base = spawn_server_with_env(vec![(
+        "BASIC_AUTH_USERS",
+        "view:v1:viewer,prov:p1:provisioner",
+    )])
+    .await;
+    let client = Client::new();
+    let upload = |creds: &str| {
+        let req = client
+            .post(format!("{base}/ingest/elf"))
+            .header("Content-Type", "application/octet-stream")
+            .header(
+                "Authorization",
+                format!(
+                    "Basic {}",
+                    base64::engine::general_purpose::STANDARD.encode(creds)
+                ),
+            )
+            .header("X-Firmware-Version", "role-test")
+            .body(b"fake elf".to_vec());
+        async move { req.send().await.unwrap().status() }
+    };
+
+    assert_eq!(upload("view:v1").await, StatusCode::FORBIDDEN);
+    assert_eq!(upload("prov:p1").await, StatusCode::OK);
+    assert_eq!(upload("admin:admin").await, StatusCode::OK);
+}
+
 // =========================================================================
 // ELF size limit
 // =========================================================================

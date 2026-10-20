@@ -10,10 +10,10 @@ Symbolication resolves raw program counter (PC) addresses from fault records int
 
 ## Uploading ELF files
 
-Upload your debug ELF after each build:
+Upload your debug ELF after each build. The upload needs a provisioner or admin user, or the ingest API key (`X-API-Key`) when the server sets `INGEST_API_KEY`:
 
 ```bash
-curl -X POST http://localhost:4000/ingest/elf \
+curl -X POST http://localhost:4000/ingest/elf -u admin:<password> \
   -H "X-Firmware-Version: $(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name=="my-firmware") | .version')" \
   --data-binary @target/thumbv7em-none-eabihf/release/my-firmware
 ```
@@ -65,6 +65,7 @@ Add an ELF upload step to your CI pipeline:
 - name: Upload ELF for symbolication
   run: |
     curl -X POST https://ferrite.example.com/ingest/elf \
+      -H "X-API-Key: ${{ secrets.FERRITE_INGEST_API_KEY }}" \
       -H "X-Firmware-Version: ${{ env.FIRMWARE_VERSION }}" \
       --data-binary @target/thumbv7em-none-eabihf/release/my-firmware
 ```

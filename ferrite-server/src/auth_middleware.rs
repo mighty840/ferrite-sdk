@@ -1,7 +1,8 @@
 //! Axum middleware for authentication.
 //!
 //! - `/ingest/chunks` routes: optionally checked with `X-API-Key` if configured
-//! - `/ingest/elf` routes: always require authentication (user auth or API key)
+//! - `/ingest/elf` routes: always require authentication (API key, or a
+//!   provisioner/admin user)
 //! - `/auth/*` routes: never checked (auth discovery + login endpoints)
 //! - Device-facing OTA reads (`GET /ota/targets/:device_id`,
 //!   `GET /ota/firmware/:id/{download,manifest}`): `X-API-Key` when an ingest
@@ -49,12 +50,13 @@ pub async fn require_auth(
                     return next.run(req).await;
                 }
             }
-            // Fall back to user auth
+            // Fall back to user auth. Uploaded symbols decide how every crash
+            // report reads, so only provisioners and admins may upload.
             let auth_header = auth::extract_auth_header(req.headers());
             return match auth::validate_request(auth_header, state.config).await {
-                Ok(claims) if claims.role == UserRole::Auditor => (
+                Ok(claims) if !claims.role.can_write() => (
                     StatusCode::FORBIDDEN,
-                    "Insufficient permissions: the auditor role can only read the evidence log",
+                    "Insufficient permissions: provisioner or admin role required",
                 )
                     .into_response(),
                 Ok(claims) => {

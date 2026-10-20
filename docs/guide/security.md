@@ -76,7 +76,7 @@ Protect ingest endpoints with an API key:
 INGEST_API_KEY=my-secret-key
 ```
 
-Devices include the key in the `X-API-Key` header. The `/ingest/elf` endpoint always requires authentication (API key or user auth).
+Devices include the key in the `X-API-Key` header. The `/ingest/elf` endpoint always requires authentication: the API key, or a provisioner or admin user. Viewers and auditors get `403`.
 
 ## Rate limiting
 
