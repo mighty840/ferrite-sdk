@@ -21,7 +21,7 @@
 
 ## Live Demo
 
-**[ferrite.shanifaas.com](https://ferrite.shanifaas.com)** — 5 real boards reporting telemetry.
+**[ferrite.shanifaas.com](https://ferrite.shanifaas.com)** — 5 real boards and the Linux gateway reporting telemetry.
 
 | Board | Stack | Transport |
 |-------|-------|-----------|
@@ -30,8 +30,9 @@
 | STM32WL55 | RTIC 2.x | LPUART VCP |
 | STM32H563 | Embassy (embassy-stm32) | Ethernet |
 | nRF5340 | Zephyr 4.1 (C + FFI) | BLE GATT |
+| Raspberry Pi (the gateway itself) | Linux, `ferrite-agent` | HTTP via gateway |
 
-> **Login**: `admin` / `HdNka6HvI5FfqG8TOT1SiQ`
+> **Access**: the demo is private. For a demo login, contact [@mighty840](https://github.com/mighty840) on GitHub.
 >
 > Demo data resets every 2 hours.
 
