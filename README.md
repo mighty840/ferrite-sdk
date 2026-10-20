@@ -137,8 +137,8 @@ cargo test -p ferrite-server
 rustup target add thumbv7em-none-eabihf
 cargo build -p ferrite-sdk --features cortex-m,defmt,embassy --target thumbv7em-none-eabihf
 
-# Run the server (uses .env for config, see .env.example)
-cargo run -p ferrite-server
+# Run the server (uses .env for config, see .env.example; basic auth needs BASIC_AUTH_PASS)
+BASIC_AUTH_PASS=admin cargo run -p ferrite-server
 
 # Run the dashboard (proxies API to localhost:4000)
 cd ferrite-dashboard && dx serve

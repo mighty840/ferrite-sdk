@@ -123,8 +123,8 @@ cd tests/qemu && cargo run --release
 ### Dashboard
 
 ```bash
-# Terminal 1: start the server
-cargo run -p ferrite-server
+# Terminal 1: start the server (login admin/admin)
+BASIC_AUTH_PASS=admin cargo run -p ferrite-server
 
 # Terminal 2: start the dashboard dev server (proxies API to localhost:4000)
 cd ferrite-dashboard && dx serve

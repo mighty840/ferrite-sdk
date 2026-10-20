@@ -66,10 +66,10 @@ Configure the server with the [environment variables](/server/configuration#envi
 ## Verify
 
 ```bash
-# Start the server
-ferrite-server --http 0.0.0.0:4000
+# Start the server (Basic auth needs a password)
+BASIC_AUTH_PASS=change-me ferrite-server --http 0.0.0.0:4000
 
-# In another terminal, check health
-curl http://localhost:4000/devices
+# In another terminal, check it answers
+curl -u admin:change-me http://localhost:4000/devices
 # Should return: {"devices":[]}
 ```

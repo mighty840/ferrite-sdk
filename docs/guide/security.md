@@ -40,8 +40,10 @@ Without Keycloak variables, the server falls back to HTTP Basic auth:
 
 ```bash
 BASIC_AUTH_USER=admin      # default: admin
-BASIC_AUTH_PASS=s3cret     # default: admin
+BASIC_AUTH_PASS=s3cret     # required: the server won't start without it
 ```
+
+`BASIC_AUTH_PASS=admin` works for local development; the server logs a warning.
 
 ## Multi-user RBAC
 

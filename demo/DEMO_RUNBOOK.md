@@ -60,7 +60,7 @@ through mixed transports to a Raspberry Pi edge gateway and dashboard.
 - [ ] All boards flashed with latest firmware (see Flash section below)
 
 ### Software
-- [ ] ferrite-server running on host: `cargo run -p ferrite-server` (port 4000)
+- [ ] ferrite-server running on host: `BASIC_AUTH_PASS=admin cargo run -p ferrite-server` (port 4000)
 - [ ] ferrite-dashboard running on host: `cd ferrite-dashboard && dx serve` (port 8080)
 - [ ] ferrite-gateway running on RPi with all transports:
   ```bash
@@ -70,7 +70,7 @@ through mixed transports to a Raspberry Pi edge gateway and dashboard.
     --http-ingest-port 4001 --ble
   ```
 - [ ] Dashboard accessible at `http://localhost:8080`
-- [ ] Login with admin/admin (Basic auth default)
+- [ ] Login with admin/admin (from `BASIC_AUTH_PASS=admin`)
 
 ## Flash Firmware
 
@@ -155,7 +155,7 @@ nrfjprog --recover -f NRF53
 
 1. Stop server: `Ctrl+C` on the `cargo run -p ferrite-server` terminal
 2. Wait 30s — devices keep sending, gateway buffers to SQLite
-3. Restart server: `cargo run -p ferrite-server`
+3. Restart server: `BASIC_AUTH_PASS=admin cargo run -p ferrite-server`
 4. Watch dashboard — buffered data appears within seconds
 
 ### Scenario 4: Device Comparison (1 min)

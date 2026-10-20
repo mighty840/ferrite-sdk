@@ -9,6 +9,7 @@ contain breaking changes.
 
 ### Added
 ### Changed (breaking)
+- In Basic auth mode, `ferrite-server serve` refuses to start without `BASIC_AUTH_PASS` instead of falling back to `admin`/`admin`. Set `BASIC_AUTH_PASS=admin` for local development; the server logs a warning for that password.
 - `/events/stream` (live server-sent events) now requires a signed-in user; it was public. The dashboard doesn't use it.
 - `POST /ingest/elf` with user auth now needs the provisioner or admin role; viewers get `403`. Uploaded symbols decide how every crash report reads. The ingest API key still works.
 - C API: the transport callback typedefs are now `ferrite_send_chunk_fn_t` and `ferrite_is_available_fn_t` (were `IotaiSendChunkFn` / `IotaiIsAvailableFn`), matching the other `ferrite_*_t` types. The Rust-side `ferrite-ffi` types drop the `Iotai` prefix too (`FerriteError`, `FerriteTransport`, …). Regenerate your header with cbindgen; the `ferrite_*_t` structs and `FERRITE_ERROR_T_*` codes are unchanged.

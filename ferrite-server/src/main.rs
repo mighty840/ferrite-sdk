@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use ferrite_server::config::AuthConfig;
+use ferrite_server::config::{AuthConfig, AuthMode};
 use ferrite_server::prometheus::RequestCounters;
 use ferrite_server::rate_limit::RateLimiter;
 use ferrite_server::store::Store;
@@ -87,6 +87,24 @@ async fn main() -> anyhow::Result<()> {
 
     // Load auth config from environment (leaked for 'static lifetime)
     let config: &'static AuthConfig = Box::leak(Box::new(AuthConfig::from_env()));
+
+    // Never serve with the built-in admin/admin login: a deployment that
+    // loses its BASIC_AUTH_PASS would otherwise come up wide open.
+    if let (AuthMode::Basic(basic), None | Some(Command::Serve)) = (&config.mode, &cli.command) {
+        if std::env::var("BASIC_AUTH_PASS").map_or(true, |v| v.is_empty()) {
+            anyhow::bail!(
+                "BASIC_AUTH_PASS is not set; refusing to serve with the default admin/admin \
+                 login. Set BASIC_AUTH_PASS (BASIC_AUTH_PASS=admin for local development) \
+                 or configure Keycloak."
+            );
+        }
+        if basic.password == "admin" {
+            tracing::warn!(
+                "BASIC_AUTH_PASS is \"admin\": fine for local development, never for a \
+                 server others can reach"
+            );
+        }
+    }
     if config.ota_trusted_keys.is_empty() {
         tracing::warn!(
             "OTA_TRUSTED_KEYS not set: firmware uploads are not signature-checked \

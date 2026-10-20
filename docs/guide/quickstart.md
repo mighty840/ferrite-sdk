@@ -238,7 +238,7 @@ On your host machine, build and start the companion server:
 
 ```bash
 cd ferrite-server
-cargo run -- --http 0.0.0.0:4000 --db ./ferrite.db --elf-dir ./elfs
+BASIC_AUTH_PASS=admin cargo run -- --http 0.0.0.0:4000 --db ./ferrite.db --elf-dir ./elfs
 ```
 
 The server listens for binary chunk data on `POST /ingest/chunks`. Point your device's transport at this endpoint (or pipe UART output through a bridge script).
