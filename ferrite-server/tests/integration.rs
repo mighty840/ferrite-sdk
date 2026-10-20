@@ -681,7 +681,9 @@ async fn keycloak_invalid_token_rejected() {
 #[tokio::test]
 async fn keycloak_elf_upload_with_bearer_token() {
     let (kc_url, kc_realm, kc_client) = keycloak_env();
-    let token = keycloak_token(&kc_url, &kc_realm, &kc_client, "testuser", "testpass").await;
+    // admin-user holds `ferrite-admin`; testuser has no ferrite role (viewer).
+    let token = keycloak_token(&kc_url, &kc_realm, &kc_client, "admin-user", "adminpass").await;
+    let viewer = keycloak_token(&kc_url, &kc_realm, &kc_client, "testuser", "testpass").await;
 
     let base = spawn_server_with_env(vec![
         ("KEYCLOAK_URL", &kc_url),
@@ -701,6 +703,17 @@ async fn keycloak_elf_upload_with_bearer_token() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = client
+        .post(format!("{base}/ingest/elf"))
+        .header("Content-Type", "application/octet-stream")
+        .header("Authorization", format!("Bearer {viewer}"))
+        .header("X-Firmware-Version", "kc-test-v2")
+        .body(b"fake elf via keycloak".to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }
 
 // =========================================================================
