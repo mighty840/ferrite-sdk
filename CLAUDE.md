@@ -68,7 +68,7 @@ cargo run --release
 ## Run dashboard (development)
 ```bash
 # Terminal 1: start the server
-cargo run -p ferrite-server
+BASIC_AUTH_PASS=admin cargo run -p ferrite-server
 
 # Terminal 2: start the dashboard (proxies API to server)
 cd ferrite-dashboard
@@ -89,7 +89,7 @@ The `dx serve` dev server proxies `/auth`, `/devices`, `/ingest`, `/health` to `
 ## Authentication
 - **Dual-mode**: Keycloak OIDC or Basic auth, selected automatically at server startup
 - Set `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` env vars for Keycloak mode
-- Without those vars, falls back to Basic auth (default: admin/admin, configurable via `BASIC_AUTH_USER`/`BASIC_AUTH_PASS`)
+- Without those vars, falls back to Basic auth (`BASIC_AUTH_USER`, default `admin`; `BASIC_AUTH_PASS` is required: `serve` refuses to start without it, so use `BASIC_AUTH_PASS=admin` locally)
 - Optional `INGEST_API_KEY` env var gates `/ingest/*` endpoints
 - Config loaded via `dotenvy` from `.env` file (see `.env.example`)
 - Server config uses `Box::leak(Box::new(config))` for `&'static` lifetime

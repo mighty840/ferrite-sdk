@@ -38,7 +38,7 @@ ferrite-server [OPTIONS] [COMMAND]
 | `KEYCLOAK_CLIENT_ID` | — | Dashboard SPA client ID |
 | `KEYCLOAK_CLIENT_SECRET` | — | (Optional) Confidential client secret |
 | `BASIC_AUTH_USER` | `admin` | Primary basic auth username |
-| `BASIC_AUTH_PASS` | `admin` | Primary basic auth password |
+| `BASIC_AUTH_PASS` | — (required in Basic mode) | Primary basic auth password. Without it, `serve` refuses to start |
 | `BASIC_AUTH_USERS` | — | Additional users (format below) |
 
 **`BASIC_AUTH_USERS` format:** `user1:pass1:role,user2:pass2:role`

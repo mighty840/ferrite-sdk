@@ -52,8 +52,8 @@ Prometheus ──[/metrics/prometheus]─> │    └── Encrypted chunk decr
 ## Quick start
 
 ```bash
-# Start with defaults (Basic auth, admin/admin)
-cargo run -p ferrite-server
+# Local development: Basic auth as admin/admin
+BASIC_AUTH_PASS=admin cargo run -p ferrite-server
 
 # Or with environment configuration
 cp .env.example .env
@@ -61,4 +61,4 @@ cp .env.example .env
 cargo run -p ferrite-server
 ```
 
-See [Installation](./installation) and [Configuration](./configuration) for details.
+In Basic auth mode the server refuses to start without `BASIC_AUTH_PASS`, so a deployment can't come up with a default login. See [Installation](./installation) and [Configuration](./configuration) for details.
