@@ -90,7 +90,7 @@ Retention never touches the evidence log.
 | GET | `/health` | Public | Server health check |
 | GET | `/auth/mode` | Public | Auth mode discovery |
 | GET | `/metrics/prometheus` | Public | Prometheus metrics |
-| GET | `/events/stream` | Public | SSE live event stream |
+| GET | `/events/stream` | User | SSE live event stream |
 
 ### Data ingest
 
@@ -227,11 +227,13 @@ The `/metrics/prometheus` endpoint exposes:
 
 ## Server-Sent Events (SSE)
 
-The `/events/stream` endpoint provides real-time updates:
+The `/events/stream` endpoint provides real-time updates to signed-in users (viewer role and up):
 
 ```bash
-curl -N http://localhost:4000/events/stream
+curl -N -u admin:<password> http://localhost:4000/events/stream
 ```
+
+A browser `EventSource` can't send an `Authorization` header; use `fetch()` with a streamed response body instead.
 
 Event types: `heartbeat`, `fault`, `metric`, `reboot`, `device_registered`, `ota_available`.
 

@@ -32,12 +32,9 @@ pub async fn require_auth(
 
     let path = req.uri().path().to_string();
 
-    // Auth discovery, health, Prometheus, and SSE endpoints are always public
-    if path == "/auth/mode"
-        || path == "/health"
-        || path == "/metrics/prometheus"
-        || path == "/events/stream"
-    {
+    // Auth discovery, health and Prometheus endpoints are always public.
+    // The SSE stream carries live device data, so it needs a signed-in user.
+    if path == "/auth/mode" || path == "/health" || path == "/metrics/prometheus" {
         return next.run(req).await;
     }
 

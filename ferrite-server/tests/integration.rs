@@ -383,11 +383,18 @@ async fn prometheus_metrics_is_public() {
 // =========================================================================
 
 #[tokio::test]
-async fn sse_endpoint_is_public() {
+async fn sse_endpoint_requires_auth() {
     let base = spawn_server().await;
-    // Just verify the endpoint accepts connections (returns 200 with SSE content type)
+    let anon = Client::new()
+        .get(format!("{base}/events/stream"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
+
     let resp = Client::new()
         .get(format!("{base}/events/stream"))
+        .header("Authorization", basic_auth_header())
         .send()
         .await
         .unwrap();
