@@ -91,7 +91,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["default-roles-ferrite"]
+      "realmRoles": ["default-roles-ferrite", "ferrite-admin"]
     }
   ],
   "roles": {
@@ -103,6 +103,18 @@
       {
         "name": "viewer",
         "description": "Read-only access to dashboards"
+      },
+      {
+        "name": "ferrite-admin",
+        "description": "Ferrite admin: full access"
+      },
+      {
+        "name": "ferrite-provisioner",
+        "description": "Ferrite provisioner: register devices, upload ELF files"
+      },
+      {
+        "name": "ferrite-auditor",
+        "description": "Ferrite auditor: reads the evidence log only"
       }
     ]
   }

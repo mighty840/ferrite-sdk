@@ -78,4 +78,4 @@ INGEST_API_KEY=your-secret-device-key
 X-API-Key: your-secret-device-key
 ```
 
-The `/ingest/elf` endpoint additionally accepts user auth (Bearer or Basic) for manual ELF uploads.
+The `/ingest/elf` endpoint additionally accepts user auth (Bearer or Basic) for manual ELF uploads, from provisioners and admins.
