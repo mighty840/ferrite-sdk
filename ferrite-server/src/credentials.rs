@@ -57,6 +57,7 @@ pub struct CredentialStore {
 
 impl CredentialStore {
     pub fn open(path: &Path) -> SqlResult<Self> {
+        restrict_to_owner(path);
         Self::init(Connection::open(path)?)
     }
 
@@ -256,6 +257,35 @@ impl CredentialStore {
             touch(&conn, key_id)?;
         }
         Ok(outcome.0)
+    }
+}
+
+/// The file holds every device's key: create it, and tighten its journal
+/// files, as owner-only before SQLite opens it. SQLite gives `-wal` and
+/// `-shm` the database file's mode.
+fn restrict_to_owner(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        if let Err(e) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(path)
+        {
+            tracing::warn!(path = %path.display(), error = %e, "could not create credentials database");
+        }
+        for suffix in ["", "-wal", "-shm"] {
+            let mut p = path.as_os_str().to_owned();
+            p.push(suffix);
+            let p = std::path::PathBuf::from(p);
+            if p.exists() {
+                if let Err(e) = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600))
+                {
+                    tracing::warn!(path = %p.display(), error = %e, "could not make credentials file owner-only");
+                }
+            }
+        }
     }
 }
 

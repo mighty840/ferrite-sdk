@@ -146,12 +146,6 @@ async fn main() -> anyhow::Result<()> {
         .clone()
         .unwrap_or_else(|| cli.db.with_file_name("credentials.db"));
     let credentials = ferrite_server::credentials::CredentialStore::open(&credentials_path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        // It holds every device's key.
-        std::fs::set_permissions(&credentials_path, std::fs::Permissions::from_mode(0o600))?;
-    }
     if config.device_auth_required {
         tracing::info!(
             "DEVICE_AUTH_REQUIRED: only chunks sealed with a device credential are accepted"
