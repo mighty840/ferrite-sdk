@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use ferrite_sdk::encryption::DeviceCredential;
 use serde::Deserialize;
 
 /// Longest metric key the chunk format carries.
@@ -16,6 +17,11 @@ pub struct Config {
     /// Sent as `X-API-Key` when the server sets `INGEST_API_KEY`.
     #[serde(default)]
     pub api_key: Option<String>,
+    /// This device's own key, from `POST /devices/:id/credential`. When set,
+    /// every report is sealed with it: the server then knows the report came
+    /// from this device, not from anything else holding the API key.
+    #[serde(default)]
+    pub credential: Option<CredentialConfig>,
     /// Overrides the derived device ID (see [`crate::identity`]).
     #[serde(default)]
     pub device_id: Option<String>,
@@ -47,6 +53,38 @@ pub struct Config {
     /// Root for `/proc`, `/sys`, `/etc` lookups (tests only).
     #[serde(default = "default_root", skip)]
     pub root: PathBuf,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialConfig {
+    pub key_id: u32,
+    /// 32 hex characters.
+    pub key: String,
+}
+
+impl CredentialConfig {
+    pub fn device_credential(&self) -> Result<DeviceCredential> {
+        let bytes = hex::decode(self.key.trim()).context("credential.key is not hex")?;
+        let key: [u8; 16] = bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("credential.key must be 16 bytes (32 hex characters)"))?;
+        if self.key_id == 0 {
+            bail!("credential.key_id must not be 0");
+        }
+        Ok(DeviceCredential {
+            key_id: self.key_id,
+            key,
+        })
+    }
+}
+
+impl std::fmt::Debug for CredentialConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CredentialConfig")
+            .field("key_id", &self.key_id)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -107,6 +145,9 @@ impl Config {
     fn validate(&self) -> Result<()> {
         if !(self.server_url.starts_with("http://") || self.server_url.starts_with("https://")) {
             bail!("server_url must start with http:// or https://");
+        }
+        if let Some(c) = &self.credential {
+            c.device_credential()?;
         }
         if self.interval_secs == 0 {
             bail!("interval_secs must be at least 1");

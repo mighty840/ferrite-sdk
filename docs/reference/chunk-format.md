@@ -260,12 +260,23 @@ When the `ENCRYPTED` flag (0x04) is set, the payload is wrapped as:
 ```
 Offset  Size  Field
 ------  ----  -----
-0       13    nonce               AES-128-CCM nonce
-13      M     ciphertext          Encrypted original payload (M = payload_len - 29)
-13+M    16    tag                 Authentication tag
+0       13    nonce               AES-128-CCM nonce (below)
+13      M     ciphertext          Encrypted original payload (M = payload_len - 21)
+13+M    8     tag                 Authentication tag
 ```
 
-The server decrypts the payload using the configured `CHUNK_ENCRYPTION_KEY` before processing.
+The nonce is never reused under one key:
+
+```
+Offset  Size  Field
+------  ----  -----
+0       4     counter             u32 LE, per chunk, restarts at every boot
+4       4     boot_epoch          u32 LE, different on every boot
+8       4     key_id              u32 LE, device credential ID (0 for the shared key)
+12      1     version             0 = shared key, 1 = device credential
+```
+
+Version 1: the server looks up the device credential by `key_id`, verifies the tag, rejects a `(boot_epoch, counter)` it has already accepted, and stores the chunk under the key's device. Version 0: it decrypts with `CHUNK_ENCRYPTION_KEY`. Older SDKs send zeros in bytes 4–12, which reads as version 0. See [Per-device credentials](/guide/security#per-device-credentials).
 
 ### Compressed chunks
 

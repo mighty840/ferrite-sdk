@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use ferrite_agent::boot::{self, BootTracker};
 use ferrite_agent::config::Config;
@@ -13,6 +13,7 @@ use ferrite_agent::services;
 use ferrite_agent::system::{self, SystemSampler};
 use ferrite_agent::uplink::{self, Delivery, HttpTransport, Spool};
 use ferrite_sdk::chunks::ChunkEncoder;
+use ferrite_sdk::encryption::ChunkSealer;
 
 /// Persist the uptime for reboot reports at most this often (flash wear).
 const UPTIME_SAVE_INTERVAL_SECS: u32 = 600;
@@ -86,6 +87,8 @@ struct Agent {
     tracker: BootTracker,
     pending_reboot: Option<boot::Reboot>,
     transport: HttpTransport,
+    /// Seals every chunk with the device credential, when configured.
+    sealer: Option<ChunkSealer>,
     spool: Spool,
     uptime_saved: u32,
 }
@@ -107,7 +110,21 @@ impl Agent {
             Duration::from_secs(cfg.timeout_secs),
         )?;
         let spool = Spool::open(&cfg.state_dir.join("spool"), cfg.max_spooled_reports)?;
+        // A fresh random epoch per start keeps nonces unique: the counter
+        // restarts with the process.
+        let sealer = match &cfg.credential {
+            Some(c) => {
+                let credential = c.device_credential()?;
+                tracing::info!(
+                    key_id = credential.key_id,
+                    "sealing reports with the device credential"
+                );
+                Some(ChunkSealer::for_device(&credential, random_u32()?))
+            }
+            None => None,
+        };
         Ok(Self {
+            sealer,
             sampler: SystemSampler::new(&cfg),
             encoder: ChunkEncoder::new(),
             tracker,
@@ -133,6 +150,7 @@ impl Agent {
                 samples: &samples,
                 reboot: self.pending_reboot,
             },
+            self.sealer.as_mut(),
         );
         // Once encoded, the reboot travels with the batch, spooled or not.
         self.pending_reboot = None;
@@ -165,6 +183,15 @@ impl Agent {
         self.tracker
             .record_shutdown(uptime_secs(&self.cfg), stopping)
     }
+}
+
+fn random_u32() -> Result<u32> {
+    use std::io::Read;
+    let mut b = [0u8; 4];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut b))
+        .context("reading /dev/urandom")?;
+    Ok(u32::from_le_bytes(b))
 }
 
 fn uptime_secs(cfg: &Config) -> u32 {

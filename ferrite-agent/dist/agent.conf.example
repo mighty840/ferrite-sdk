@@ -24,6 +24,13 @@ server_url = "https://ferrite.example.com"
 # Reports kept while offline (1440 = one day at 60 s); oldest dropped first.
 # max_spooled_reports = 1440
 
+# This device's credential (POST /devices/<id>/credential). Every report is
+# then sealed with it. Keep this file mode 0640, group ferrite-agent.
+# Tables go last: TOML assigns any key after a table header to that table.
+# [credential]
+# key_id = 2895710042
+# key = "<32 hex characters>"
+
 # systemd units to watch. Each reports <key>_active (1/0) and
 # <key>_restarts. key defaults to the unit name without its suffix and
 # must keep "<key>_restarts" within 32 bytes. Keep [[units]] tables at

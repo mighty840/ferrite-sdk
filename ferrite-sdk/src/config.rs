@@ -12,3 +12,13 @@ pub const MAX_CHUNK_SIZE: usize = 256;
 
 /// Maximum payload size per chunk.
 pub const MAX_PAYLOAD_SIZE: usize = 248;
+
+/// Largest payload the encoder puts in one chunk: what fits in
+/// [`MAX_CHUNK_SIZE`] after the header and CRC (10 bytes). With the
+/// `encryption` feature it also leaves room for the nonce and tag (21 bytes),
+/// so every chunk the SDK produces can be sealed.
+pub const MAX_PLAIN_PAYLOAD_SIZE: usize = if cfg!(feature = "encryption") {
+    MAX_CHUNK_SIZE - 10 - 21
+} else {
+    MAX_CHUNK_SIZE - 10
+};

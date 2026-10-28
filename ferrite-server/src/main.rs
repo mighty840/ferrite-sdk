@@ -33,6 +33,11 @@ struct Cli {
     #[arg(long)]
     evidence_db: Option<PathBuf>,
 
+    /// Device credentials and replay state (secret keys: keep it private).
+    /// Defaults to `credentials.db` next to `--db`.
+    #[arg(long)]
+    credentials_db: Option<PathBuf>,
+
     /// Directory for uploaded ELF files
     #[arg(long, default_value = "./elfs")]
     elf_dir: PathBuf,
@@ -136,6 +141,22 @@ async fn main() -> anyhow::Result<()> {
         ),
         Err(e) => tracing::error!(error = %e, "Evidence log could not be verified"),
     }
+    let credentials_path = cli
+        .credentials_db
+        .clone()
+        .unwrap_or_else(|| cli.db.with_file_name("credentials.db"));
+    let credentials = ferrite_server::credentials::CredentialStore::open(&credentials_path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // It holds every device's key.
+        std::fs::set_permissions(&credentials_path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    if config.device_auth_required {
+        tracing::info!(
+            "DEVICE_AUTH_REQUIRED: only chunks sealed with a device credential are accepted"
+        );
+    }
     let symbolicator = Symbolicator::new(cli.addr2line.clone(), cli.elf_dir.clone());
 
     // SSE broadcast channel (capacity 256 — lagged receivers drop old events)
@@ -162,6 +183,7 @@ async fn main() -> anyhow::Result<()> {
         counters: RequestCounters::new(),
         rate_limiter: rate_limiter.clone(),
         evidence,
+        credentials,
     });
 
     if config.ingest_api_key.is_none() {

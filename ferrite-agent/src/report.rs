@@ -4,6 +4,7 @@
 //! correctly even when it arrives late from the offline spool.
 
 use ferrite_sdk::chunks::{ChunkEncoder, DeviceType};
+use ferrite_sdk::encryption::ChunkSealer;
 use ferrite_sdk::metrics::{MetricEntry, MetricValue};
 
 use crate::boot::Reboot;
@@ -22,9 +23,22 @@ pub struct Report<'a> {
     pub reboot: Option<Reboot>,
 }
 
-pub fn encode(encoder: &mut ChunkEncoder, report: &Report) -> Vec<u8> {
+/// Encode a report as one request body. With a `sealer`, every chunk is
+/// sealed with the device credential.
+pub fn encode(
+    encoder: &mut ChunkEncoder,
+    report: &Report,
+    mut sealer: Option<&mut ChunkSealer>,
+) -> Vec<u8> {
     let mut out = Vec::new();
-    let mut emit = |chunk: &[u8]| out.extend_from_slice(chunk);
+    let mut emit = |chunk: &[u8]| match sealer.as_deref_mut() {
+        None => out.extend_from_slice(chunk),
+        // The encoder keeps chunks small enough to seal; never send one in clear.
+        Some(s) => match s.seal(chunk) {
+            Some((sealed, len)) => out.extend_from_slice(&sealed[..len]),
+            None => tracing::warn!(len = chunk.len(), "chunk could not be sealed; dropped"),
+        },
+    };
 
     encoder.encode_device_info_typed(
         &report.identity.device_id,
@@ -126,6 +140,7 @@ mod tests {
                     uptime_before_reboot: 3600,
                 }),
             },
+            None,
         );
         let chunks = split(&bytes);
         let types: Vec<ChunkType> = chunks.iter().map(|(t, _)| *t).collect();
@@ -149,5 +164,46 @@ mod tests {
         // All 41 valid metrics arrive (the 33-byte key is dropped), across chunks.
         let metric_count: usize = chunks[3..].iter().map(|(_, p)| p[0] as usize).sum();
         assert_eq!(metric_count, 41);
+    }
+
+    #[test]
+    fn sealed_reports_carry_the_credential_and_decrypt() {
+        use ferrite_sdk::encryption::{decrypt_payload, DeviceCredential, NonceFields};
+        let identity = Identity {
+            device_id: "linux-0011223344556677".into(),
+            firmware_version: "1".into(),
+            build_id: 1,
+            build_id_source: "1".into(),
+        };
+        let cred = DeviceCredential {
+            key_id: 99,
+            key: [3; 16],
+        };
+        let mut sealer = ChunkSealer::for_device(&cred, 5);
+        let samples: Vec<Sample> = (0..40)
+            .map(|i| (format!("metric_number_{i}"), Value::Gauge(i as f32)))
+            .collect();
+        let bytes = encode(
+            &mut ChunkEncoder::new(),
+            &Report {
+                identity: &identity,
+                uptime_ms: 1,
+                mem_available_bytes: 1,
+                samples: &samples,
+                reboot: None,
+            },
+            Some(&mut sealer),
+        );
+        let chunks = split(&bytes);
+        assert!(chunks.len() > 3);
+        for (i, (_, sealed)) in chunks.iter().enumerate() {
+            let nonce = NonceFields::parse(&sealed[..13]).unwrap();
+            assert_eq!(
+                (nonce.key_id, nonce.boot_epoch, nonce.counter),
+                (99, 5, i as u32)
+            );
+            let mut out = [0u8; 256];
+            assert!(decrypt_payload(&cred.key, sealed, &mut out).is_some());
+        }
     }
 }

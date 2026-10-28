@@ -36,7 +36,8 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 aes = "0.8"
 ccm = "0.5"
 sha2 = "0.10"
-ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["ota-manifest"] }
+ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["ota-manifest", "encryption"] }
+getrandom = "0.2"
 
 [dev-dependencies]
 heapless = { workspace = true }

@@ -1,5 +1,5 @@
 use crate::chunks::types::{ChunkHeader, ChunkType, DeviceType};
-use crate::config::MAX_PAYLOAD_SIZE;
+use crate::config::{MAX_PAYLOAD_SIZE, MAX_PLAIN_PAYLOAD_SIZE};
 use crate::fault::FaultRecord;
 use crate::metrics::MetricEntry;
 use crate::trace::TraceBuffer;
@@ -39,8 +39,8 @@ impl ChunkEncoder {
         last: bool,
         out: &mut [u8; 256],
     ) -> usize {
-        // Reserve space for header (8) + CRC (2) = 10 bytes overhead
-        let max_payload = MAX_PAYLOAD_SIZE.min(256 - 10);
+        // Header and CRC (and, with `encryption`, room to seal the chunk).
+        let max_payload = MAX_PLAIN_PAYLOAD_SIZE;
         let payload_len = payload.len().min(max_payload);
         let seq = self.next_seq();
 
@@ -102,7 +102,7 @@ impl ChunkEncoder {
 
         for entry in &entries_vec {
             let entry_size = entry.serialized_size();
-            if pos + entry_size > MAX_PAYLOAD_SIZE {
+            if pos + entry_size > MAX_PLAIN_PAYLOAD_SIZE {
                 // Emit current chunk
                 payload[0] = count;
                 let mut out = [0u8; 256];
@@ -146,7 +146,7 @@ impl ChunkEncoder {
         }
 
         // Fragment into chunks: 8 bytes for byte_offset prefix, rest is data
-        let max_data_per_chunk = MAX_PAYLOAD_SIZE - 8;
+        let max_data_per_chunk = MAX_PLAIN_PAYLOAD_SIZE - 8;
         let mut offset = 0usize;
 
         while offset < data_len {
@@ -295,7 +295,7 @@ impl ChunkEncoder {
         let mut pos = 0;
         // What `encode` keeps of a payload; the version gives way so that the
         // build ID and type byte always fit.
-        let max = MAX_PAYLOAD_SIZE.min(256 - 10);
+        let max = MAX_PLAIN_PAYLOAD_SIZE;
         let fixed = 2 + 8 + usize::from(device_type.is_some());
 
         let did_len = device_id.len().min(127);

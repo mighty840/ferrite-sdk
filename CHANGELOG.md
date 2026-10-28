@@ -8,6 +8,8 @@ contain breaking changes.
 ## [Unreleased]
 
 ### Added
+- **Per-device credentials** (#118): `POST /devices/:id/credential` issues a device its own AES-128-CCM key (rotate by calling again; `DELETE` revokes; issue, rotation and revocation go into the evidence log). Devices seal every chunk with it (`EncryptedTransport::with_credential` in the SDK, `[credential]` in `ferrite-agent`), and the server stores each sealed chunk under the device its key belongs to, rejecting forged, replayed and revoked ones. Unsealed reports for a device that has a credential are rejected; `DEVICE_AUTH_REQUIRED=1` rejects all unsealed reports. Devices show how their latest report authenticated (`last_auth`). Keys live in `credentials.db` (`--credentials-db`, mode `0600`), which retention and the demo reset leave alone.
+- SDK: `EncryptedTransport` also implements `AsyncChunkTransport`; `ChunkSealer` seals chunks for hosts that build request bodies themselves.
 ### Changed (breaking)
 - In Basic auth mode, `ferrite-server serve` refuses to start without `BASIC_AUTH_PASS` instead of falling back to `admin`/`admin`. Set `BASIC_AUTH_PASS=admin` for local development; the server logs a warning for that password.
 - `/events/stream` (live server-sent events) now requires a signed-in user; it was public. The dashboard doesn't use it.
@@ -17,6 +19,9 @@ contain breaking changes.
 - **Auditor role:** `auditor` (basic auth) / `ferrite-auditor` (Keycloak) reads the evidence log and nothing else. The evidence log (`/evidence/*`) is now limited to admins and auditors; viewers and provisioners lose access.
 
 ### Fixed
+- **Chunk encryption reused nonces:** the AES-CCM nonce was a counter that restarted at 0 on every boot, under the same key, which breaks CCM's confidentiality and integrity. The nonce now carries a per-boot epoch (`with_credential`, `with_shared_key`); `EncryptedTransport::new` keeps the old nonce and is documented as such.
+- Chunk encryption could panic: a 226- or 227-byte payload passed the size check but overflowed the 256-byte chunk buffer. Chunks too large to seal are now refused before writing, and with the `encryption` feature the encoder keeps payloads at 225 bytes so every chunk can be sealed. With a device credential, a chunk is never sent in clear.
+- Docs: the CCM tag is 8 bytes, not 16 (sealing adds 21 bytes).
 - Gateway: the BLE scanner retries with backoff when it can't start (e.g. at boot, before BlueZ is ready) or when BlueZ goes away, instead of stopping for good until the gateway restarts. The Pi unit is ordered after `bluetooth.service`.
 - `ChunkEncoder::encode_device_info` could index past its buffer when the device ID and firmware version were both near 127 bytes; the version is now shortened to fit.
 

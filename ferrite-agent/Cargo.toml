@@ -17,7 +17,7 @@ default = ["tls"]
 tls = ["ureq/tls"]
 
 [dependencies]
-ferrite-sdk = { path = "../ferrite-sdk", default-features = false }
+ferrite-sdk = { path = "../ferrite-sdk", default-features = false, features = ["encryption"] }
 heapless = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 ureq = { version = "2.12", default-features = false }

@@ -15,6 +15,7 @@ ferrite-server [OPTIONS] [COMMAND]
 | `--http <ADDR>` | `0.0.0.0:4000` | HTTP listen address (ip:port) |
 | `--db <PATH>` | `./ferrite.db` | SQLite database file path |
 | `--evidence-db <PATH>` | `evidence.db` next to `--db` | Append-only evidence log; never purged (see [Evidence log](/guide/evidence-log)) |
+| `--credentials-db <PATH>` | `credentials.db` next to `--db` | Device keys and replay state; mode `0600`, never purged (see [Per-device credentials](/guide/security#per-device-credentials)) |
 | `--elf-dir <PATH>` | `./elfs` | Directory for uploaded ELF files |
 | `--addr2line <PATH>` | Auto-detect | Path to `arm-none-eabi-addr2line` binary |
 
@@ -51,7 +52,8 @@ Roles: `admin`, `provisioner`, `viewer`, `auditor` (evidence log only).
 |---|---|---|
 | `INGEST_API_KEY` | — | API key for `/ingest/*` endpoints |
 | `CORS_ORIGIN` | `*` (all) | Allowed CORS origin |
-| `CHUNK_ENCRYPTION_KEY` | — | 32-char hex AES-128 key for encrypted chunks |
+| `CHUNK_ENCRYPTION_KEY` | — | 32-char hex AES-128 key shared by the fleet (chunks sealed without a device credential) |
+| `DEVICE_AUTH_REQUIRED` | off | `1`: accept only chunks sealed with a device credential. Off: only devices that have a credential must use it |
 | `RATE_LIMIT_RPS` | disabled | Per-IP rate limit (requests/second) |
 | `OTA_TRUSTED_KEYS` | — | Comma-separated hex Ed25519 public keys allowed to sign OTA manifests. When set, firmware uploads must carry a valid signed manifest. See [Signed OTA updates](/guide/ota) |
 
@@ -109,6 +111,9 @@ Retention never touches the evidence log.
 | GET | `/devices/:key` | User | Get device by key |
 | PUT | `/devices/:key` | Provisioner+ | Update device metadata |
 | DELETE | `/devices/:key` | Admin | Delete a device |
+| POST | `/devices/:id/credential` | Provisioner+ | Issue or rotate the device's credential; the key is in this response only |
+| GET | `/devices/:id/credential` | User | Key ID, issued and last used (never the key) |
+| DELETE | `/devices/:id/credential` | Admin | Revoke the device's credential |
 
 ### Device data
 

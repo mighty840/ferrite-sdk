@@ -9,11 +9,12 @@ It runs as an unprivileged systemd service (a static `ferrite-agent` system user
 ```bash
 cargo build -p ferrite-agent --release            # or cross-compile, see below
 sudo install -m 0755 target/release/ferrite-agent /usr/bin/
-sudo install -D -m 0644 ferrite-agent/dist/agent.conf.example /etc/ferrite/agent.conf
 sudo install -D -m 0644 ferrite-agent/dist/ferrite-agent.sysusers /usr/lib/sysusers.d/ferrite-agent.conf
 sudo systemd-sysusers                             # creates the ferrite-agent system user
+# 0640: the config may hold the device's credential
+sudo install -D -m 0640 -g ferrite-agent ferrite-agent/dist/agent.conf.example /etc/ferrite/agent.conf
 sudo install -m 0644 ferrite-agent/dist/ferrite-agent.service /etc/systemd/system/
-sudoedit /etc/ferrite/agent.conf                  # set server_url (and api_key)
+sudoedit /etc/ferrite/agent.conf                  # set server_url (and api_key, credential)
 sudo systemctl enable --now ferrite-agent
 ```
 
@@ -43,6 +44,7 @@ key = "codesys"
 |---|---|---|
 | `server_url` | — | ferrite-server, or a gateway, base URL |
 | `api_key` | none | Sent as `X-API-Key` |
+| `credential` | none | `key_id` and `key` (hex) of this device's credential; every report is sealed with it |
 | `interval_secs` | `60` | Seconds between reports |
 | `disks` | `["/"]` | Filesystems to report |
 | `units` | none | systemd units to watch (`name`, optional `key`) |
@@ -50,6 +52,18 @@ key = "codesys"
 | `state_dir` | `/var/lib/ferrite-agent` | Boot tracking and offline spool |
 | `max_spooled_reports` | `1440` | Reports kept while offline (one day at 60 s) |
 | `timeout_secs` | `15` | HTTP timeout |
+
+### Device credential
+
+With a credential the server knows a report came from this device, not from anything else that holds the API key (see [Per-device credentials](/guide/security#per-device-credentials)). Issue one for the device ID that `ferrite-agent identity` prints, then add it to the config before any `[[units]]` table:
+
+```toml
+[credential]
+key_id = 2895710042
+key = "5f1c0d…"           # 32 hex characters, from POST /devices/<id>/credential
+```
+
+The agent seals every chunk with it and picks a random boot epoch each time it starts, so nonces never repeat. Keep the file readable by root and the `ferrite-agent` group only (`0640`).
 
 `ferrite-agent identity` prints what the server will see. `ferrite-agent once` sends a single report and exits non-zero if it couldn't be delivered. `RUST_LOG=debug` raises the log level.
 
