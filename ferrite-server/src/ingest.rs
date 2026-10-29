@@ -571,29 +571,9 @@ async fn ingest_chunks(
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let mut chunks = decode_all_chunks(&body);
+    let chunks = decode_all_chunks(&body);
     let num_chunks = chunks.len();
     let mut errors: Vec<String> = Vec::new();
-
-    // Decrypt encrypted chunks if key is configured
-    if let Some(ref key) = state.config.chunk_encryption_key {
-        for chunk in &mut chunks {
-            if chunk.flags & FLAG_ENCRYPTED != 0 {
-                match decrypt_chunk_payload(key, &chunk.payload) {
-                    Some(plaintext) => {
-                        chunk.payload = plaintext;
-                        chunk.flags &= !FLAG_ENCRYPTED; // clear encrypted flag
-                    }
-                    None => {
-                        errors.push(format!(
-                            "failed to decrypt chunk seq={} type={:?}",
-                            chunk.sequence_id, chunk.chunk_type
-                        ));
-                    }
-                }
-            }
-        }
-    }
 
     // Prometheus counters
     state
@@ -605,17 +585,16 @@ async fn ingest_chunks(
         .ingest_chunks
         .fetch_add(num_chunks as u64, Ordering::Relaxed);
 
-    // Determine device context: first try to find a DeviceInfo chunk, else use header.
+    // Fallback device ID for chunks without a DeviceInfo chunk.
     let fallback_device_id = headers
         .get("X-Device-Id")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown")
         .to_string();
 
-    let mut current_device_id = fallback_device_id.clone();
-    let mut device_rowid: Option<i64> = None;
+    let groups = open_and_group(&state, chunks, &fallback_device_id, &mut errors);
 
-    let store = state.store.lock().await;
+    let mut store = state.store.lock().await;
 
     // Wrap all DB writes in a transaction for atomicity.
     if let Err(e) = store.begin_transaction() {
@@ -629,16 +608,245 @@ async fn ingest_chunks(
         );
     }
 
+    for group in &groups {
+        process_device_chunks(&state, &mut store, group, &mut errors).await;
+    }
+
+    // Commit the transaction (or rollback on total failure).
+    if errors.is_empty() {
+        if let Err(e) = store.commit_transaction() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(IngestResponse {
+                    ok: false,
+                    chunks_received: num_chunks,
+                    errors: vec![format!("failed to commit transaction: {e}")],
+                }),
+            );
+        }
+    } else {
+        // Partial success — still commit so we don't lose good data.
+        let _ = store.commit_transaction();
+    }
+
+    let status = if errors.is_empty() {
+        StatusCode::OK
+    } else {
+        StatusCode::MULTI_STATUS
+    };
+
+    (
+        status,
+        Json(IngestResponse {
+            ok: errors.is_empty(),
+            chunks_received: num_chunks,
+            errors,
+        }),
+    )
+}
+
+/// Chunks attributed to one device.
+struct DeviceChunks {
+    /// The credential's device for sealed chunks. For the rest, the
+    /// `X-Device-Id` fallback; a DeviceInfo chunk among them overrides it.
+    device_id: String,
+    /// Sealed with this device's credential.
+    authenticated: bool,
+    chunks: Vec<DecodedChunk>,
+}
+
+/// Open sealed chunks and sort every chunk under the device that sent it.
+///
+/// A chunk sealed with a device credential belongs to that credential's
+/// device wherever it sits in the request: a gateway batches several boards
+/// into one POST. The rest keep the old rule (the request's DeviceInfo, else
+/// `X-Device-Id`) and are refused for a device that has a credential, or for
+/// every device under `DEVICE_AUTH_REQUIRED`.
+fn open_and_group(
+    state: &AppState,
+    chunks: Vec<DecodedChunk>,
+    fallback_device_id: &str,
+    errors: &mut Vec<String>,
+) -> Vec<DeviceChunks> {
+    use ferrite_sdk::encryption::{NonceFields, NONCE_SIZE, NONCE_VERSION_CREDENTIAL};
+
+    let mut groups: Vec<DeviceChunks> = Vec::new();
+    let mut unsealed: Vec<DecodedChunk> = Vec::new();
+    let mut rejected = 0u64;
+
+    for mut chunk in chunks {
+        if chunk.flags & FLAG_ENCRYPTED != 0 {
+            let nonce = chunk
+                .payload
+                .get(..NONCE_SIZE)
+                .and_then(NonceFields::parse)
+                .filter(|n| n.version == NONCE_VERSION_CREDENTIAL);
+            if let Some(nonce) = nonce {
+                match open_with_credential(state, nonce, &chunk.payload) {
+                    Ok((device_id, plaintext)) => {
+                        chunk.payload = plaintext;
+                        chunk.flags &= !FLAG_ENCRYPTED;
+                        match groups
+                            .iter_mut()
+                            .find(|g| g.authenticated && g.device_id == device_id)
+                        {
+                            Some(g) => g.chunks.push(chunk),
+                            None => groups.push(DeviceChunks {
+                                device_id,
+                                authenticated: true,
+                                chunks: vec![chunk],
+                            }),
+                        }
+                    }
+                    Err(reason) => {
+                        rejected += 1;
+                        tracing::warn!(
+                            key_id = nonce.key_id,
+                            seq = chunk.sequence_id,
+                            "sealed chunk rejected: {reason}"
+                        );
+                        errors.push(format!(
+                            "chunk seq={} (key {}) rejected: {reason}",
+                            chunk.sequence_id, nonce.key_id
+                        ));
+                    }
+                }
+                continue;
+            }
+            // Shared key (`CHUNK_ENCRYPTION_KEY`): confidentiality only.
+            if let Some(ref key) = state.config.chunk_encryption_key {
+                match decrypt_chunk_payload(key, &chunk.payload) {
+                    Some(plaintext) => {
+                        chunk.payload = plaintext;
+                        chunk.flags &= !FLAG_ENCRYPTED;
+                    }
+                    None => {
+                        errors.push(format!(
+                            "failed to decrypt chunk seq={} type={:?}",
+                            chunk.sequence_id, chunk.chunk_type
+                        ));
+                    }
+                }
+            }
+        }
+        unsealed.push(chunk);
+    }
+
+    if !unsealed.is_empty() {
+        let required = state.config.device_auth_required;
+        // Fails closed: a lookup error counts as "has a credential".
+        let has_credential = |id: &str| state.credentials.has_credential(id).unwrap_or(true);
+
+        // A DeviceInfo naming a device with a credential must be sealed: it
+        // writes the device's build into the evidence log.
+        unsealed.retain(|c| {
+            if c.chunk_type != ChunkType::DeviceInfo {
+                return true;
+            }
+            match parse_device_info_payload(&c.payload) {
+                Some(info) if required || has_credential(&info.device_id) => {
+                    rejected += 1;
+                    tracing::warn!(device = %info.device_id, "unsealed DeviceInfo rejected: device credential required");
+                    errors.push(format!(
+                        "unsealed DeviceInfo for '{}' rejected: device credential required",
+                        info.device_id
+                    ));
+                    false
+                }
+                _ => true,
+            }
+        });
+
+        let context = unsealed
+            .iter()
+            .filter(|c| c.chunk_type == ChunkType::DeviceInfo)
+            .filter_map(|c| parse_device_info_payload(&c.payload))
+            .next_back()
+            .map(|info| info.device_id)
+            .unwrap_or_else(|| fallback_device_id.to_string());
+        if unsealed.is_empty() {
+            // Nothing left.
+        } else if required || (context != "unknown" && has_credential(&context)) {
+            rejected += unsealed.len() as u64;
+            tracing::warn!(device = %context, chunks = unsealed.len(), "unsealed chunks rejected: device credential required");
+            errors.push(format!(
+                "{} unsealed chunk(s) for '{context}' rejected: device credential required",
+                unsealed.len()
+            ));
+        } else {
+            groups.push(DeviceChunks {
+                device_id: fallback_device_id.to_string(),
+                authenticated: false,
+                chunks: unsealed,
+            });
+        }
+    }
+
+    if rejected > 0 {
+        state
+            .counters
+            .auth_failures
+            .fetch_add(rejected, Ordering::Relaxed);
+    }
+    groups
+}
+
+/// Verify a chunk sealed with a device credential and check it isn't a
+/// replay. Returns the device and the plaintext payload.
+fn open_with_credential(
+    state: &AppState,
+    nonce: ferrite_sdk::encryption::NonceFields,
+    sealed: &[u8],
+) -> Result<(String, Vec<u8>), &'static str> {
+    use crate::credentials::Freshness;
+
+    let (device_id, key) = match state.credentials.key_for(nonce.key_id) {
+        Ok(Some(found)) => found,
+        Ok(None) => return Err("unknown or revoked device key"),
+        Err(_) => return Err("credential lookup failed"),
+    };
+    let plaintext =
+        decrypt_chunk_payload(&key, sealed).ok_or("authentication tag did not verify")?;
+    // Only after the tag verified, so nobody can burn a device's counters.
+    match state
+        .credentials
+        .accept_counter(nonce.key_id, nonce.boot_epoch, nonce.counter)
+    {
+        Ok(Freshness::Fresh) => Ok((device_id, plaintext)),
+        Ok(Freshness::Replayed) => Err("replayed chunk"),
+        Ok(Freshness::Stale) => Err("chunk too old to check for replay"),
+        Err(_) => Err("replay check failed"),
+    }
+}
+
+/// Store one device's chunks. Errors go into `errors`; the caller commits.
+async fn process_device_chunks(
+    state: &Arc<AppState>,
+    // `&mut` keeps the future `Send`: the connection itself isn't `Sync`.
+    store: &mut tokio::sync::MutexGuard<'_, crate::store::Store>,
+    group: &DeviceChunks,
+    errors: &mut Vec<String>,
+) {
+    let mut current_device_id = group.device_id.clone();
+    let mut device_rowid: Option<i64> = None;
+
     // Process DeviceInfo chunks first to establish device context.
-    for chunk in &chunks {
+    for chunk in &group.chunks {
         if chunk.chunk_type == ChunkType::DeviceInfo {
             if let Some(info) = parse_device_info_payload(&chunk.payload) {
+                if group.authenticated && info.device_id != group.device_id {
+                    errors.push(format!(
+                        "DeviceInfo for '{}' sealed with the credential of '{}'; ignored",
+                        info.device_id, group.device_id
+                    ));
+                    continue;
+                }
                 current_device_id = info.device_id.clone();
                 let previous = store.get_device_by_id(&info.device_id).ok().flatten();
                 match store.upsert_device(&info.device_id, &info.firmware_version, info.build_id) {
                     Ok(rid) => {
                         device_rowid = Some(rid);
-                        record_build_report(&state, &info, previous.as_ref());
+                        record_build_report(state, &info, previous.as_ref());
                         if let Some(t) = info.device_type {
                             if let Err(e) = store.set_device_type(&info.device_id, t.as_str()) {
                                 errors.push(format!("db error setting device type: {e}"));
@@ -660,34 +868,27 @@ async fn ingest_chunks(
             Ok(rid) => device_rowid = Some(rid),
             Err(e) => {
                 errors.push(format!("db error touching device: {e}"));
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(IngestResponse {
-                        ok: false,
-                        chunks_received: 0,
-                        errors,
-                    }),
-                );
+                return;
             }
         }
     }
 
     let Some(dev_rid) = device_rowid else {
         // No device context — either "unknown" device or missing DeviceInfo.
-        // Accept the request (chunks will arrive again with DeviceInfo) but don't store.
-        let _ = store.commit_transaction();
-        return (
-            StatusCode::OK,
-            Json(IngestResponse {
-                ok: true,
-                chunks_received: num_chunks,
-                errors,
-            }),
-        );
+        // Accept the chunks (they will arrive again with DeviceInfo) but don't store.
+        return;
     };
+    let auth = if group.authenticated {
+        "credential"
+    } else {
+        "none"
+    };
+    if let Err(e) = store.set_device_auth(&current_device_id, auth) {
+        errors.push(format!("db error recording device auth: {e}"));
+    }
 
     // Process remaining chunk types.
-    for chunk in &chunks {
+    for chunk in &group.chunks {
         match chunk.chunk_type {
             ChunkType::DeviceInfo => {
                 // Already handled above.
@@ -745,7 +946,7 @@ async fn ingest_chunks(
                         ));
                         // Send fault alert webhook (#28)
                         crate::alerting::send_fault_alert(
-                            &state,
+                            state,
                             &current_device_id,
                             fault.fault_type,
                             fault.pc,
@@ -964,38 +1165,6 @@ async fn ingest_chunks(
             }
         }
     }
-
-    // Commit the transaction (or rollback on total failure).
-    if errors.is_empty() {
-        if let Err(e) = store.commit_transaction() {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(IngestResponse {
-                    ok: false,
-                    chunks_received: num_chunks,
-                    errors: vec![format!("failed to commit transaction: {e}")],
-                }),
-            );
-        }
-    } else {
-        // Partial success — still commit so we don't lose good data.
-        let _ = store.commit_transaction();
-    }
-
-    let status = if errors.is_empty() {
-        StatusCode::OK
-    } else {
-        StatusCode::MULTI_STATUS
-    };
-
-    (
-        status,
-        Json(IngestResponse {
-            ok: errors.is_empty(),
-            chunks_received: num_chunks,
-            errors,
-        }),
-    )
 }
 
 /// POST /ingest/elf
@@ -1482,6 +1651,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/devices/:id/faults", get(list_device_faults))
         .route("/devices/:id/metrics", get(list_device_metrics))
+        .route(
+            "/devices/:id/credential",
+            get(crate::credentials::get_credential)
+                .post(crate::credentials::issue_credential)
+                .delete(crate::credentials::revoke_credential),
+        )
         .route("/faults", get(list_all_faults))
         // Update-reach reports (#78)
         .route("/reports/fleet/builds", get(crate::reach::fleet_builds))

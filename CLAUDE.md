@@ -91,6 +91,7 @@ The `dx serve` dev server proxies `/auth`, `/devices`, `/ingest`, `/health` to `
 - Set `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` env vars for Keycloak mode
 - Without those vars, falls back to Basic auth (`BASIC_AUTH_USER`, default `admin`; `BASIC_AUTH_PASS` is required: `serve` refuses to start without it, so use `BASIC_AUTH_PASS=admin` locally)
 - Optional `INGEST_API_KEY` env var gates `/ingest/*` endpoints
+- Per-device credentials (#118): `POST /devices/:id/credential` issues a device key; devices seal chunks with it (`EncryptedTransport::with_credential`), the server attributes sealed chunks by key ID (`credentials.rs`, separate `credentials.db`). `DEVICE_AUTH_REQUIRED=1` rejects unsealed chunks
 - Config loaded via `dotenvy` from `.env` file (see `.env.example`)
 - Server config uses `Box::leak(Box::new(config))` for `&'static` lifetime
 - Dashboard discovers auth mode at startup via `GET /auth/mode`

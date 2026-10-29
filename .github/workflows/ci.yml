@@ -41,6 +41,15 @@ jobs:
       - name: Test – ferrite-sdk (signed OTA)
         run: cargo test --locked -p ferrite-sdk --no-default-features --features http -- --test-threads=1 ota
 
+      - name: Clippy – ferrite-sdk (encryption)
+        run: cargo clippy --locked -p ferrite-sdk --no-default-features --features encryption -- -D warnings
+
+      - name: Test – ferrite-sdk (encryption, device credentials)
+        run: cargo test --locked -p ferrite-sdk --no-default-features --features encryption -- --test-threads=1
+
+      - name: Build – ferrite-sdk (encryption + async transport)
+        run: cargo build --locked -p ferrite-sdk --no-default-features --features encryption,embassy
+
       - name: Test – ferrite-server (unit)
         run: cargo test --locked -p ferrite-server --lib
 

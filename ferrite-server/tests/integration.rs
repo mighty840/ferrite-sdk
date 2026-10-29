@@ -38,6 +38,7 @@ const AUTH_ENV_KEYS: &[&str] = &[
     "CHUNK_ENCRYPTION_KEY",
     "BASIC_AUTH_USERS",
     "OTA_TRUSTED_KEYS",
+    "DEVICE_AUTH_REQUIRED",
     "EVIDENCE_ANCHOR_INTERVAL_SECS",
     "EVIDENCE_ANCHOR_WEBHOOK_URL",
     "EVIDENCE_ANCHOR_WEBHOOK_TOKEN",
@@ -90,6 +91,7 @@ async fn spawn_server_with_env(env_overrides: Vec<(&str, &str)>) -> String {
             counters: ferrite_server::prometheus::RequestCounters::new(),
             rate_limiter: None,
             evidence: ferrite_server::evidence::EvidenceLog::open_in_memory().unwrap(),
+            credentials: ferrite_server::credentials::CredentialStore::open_in_memory().unwrap(),
         });
 
         let app = ferrite_server::ingest::router(state);
@@ -1643,4 +1645,340 @@ async fn update_reach_reports_json_and_csv() {
         .await
         .unwrap();
     assert_eq!(anon.status(), StatusCode::UNAUTHORIZED);
+}
+
+// =========================================================================
+// Per-device credentials (#118)
+// =========================================================================
+
+mod device_credentials {
+    use super::*;
+    use ferrite_sdk::chunks::ChunkEncoder;
+    use ferrite_sdk::encryption::{ChunkSealer, DeviceCredential};
+
+    fn auth(creds: &str) -> String {
+        use base64::Engine;
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD.encode(creds)
+        )
+    }
+
+    async fn issue(base: &str, device: &str) -> DeviceCredential {
+        let resp = Client::new()
+            .post(format!("{base}/devices/{device}/credential"))
+            .header("Authorization", auth("admin:admin"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        DeviceCredential {
+            key_id: body["key_id"].as_u64().unwrap() as u32,
+            key: hex::decode(body["key"].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        }
+    }
+
+    /// DeviceInfo + heartbeat for `device`, each chunk passed through `seal`.
+    fn report(
+        encoder: &mut ChunkEncoder,
+        device: &str,
+        version: &str,
+        mut seal: impl FnMut(&[u8]) -> Vec<u8>,
+    ) -> Vec<u8> {
+        let mut body = Vec::new();
+        encoder.encode_device_info(device, version, 7, |c| body.extend(seal(c)));
+        encoder.encode_heartbeat(1000, 512, 0, 0, 0, |c| body.extend(seal(c)));
+        body
+    }
+
+    fn sealer(cred: &DeviceCredential, epoch: u32) -> impl FnMut(&[u8]) -> Vec<u8> {
+        let mut s = ChunkSealer::for_device(cred, epoch);
+        move |c| {
+            let (buf, n) = s.seal(c).unwrap();
+            buf[..n].to_vec()
+        }
+    }
+
+    async fn post(base: &str, body: Vec<u8>) -> (StatusCode, serde_json::Value) {
+        let resp = Client::new()
+            .post(format!("{base}/ingest/chunks"))
+            .header("Content-Type", "application/octet-stream")
+            .body(body)
+            .send()
+            .await
+            .unwrap();
+        (resp.status(), resp.json().await.unwrap())
+    }
+
+    async fn device(base: &str, id: &str) -> Option<serde_json::Value> {
+        let body: serde_json::Value = Client::new()
+            .get(format!("{base}/devices"))
+            .header("Authorization", auth("admin:admin"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        body["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["device_id"] == id)
+            .cloned()
+    }
+
+    async fn evidence_kinds(base: &str, subject: &str) -> Vec<String> {
+        let body: serde_json::Value = Client::new()
+            .get(format!("{base}/evidence?subject={subject}"))
+            .header("Authorization", auth("admin:admin"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        body["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn sealed_reports_are_accepted_once() {
+        let base = spawn_server().await;
+        let cred = issue(&base, "dev-a").await;
+        let mut enc = ChunkEncoder::new();
+        let body = report(&mut enc, "dev-a", "1.0.0", sealer(&cred, 41));
+
+        let (status, json) = post(&base, body.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{json}");
+        let dev = device(&base, "dev-a").await.unwrap();
+        assert_eq!(dev["firmware_version"], "1.0.0");
+        assert_eq!(dev["last_auth"], "credential");
+
+        // The same bytes again: a replay.
+        let (status, json) = post(&base, body).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"][0].as_str().unwrap().contains("replayed"),
+            "{json}"
+        );
+
+        // The next boot (new epoch) is fine.
+        let (status, _) = post(&base, report(&mut enc, "dev-a", "1.0.1", sealer(&cred, 42))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            device(&base, "dev-a").await.unwrap()["firmware_version"],
+            "1.0.1"
+        );
+    }
+
+    #[tokio::test]
+    async fn unsealed_reports_for_a_credentialed_device_are_rejected() {
+        let base = spawn_server().await;
+        let cred = issue(&base, "dev-a").await;
+        let mut enc = ChunkEncoder::new();
+        post(&base, report(&mut enc, "dev-a", "1.0.0", sealer(&cred, 1))).await;
+
+        // Someone else claims to be dev-a, without the key.
+        let (status, json) = post(&base, report(&mut enc, "dev-a", "6.6.6", |c| c.to_vec())).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"]
+                .to_string()
+                .contains("device credential required"),
+            "{json}"
+        );
+        assert_eq!(
+            device(&base, "dev-a").await.unwrap()["firmware_version"],
+            "1.0.0"
+        );
+
+        // A key that isn't dev-a's: the tag doesn't verify.
+        let forged = DeviceCredential {
+            key: [7; 16],
+            ..cred
+        };
+        let (status, json) = post(
+            &base,
+            report(&mut enc, "dev-a", "6.6.6", sealer(&forged, 2)),
+        )
+        .await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"].to_string().contains("did not verify"),
+            "{json}"
+        );
+        assert_eq!(
+            device(&base, "dev-a").await.unwrap()["firmware_version"],
+            "1.0.0"
+        );
+
+        // Devices without a credential report as before.
+        let (status, _) = post(&base, report(&mut enc, "dev-b", "2.0.0", |c| c.to_vec())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(device(&base, "dev-b").await.unwrap()["last_auth"], "none");
+    }
+
+    #[tokio::test]
+    async fn a_credential_only_speaks_for_its_own_device() {
+        let base = spawn_server().await;
+        let cred_a = issue(&base, "dev-a").await;
+        let mut enc = ChunkEncoder::new();
+        // dev-a's key, but the DeviceInfo says dev-c.
+        let (status, json) = post(
+            &base,
+            report(&mut enc, "dev-c", "9.9.9", sealer(&cred_a, 1)),
+        )
+        .await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"]
+                .to_string()
+                .contains("sealed with the credential of 'dev-a'"),
+            "{json}"
+        );
+        assert!(device(&base, "dev-c").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn mixed_gateway_batches_are_split_by_credential() {
+        let base = spawn_server().await;
+        let cred_a = issue(&base, "dev-a").await;
+        let mut enc = ChunkEncoder::new();
+        // A gateway batch: dev-b (no credential) first, then dev-a's sealed
+        // heartbeat with no DeviceInfo of its own in this request.
+        let mut body = report(&mut enc, "dev-b", "2.0.0", |c| c.to_vec());
+        let mut seal = sealer(&cred_a, 5);
+        enc.encode_device_info("dev-a", "1.2.3", 7, |c| body.extend(seal(c)));
+        let (status, json) = post(&base, body).await;
+        assert_eq!(status, StatusCode::OK, "{json}");
+        assert_eq!(
+            device(&base, "dev-a").await.unwrap()["firmware_version"],
+            "1.2.3"
+        );
+        assert_eq!(
+            device(&base, "dev-b").await.unwrap()["firmware_version"],
+            "2.0.0"
+        );
+    }
+
+    #[tokio::test]
+    async fn revoked_keys_stop_working() {
+        let base = spawn_server().await;
+        let cred = issue(&base, "dev-a").await;
+        let resp = Client::new()
+            .delete(format!("{base}/devices/dev-a/credential"))
+            .header("Authorization", auth("admin:admin"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let mut enc = ChunkEncoder::new();
+        let (status, json) =
+            post(&base, report(&mut enc, "dev-a", "1.0.0", sealer(&cred, 1))).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"].to_string().contains("unknown or revoked"),
+            "{json}"
+        );
+        assert_eq!(
+            evidence_kinds(&base, "device:dev-a").await,
+            ["device.credential_set", "device.credential_revoked"]
+        );
+    }
+
+    #[tokio::test]
+    async fn device_auth_required_rejects_every_unsealed_report() {
+        let base = spawn_server_with_env(vec![("DEVICE_AUTH_REQUIRED", "1")]).await;
+        let mut enc = ChunkEncoder::new();
+        let (status, json) = post(&base, report(&mut enc, "dev-b", "2.0.0", |c| c.to_vec())).await;
+        assert_eq!(status, StatusCode::MULTI_STATUS);
+        assert!(
+            json["errors"]
+                .to_string()
+                .contains("device credential required"),
+            "{json}"
+        );
+        assert!(device(&base, "dev-b").await.is_none());
+
+        let cred = issue(&base, "dev-b").await;
+        let (status, _) = post(&base, report(&mut enc, "dev-b", "2.0.0", sealer(&cred, 1))).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn credential_api_roles_and_evidence() {
+        let base = spawn_server_with_env(vec![(
+            "BASIC_AUTH_USERS",
+            "view:v1:viewer,prov:p1:provisioner",
+        )])
+        .await;
+        let client = Client::new();
+        let call = |method: reqwest::Method, creds: &str| {
+            client
+                .request(method, format!("{base}/devices/dev-a/credential"))
+                .header("Authorization", auth(creds))
+                .send()
+        };
+        use reqwest::Method;
+
+        assert_eq!(
+            call(Method::POST, "view:v1").await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            call(Method::POST, "prov:p1").await.unwrap().status(),
+            StatusCode::CREATED
+        );
+        let rotated: serde_json::Value = call(Method::POST, "prov:p1")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(rotated["rotated"], true);
+
+        let info: serde_json::Value = call(Method::GET, "view:v1")
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(info["key_id"], rotated["key_id"]);
+        assert_eq!(info["created_by"], "prov");
+        assert!(
+            info.get("key").is_none(),
+            "the key is only in the issue response"
+        );
+
+        assert_eq!(
+            call(Method::DELETE, "prov:p1").await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            call(Method::DELETE, "admin:admin").await.unwrap().status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(Method::GET, "view:v1").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+
+        assert_eq!(
+            evidence_kinds(&base, "device:dev-a").await,
+            [
+                "device.credential_set",
+                "device.credential_rotated",
+                "device.credential_revoked"
+            ]
+        );
+    }
 }

@@ -209,6 +209,10 @@ pub struct AuthConfig {
     pub ota_trusted_keys: Vec<[u8; 32]>,
     /// Where and how often to anchor the evidence log's head hash.
     pub evidence_anchor: crate::evidence_anchor::EvidenceAnchorConfig,
+    /// `DEVICE_AUTH_REQUIRED`: reject every chunk not sealed with a device
+    /// credential. Off by default: then only devices that have a credential
+    /// must use it.
+    pub device_auth_required: bool,
 }
 
 impl AuthConfig {
@@ -278,6 +282,8 @@ impl AuthConfig {
                 webhook_token: optional_env("EVIDENCE_ANCHOR_WEBHOOK_TOKEN"),
                 tsa_url: optional_env("EVIDENCE_ANCHOR_TSA_URL"),
             },
+            device_auth_required: optional_env("DEVICE_AUTH_REQUIRED")
+                .is_some_and(|v| matches!(v.as_str(), "1" | "true" | "yes")),
         }
     }
 }
@@ -386,6 +392,7 @@ mod tests {
             additional_users: vec![],
             ota_trusted_keys: vec![],
             evidence_anchor: Default::default(),
+            device_auth_required: false,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "basic");
@@ -411,6 +418,7 @@ mod tests {
             additional_users: vec![],
             ota_trusted_keys: vec![],
             evidence_anchor: Default::default(),
+            device_auth_required: false,
         };
         let resp = config.mode_response();
         assert_eq!(resp.mode, "keycloak");

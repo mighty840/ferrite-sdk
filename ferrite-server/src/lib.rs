@@ -5,6 +5,7 @@ pub mod backup;
 pub mod campaigns;
 pub mod config;
 pub mod crashes;
+pub mod credentials;
 pub mod evidence;
 pub mod evidence_anchor;
 pub mod groups;
@@ -34,4 +35,6 @@ pub struct AppState {
     pub rate_limiter: Option<Arc<rate_limit::RateLimiter>>,
     /// Append-only, hash-chained compliance record (separate database).
     pub evidence: evidence::EvidenceLog,
+    /// Per-device keys and replay state (separate database).
+    pub credentials: credentials::CredentialStore,
 }
