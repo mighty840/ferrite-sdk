@@ -37,10 +37,10 @@ struct Cli {
     #[arg(long = "usb-port")]
     usb_ports: Vec<String>,
 
-    /// USB baud rate
+    /// USB baud rate (overrides USB_BAUD env var; default 115200)
     #[cfg(feature = "usb")]
-    #[arg(long, default_value = "115200")]
-    usb_baud: u32,
+    #[arg(long)]
+    usb_baud: Option<u32>,
 
     /// Enable BLE scanning
     #[cfg(feature = "ble")]
@@ -56,9 +56,32 @@ struct Cli {
     #[arg(long, default_value = "4001")]
     http_ingest_port: u16,
 
-    /// Buffer database path
-    #[arg(long, default_value = "ferrite-gateway.db")]
-    buffer_db: String,
+    /// Buffer database path (overrides GATEWAY_BUFFER_DB env var;
+    /// default ferrite-gateway.db)
+    #[arg(long)]
+    buffer_db: Option<String>,
+}
+
+impl Cli {
+    /// Flags given on the command line win over the environment; flags left
+    /// out keep the value from the environment (or the built-in default).
+    fn apply(&self, config: &mut GatewayConfig) {
+        if let Some(server) = &self.server {
+            config.server_url = server.clone();
+        }
+        #[cfg(feature = "usb")]
+        {
+            if !self.usb_ports.is_empty() {
+                config.usb_ports = self.usb_ports.clone();
+            }
+            if let Some(baud) = self.usb_baud {
+                config.usb_baud = baud;
+            }
+        }
+        if let Some(path) = &self.buffer_db {
+            config.buffer_db = path.clone();
+        }
+    }
 }
 
 #[tokio::main]
@@ -72,19 +95,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     let mut config = GatewayConfig::from_env();
-
-    // CLI overrides
-    if let Some(server) = cli.server {
-        config.server_url = server;
-    }
-    #[cfg(feature = "usb")]
-    {
-        if !cli.usb_ports.is_empty() {
-            config.usb_ports = cli.usb_ports;
-        }
-        config.usb_baud = cli.usb_baud;
-    }
-    config.buffer_db = cli.buffer_db;
+    cli.apply(&mut config);
 
     info!("ferrite-gateway starting");
     info!("Server: {}", config.server_url);
@@ -214,5 +225,41 @@ async fn drain_buffer(buffer: &ChunkBuffer, forwarder: &Forwarder) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn from_env_file() -> GatewayConfig {
+        GatewayConfig {
+            buffer_db: "/var/lib/ferrite/from-env.db".into(),
+            #[cfg(feature = "usb")]
+            usb_baud: 230400,
+            ..GatewayConfig::default()
+        }
+    }
+
+    #[test]
+    fn flags_left_out_keep_the_environment() {
+        let mut config = from_env_file();
+        Cli::parse_from(["ferrite-gateway"]).apply(&mut config);
+        assert_eq!(config.buffer_db, "/var/lib/ferrite/from-env.db");
+        #[cfg(feature = "usb")]
+        assert_eq!(config.usb_baud, 230400);
+    }
+
+    #[test]
+    fn flags_given_override_the_environment() {
+        let mut config = from_env_file();
+        let mut args = vec!["ferrite-gateway", "--buffer-db", "cli.db"];
+        if cfg!(feature = "usb") {
+            args.extend(["--usb-baud", "9600"]);
+        }
+        Cli::parse_from(args).apply(&mut config);
+        assert_eq!(config.buffer_db, "cli.db");
+        #[cfg(feature = "usb")]
+        assert_eq!(config.usb_baud, 9600);
     }
 }

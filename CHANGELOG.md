@@ -23,6 +23,9 @@ contain breaking changes.
 - Chunk encryption could panic: a 226- or 227-byte payload passed the size check but overflowed the 256-byte chunk buffer. Chunks too large to seal are now refused before writing, and with the `encryption` feature the encoder keeps payloads at 225 bytes so every chunk can be sealed. With a device credential, a chunk is never sent in clear.
 - Docs: the CCM tag is 8 bytes, not 16 (sealing adds 21 bytes).
 - Gateway: the BLE scanner retries with backoff when it can't start (e.g. at boot, before BlueZ is ready) or when BlueZ goes away, instead of stopping for good until the gateway restarts. The Pi unit is ordered after `bluetooth.service`.
+- Gateway: `GATEWAY_BUFFER_DB` and `USB_BAUD` had no effect, because the `--buffer-db` and `--usb-baud` defaults always overrode them. A flag now wins only when given. If you set `GATEWAY_BUFFER_DB` (the Pi deployment does), the gateway now opens that file instead of `ferrite-gateway.db` in its working directory; let it drain its buffer, or move the old file, before upgrading.
+- Gateway udev rules (`deploy/rpi-gateway/99-ferrite.rules`) gave every local user read/write access to the boards' serial ports (`0666`), so any user could inject chunks. Ports now belong to group `dialout`, mode `0660`.
+- Docs: the gateway's environment variables are `INGEST_API_KEY`, `USB_PORTS` and `USB_BAUD`, not `FERRITE_API_KEY`, `FERRITE_USB_PORT` and `FERRITE_USB_BAUD`.
 - `ChunkEncoder::encode_device_info` could index past its buffer when the device ID and firmware version were both near 127 bytes; the version is now shortened to fit.
 
 ## [0.1.0] — 2026-10-18 (pre-release)
