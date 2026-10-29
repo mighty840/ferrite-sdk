@@ -62,20 +62,27 @@ ferrite-gateway \
 | Flag | Default | Description |
 |---|---|---|
 | `--server` | `FERRITE_SERVER_URL` env | Server URL |
-| `--usb-port` | none | USB serial port path |
-| `--usb-baud` | `115200` | USB baud rate |
+| `--usb-port` | `USB_PORTS` env | USB serial port path (repeat for several) |
+| `--usb-baud` | `USB_BAUD` env, else `115200` | USB baud rate |
 | `--ble` | false | Enable BLE scanning |
 | `--http-ingest-port` | `4001` | HTTP ingest listener port (0 = disabled) |
-| `--buffer-db` | `ferrite-gateway.db` | SQLite buffer path |
+| `--buffer-db` | `GATEWAY_BUFFER_DB` env, else `ferrite-gateway.db` | SQLite buffer path |
+
+A flag given on the command line wins over its environment variable.
 
 ## Environment variables
+
+The gateway also reads a `.env` file in its working directory.
 
 | Variable | Description |
 |---|---|
 | `FERRITE_SERVER_URL` | Server URL (overridden by `--server`) |
-| `FERRITE_API_KEY` | API key for `/ingest/chunks` |
-| `FERRITE_USB_PORT` | USB serial port path |
-| `FERRITE_USB_BAUD` | USB baud rate |
+| `INGEST_API_KEY` | Server's ingest API key, sent as `X-API-Key` |
+| `BASIC_AUTH_USER`, `BASIC_AUTH_PASS` | Login for the OTA relay |
+| `USB_PORTS` | Comma-separated USB serial port paths (or a single `USB_PORT`) |
+| `USB_BAUD` | USB baud rate (overridden by `--usb-baud`) |
+| `GATEWAY_BUFFER_DB` | SQLite buffer path (overridden by `--buffer-db`) |
+| `GATEWAY_MAX_RETRIES` | HTTP forwarding attempts per request (default 3) |
 
 ## Chunk framing
 
@@ -103,7 +110,7 @@ ExecStart=/usr/local/bin/ferrite-gateway \
   --ble \
   --buffer-db /var/lib/ferrite/gateway.db
 Restart=always
-Environment=FERRITE_API_KEY=your-api-key
+Environment=INGEST_API_KEY=your-api-key
 Environment=RUST_LOG=info
 
 [Install]
