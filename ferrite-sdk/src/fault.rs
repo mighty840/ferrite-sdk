@@ -270,86 +270,120 @@ pub fn clear_fault_record() {
     }
 }
 
-// Cortex-M3/M4/M7 specific: HardFault handler with ExceptionFrame and
-// extended register capture. Not available on Cortex-M0/M0+ (thumbv6m)
-// which lacks Thumb-2 instructions and fault status registers.
+// Cortex-M3/M4/M7/M33 specific: HardFault handler. Not available on
+// Cortex-M0/M0+ (thumbv6m), which lack Thumb-2 instructions and the fault
+// status registers.
 #[cfg(all(feature = "cortex-m", has_fault_registers))]
 mod cortex_m_handler {
     use super::*;
 
-    #[inline(always)]
-    unsafe fn capture_extended_registers() -> ExtendedRegisters {
-        let mut regs = ExtendedRegisters::zeroed();
-        core::arch::asm!(
-            "str r4,  [{ptr}, #0]",
-            "str r5,  [{ptr}, #4]",
-            "str r6,  [{ptr}, #8]",
-            "str r7,  [{ptr}, #12]",
-            "str r8,  [{ptr}, #16]",
-            "str r9,  [{ptr}, #20]",
-            "str r10, [{ptr}, #24]",
-            "str r11, [{ptr}, #28]",
-            "mov r0,  sp",
-            "str r0,  [{ptr}, #32]",
-            ptr = in(reg) &mut regs,
-            out("r0") _,
-            options(nostack)
-        );
-        regs
-    }
+    /// R4 to R11 as they were when the fault happened. The assembly entry
+    /// stores them before any compiled code runs, because a compiled
+    /// handler's prologue may reuse these registers before its first line.
+    static mut FAULT_R4_R11: [u32; 8] = [0; 8];
 
-    use cortex_m_rt::exception;
+    // HardFault entry, in place of cortex-m-rt's trampoline: saves R4 to R11,
+    // then calls `hard_fault` with the exception frame (on MSP or PSP,
+    // depending on EXC_RETURN bit 2) and EXC_RETURN.
+    core::arch::global_asm!(
+        ".section .HardFaultTrampoline, \"ax\"",
+        ".global HardFault",
+        ".type HardFault,%function",
+        ".thumb_func",
+        "HardFault:",
+        "movw r0, :lower16:{regs}",
+        "movt r0, :upper16:{regs}",
+        "stmia r0, {{r4-r11}}",
+        "mov r1, lr",
+        "tst r1, #4",
+        "ite eq",
+        "mrseq r0, msp",
+        "mrsne r0, psp",
+        "b {handler}",
+        ".size HardFault, . - HardFault",
+        regs = sym FAULT_R4_R11,
+        handler = sym hard_fault,
+    );
 
-    #[exception]
-    unsafe fn HardFault(frame: &cortex_m_rt::ExceptionFrame) -> ! {
-        let extended = capture_extended_registers();
+    unsafe extern "C" fn hard_fault(frame_ptr: *const ExceptionFrame, exc_return: u32) -> ! {
+        let frame = frame_ptr.read_volatile();
+        let r = core::ptr::addr_of!(FAULT_R4_R11).read_volatile();
+        let sp = sp_before_exception(frame_ptr as u32, exc_return, frame.xpsr);
+        let extended = ExtendedRegisters {
+            r4: r[0],
+            r5: r[1],
+            r6: r[2],
+            r7: r[3],
+            r8: r[4],
+            r9: r[5],
+            r10: r[6],
+            r11: r[7],
+            sp,
+        };
 
-        let sp = extended.sp as *const u32;
+        // The crashed code's stack, read only inside the registered RAM
+        // regions: a bad SP must not cause a second fault in this handler.
         let mut snapshot = [0u32; 16];
-        for i in 0..16 {
-            let addr = sp.add(i);
-            if is_valid_ram_address(addr as u32) {
-                snapshot[i] = addr.read_volatile();
+        for (i, word) in snapshot.iter_mut().enumerate() {
+            let addr = sp.wrapping_add(4 * i as u32);
+            if is_valid_ram_address(addr) {
+                *word = (addr as *const u32).read_volatile();
             }
         }
 
         let scb = &*cortex_m::peripheral::SCB::PTR;
-        let cfsr = scb.cfsr.read();
-        let hfsr = scb.hfsr.read();
-        let mmfar = scb.mmfar.read();
-        let bfar = scb.bfar.read();
-
         let retained = memory::get_retained_block_ptr();
         (*retained).fault_record = FaultRecord {
             valid: true,
             fault_type: FaultType::HardFault,
             _pad: [0; 2],
-            frame: ExceptionFrame {
-                r0: frame.r0(),
-                r1: frame.r1(),
-                r2: frame.r2(),
-                r3: frame.r3(),
-                r12: frame.r12(),
-                lr: frame.lr(),
-                pc: frame.pc(),
-                xpsr: frame.xpsr(),
-            },
+            frame,
             extended,
             stack_snapshot: snapshot,
-            cfsr,
-            hfsr,
-            mmfar,
-            bfar,
+            cfsr: scb.cfsr.read(),
+            hfsr: scb.hfsr.read(),
+            mmfar: scb.mmfar.read(),
+            bfar: scb.bfar.read(),
         };
-        (*retained).reboot_reason.reason = crate::reboot_reason::RebootReason::HardFault;
+        crate::reboot_reason::record_reboot_reason(crate::reboot_reason::RebootReason::HardFault);
 
         cortex_m::peripheral::SCB::sys_reset()
     }
 }
 
+/// Stack pointer of the code that was interrupted by an exception. The
+/// processor pushed the exception frame just below it: 8 words, or 26 with
+/// floating-point state (EXC_RETURN bit 4 clear), plus one padding word when
+/// xPSR bit 9 says it aligned the stack.
+#[cfg_attr(not(all(feature = "cortex-m", has_fault_registers)), allow(dead_code))]
+fn sp_before_exception(frame_addr: u32, exc_return: u32, xpsr: u32) -> u32 {
+    let words = if exc_return & (1 << 4) == 0 { 26 } else { 8 };
+    let padding = if xpsr & (1 << 9) != 0 { 4 } else { 0 };
+    frame_addr.wrapping_add(words * 4 + padding)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sp_above_the_exception_frame() {
+        // Basic frame (EXC_RETURN 0xFFFFFFF9), no alignment padding.
+        assert_eq!(
+            sp_before_exception(0x2000_fa78, 0xFFFF_FFF9, 0x6100_0000),
+            0x2000_fa98
+        );
+        // xPSR bit 9: the processor added a padding word.
+        assert_eq!(
+            sp_before_exception(0x2000_fa78, 0xFFFF_FFF9, 0x6100_0200),
+            0x2000_fa9c
+        );
+        // EXC_RETURN bit 4 clear: frame with floating-point state.
+        assert_eq!(
+            sp_before_exception(0x2000_fa78, 0xFFFF_FFE9, 0x6100_0000),
+            0x2000_fae0
+        );
+    }
 
     extern crate std;
 

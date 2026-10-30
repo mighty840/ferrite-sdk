@@ -20,6 +20,8 @@ contain breaking changes.
 - **Auditor role:** `auditor` (basic auth) / `ferrite-auditor` (Keycloak) reads the evidence log and nothing else. The evidence log (`/evidence/*`) is now limited to admins and auditors; viewers and provisioners lose access.
 
 ### Fixed
+- SDK: the HardFault handler saved some of its own state instead of the crashed code's. R4 to R11 were captured after the compiled handler's prologue had reused some of them, and SP and the 64-byte stack snapshot came from the handler's own stack. An assembly entry now stores R4 to R11 before any compiled code runs, SP is computed from the exception frame, and the snapshot reads the crashed code's stack (#139).
+- SDK: the HardFault handler records `HardFault` as a complete reboot-reason record, magic included, so `last_reboot_reason()` reports it (#134).
 - SDK: when the retained block's magic is wrong (first power-on, or RAM holding something else), `init()` now clears the whole block, as the docs describe. It used to reset only the header, so power-up noise under the fault record's `valid` flag could be reported as a HardFault with a random PC (#136).
 - Server: ELF and firmware uploads accept only versions made of letters, digits, `.`, `-`, `_` and `+` (1 to 64 characters, starting with a letter or digit), since the version names the stored file. Other values get `400`.
 - **Chunk encryption reused nonces:** the AES-CCM nonce was a counter that restarted at 0 on every boot, under the same key, which breaks CCM's confidentiality and integrity. The nonce now carries a per-boot epoch (`with_credential`, `with_shared_key`); `EncryptedTransport::new` keeps the old nonce and is documented as such.
