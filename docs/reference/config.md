@@ -138,4 +138,4 @@ Maximum payload size per chunk. The total chunk overhead is 10 bytes (8-byte hea
 | `TRACE_BUFFER_SIZE = 512` | 512 bytes | Negligible |
 | `MAX_CHUNK_SIZE = 256` | 256 bytes (encoder temp buffer, on stack) | Negligible |
 
-The retained RAM block is always 256 bytes regardless of these constants.
+The retained RAM block doesn't depend on these constants: it is 192 bytes, and a compile-time check keeps it at 256 bytes or less, so reserve 256.

@@ -49,16 +49,9 @@ pub fn init(config: SdkConfig<'static>) {
         let _ = crate::fault::register_ram_region(region.start, region.end);
     }
 
-    // Validate retained RAM block
+    // Validate the retained RAM block and count this boot
     unsafe {
-        let retained = crate::memory::get_retained_block_ptr();
-        if !(*retained).header.is_valid() {
-            // First boot or corrupted — initialize
-            (*retained).header.magic = crate::memory::RETAINED_MAGIC;
-            (*retained).header.sequence = 0;
-        }
-        // Increment boot sequence
-        (*retained).header.sequence = (*retained).header.sequence.wrapping_add(1);
+        crate::memory::begin_boot(crate::memory::get_retained_block_ptr());
     }
 
     // Set ticks function

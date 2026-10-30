@@ -9,7 +9,7 @@ Most Cortex-M microcontrollers do not clear SRAM on a soft reset (watchdog, soft
 The retained block layout is:
 
 ```
-RetainedBlock (256 bytes max, repr(C))
+RetainedBlock (192 bytes, at most 256, repr(C))
 +------------------+
 | RetainedHeader   |  12 bytes
 |   magic: u32     |  0xABCD1234 when valid
@@ -23,7 +23,7 @@ RetainedBlock (256 bytes max, repr(C))
 |   extra: u8      |  user-defined (e.g. watchdog timer ID)
 |   _pad: [u8; 10] |
 +------------------+
-| FaultRecord      |  ~168 bytes
+| FaultRecord      |  152 bytes
 |   valid: bool    |
 |   fault_type: u8 |
 |   frame (8xU32)  |  hardware exception frame
@@ -33,6 +33,10 @@ RetainedBlock (256 bytes max, repr(C))
 |   mmfar, bfar    |  fault status registers
 +------------------+
 | metrics_dirty    |  1 byte + 3 padding
++------------------+
+| DeviceKeyRecord  |  8 bytes
+|   magic: u32     |  0xFED15C07 when valid
+|   key: u32       |
 +------------------+
 ```
 
