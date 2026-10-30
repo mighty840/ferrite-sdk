@@ -57,3 +57,17 @@ jobs:
           arm-none-eabi-addr2line -f -C -e "$elf" "$pc" | tee addr2line.txt
           grep -q 'qemu_fault::handle_message' addr2line.txt
         timeout-minutes: 2
+
+      - name: Run the retained-ram example
+        working-directory: examples/retained-ram
+        run: |
+          q="qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native"
+          elf=target/thumbv7m-none-eabi/release/retained-ram
+          cargo build --locked --release
+          $q -kernel "$elf" | tee plain.txt
+          grep -q 'boot 3 (magic before init: 0xabcd1234)' plain.txt
+          cargo build --locked --release --features noise
+          $q -kernel "$elf" | tee noise.txt
+          grep -q 'no fault record' noise.txt
+          if grep -q 'fault record: pc' noise.txt; then exit 1; fi
+        timeout-minutes: 3

@@ -25,6 +25,7 @@ exclude = [
   "examples/rtic-stm32f4",
   "examples/rtic-stm32wl55",
   "examples/qemu-fault",
+  "examples/retained-ram",
   "tests/qemu",
   "ferrite-ble-nrf",
 ]
