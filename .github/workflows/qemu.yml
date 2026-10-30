@@ -71,3 +71,19 @@ jobs:
           grep -q 'no fault record' noise.txt
           if grep -q 'fault record: pc' noise.txt; then exit 1; fi
         timeout-minutes: 3
+
+      - name: Run the fault-record example
+        working-directory: examples/fault-record
+        run: |
+          q="qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -semihosting-config enable=on,target=native"
+          elf=target/thumbv7m-none-eabi/release/fault-record
+          cargo build --locked --release
+          $q -kernel "$elf" | tee udf.txt
+          grep -q 'cfsr = 0x00010000' udf.txt
+          pc=$(awk '/pc =/ {print $9; exit}' udf.txt)
+          arm-none-eabi-addr2line -f -C -e "$elf" "$pc" | grep -q 'fault_record::handle_message'
+          cargo build --locked --release --features guard
+          $q -kernel "$elf" | tee guard.txt
+          grep -q 'cfsr = 0x00000082' guard.txt
+          grep -q 'mmfar = 0x20008004' guard.txt
+        timeout-minutes: 3
