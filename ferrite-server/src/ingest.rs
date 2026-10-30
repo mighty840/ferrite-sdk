@@ -1167,6 +1167,17 @@ async fn process_device_chunks(
     }
 }
 
+/// Whether a firmware version can be used in a file name: 1 to 64 ASCII
+/// letters, digits, `.`, `-`, `_` or `+`, starting with a letter or digit.
+/// Uploads name their files after the version, so without this check a
+/// version such as `../x` would write outside the upload directory.
+pub(crate) fn is_safe_version(version: &str) -> bool {
+    let mut chars = version.chars();
+    version.len() <= 64
+        && matches!(chars.next(), Some(c) if c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
+}
+
 /// POST /ingest/elf
 /// Accepts a multipart or raw binary ELF file upload.
 /// The firmware version should be provided in the `X-Firmware-Version` header.
@@ -1193,6 +1204,15 @@ async fn ingest_elf(
         .get("X-Firmware-Version")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("unknown");
+    if !is_safe_version(version) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "invalid X-Firmware-Version: use 1 to 64 letters, digits, '.', '-', '_' or '+', starting with a letter or digit",
+            })),
+        );
+    }
 
     let filename = format!("{version}.elf");
     let path = state.elf_dir.join(&filename);
@@ -1840,6 +1860,20 @@ fn record_build_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safe_versions() {
+        for v in ["0.1.0", "unknown", "1.2.3-rc.1+build.5", "v2_hotfix", "A"] {
+            assert!(is_safe_version(v), "{v}");
+        }
+        for v in [
+            "", "../x", "..", ".hidden", "-rf", "a/b", "a\\b", "1.0 beta", "1.0\0", "é1",
+        ] {
+            assert!(!is_safe_version(v), "{v:?}");
+        }
+        assert!(is_safe_version(&"a".repeat(64)));
+        assert!(!is_safe_version(&"a".repeat(65)));
+    }
 
     #[test]
     fn test_crc16_ccitt_known_value() {

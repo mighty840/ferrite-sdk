@@ -20,6 +20,7 @@ contain breaking changes.
 - **Auditor role:** `auditor` (basic auth) / `ferrite-auditor` (Keycloak) reads the evidence log and nothing else. The evidence log (`/evidence/*`) is now limited to admins and auditors; viewers and provisioners lose access.
 
 ### Fixed
+- Server: ELF and firmware uploads accept only versions made of letters, digits, `.`, `-`, `_` and `+` (1 to 64 characters, starting with a letter or digit), since the version names the stored file. Other values get `400`.
 - **Chunk encryption reused nonces:** the AES-CCM nonce was a counter that restarted at 0 on every boot, under the same key, which breaks CCM's confidentiality and integrity. The nonce now carries a per-boot epoch (`with_credential`, `with_shared_key`); `EncryptedTransport::new` keeps the old nonce and is documented as such.
 - Chunk encryption could panic: a 226- or 227-byte payload passed the size check but overflowed the 256-byte chunk buffer. Chunks too large to seal are now refused before writing, and with the `encryption` feature the encoder keeps payloads at 225 bytes so every chunk can be sealed. With a device credential, a chunk is never sent in clear.
 - Docs: the CCM tag is 8 bytes, not 16 (sealing adds 21 bytes).
