@@ -39,7 +39,7 @@ With rustc 1.97.0 and QEMU 7.2.22 it prints:
 Timer with period zero, disabling
 boot: no crash recorded, handling a message
 pushed by the processor:
-  r0  = 0x00000000  r1 = 0xffffffff  r2 = 0x0000002c  r3   = 0x00001e6d
+  r0  = 0x00000000  r1 = 0xffffffff  r2 = 0x0000002c  r3   = 0x00001edd
   r12 = 0x00000001  lr = 0x0000035d  pc = 0x00000158  xpsr = 0x61000000
 saved by ferrite's handler:
   r4  = 0x00000000  r5 = 0x2000fb38  r6  = 0x00000000  r7  = 0x2000fa98
@@ -94,8 +94,10 @@ saved by ferrite's handler:
 (`0x0000018c`) resolves to `read_guarded` at `main.rs:81`.
 
 Another compiler version may place the code at other addresses; use the
-values your run prints. Before #140, the handler saved some of its own
-registers and its own stack instead of the crashed code's (#139).
+values your run prints. `r0` to `r3` and `r12` hold whatever the code last
+left in them, so they can differ even between builds of the same commit.
+Before #140, the handler saved some of its own registers and its own stack
+instead of the crashed code's (#139).
 
 `memory.x`, `device.x`, `build.rs` and `.cargo/config.toml` are the same as in
 `examples/qemu-fault`.
