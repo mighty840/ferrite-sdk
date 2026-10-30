@@ -27,7 +27,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-system-arm
+          sudo apt-get install -y qemu-system-arm binutils-arm-none-eabi
 
       - name: Build QEMU test binary
         working-directory: tests/qemu
@@ -40,4 +40,20 @@ jobs:
           -nographic
           -semihosting-config enable=on,target=native
           -kernel tests/qemu/target/thumbv7m-none-eabi/debug/ferrite-qemu-tests
+        timeout-minutes: 2
+
+      - name: Build the qemu-fault example
+        working-directory: examples/qemu-fault
+        run: cargo build --locked --release
+
+      - name: Run the qemu-fault example
+        run: |
+          elf=examples/qemu-fault/target/thumbv7m-none-eabi/release/qemu-fault
+          qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic \
+            -semihosting-config enable=on,target=native -kernel "$elf" | tee qemu-fault.txt
+          grep -q 'boot: the previous run crashed' qemu-fault.txt
+          grep -q 'cfsr = 0x00010000' qemu-fault.txt
+          pc=$(awk '/pc   =/ {print $3}' qemu-fault.txt)
+          arm-none-eabi-addr2line -f -C -e "$elf" "$pc" | tee addr2line.txt
+          grep -q 'qemu_fault::handle_message' addr2line.txt
         timeout-minutes: 2
