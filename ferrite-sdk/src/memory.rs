@@ -151,6 +151,13 @@ mod tests {
     }
 
     #[test]
+    fn block_size_matches_the_docs() {
+        // docs/guide/concepts.md, introduction.md and reference/config.md
+        // give this size; update them when the layout changes.
+        assert_eq!(size_of::<RetainedBlock>(), 192);
+    }
+
+    #[test]
     fn noise_is_cleared_on_boot() {
         let mut block = noisy_block();
         let sequence = unsafe { begin_boot(block.as_mut_ptr()) };

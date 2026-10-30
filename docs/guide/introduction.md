@@ -49,7 +49,7 @@ With default buffer sizes (32 metric entries, 512-byte trace buffer):
 
 | Resource | Usage |
 |---|---|
-| RAM (retained) | 256 bytes (`.uninit.ferrite` section) |
+| RAM (retained) | 192 bytes (`.uninit.ferrite` section; reserve 256, the most it may grow to) |
 | RAM (runtime) | ~1.4 KB (MetricsBuffer + TraceBuffer + SdkState) |
 | Flash | ~6 KB (depends on enabled features) |
 
