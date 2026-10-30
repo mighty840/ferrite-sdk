@@ -240,6 +240,12 @@ pub async fn upload_firmware(
         },
     };
 
+    if !crate::ingest::is_safe_version(&meta.version) {
+        return reject(
+            StatusCode::BAD_REQUEST,
+            "invalid firmware version: use 1 to 64 letters, digits, '.', '-', '_' or '+', starting with a letter or digit".into(),
+        );
+    }
     let filename = format!("{}-b{}-{}.bin", meta.version, meta.build_id, &sha256[..8]);
     let path = state.firmware_dir.join(&filename);
 

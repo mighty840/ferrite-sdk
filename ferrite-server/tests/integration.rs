@@ -210,6 +210,35 @@ async fn elf_upload_with_basic_auth_succeeds() {
 }
 
 #[tokio::test]
+async fn uploads_reject_versions_that_are_paths() {
+    let base = spawn_server().await;
+    let client = Client::new();
+
+    for path in ["/ingest/elf", "/ota/firmware"] {
+        let resp = client
+            .post(format!("{base}{path}"))
+            .header("Content-Type", "application/octet-stream")
+            .header("Authorization", basic_auth_header())
+            .header("X-Firmware-Version", "../escape")
+            .body(b"fake image".to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{path}");
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert_eq!(body["ok"], false, "{path}");
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .to_lowercase()
+                .contains("version"),
+            "{path}: {body}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn elf_upload_with_api_key_succeeds() {
     let base = spawn_server_with_env(vec![("INGEST_API_KEY", "test-secret-key")]).await;
     let client = Client::new();
