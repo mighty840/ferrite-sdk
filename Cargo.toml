@@ -24,6 +24,7 @@ exclude = [
   "examples/embassy-stm32h563-bootloader",
   "examples/rtic-stm32f4",
   "examples/rtic-stm32wl55",
+  "examples/qemu-fault",
   "tests/qemu",
   "ferrite-ble-nrf",
 ]
