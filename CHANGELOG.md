@@ -12,6 +12,7 @@ contain breaking changes.
 - SDK: `EncryptedTransport` also implements `AsyncChunkTransport`; `ChunkSealer` seals chunks for hosts that build request bodies themselves.
 - `examples/qemu-fault`: a HardFault recorded in retained RAM, read back after the reset and symbolicated with `addr2line`, on QEMU's lm3s6965 without hardware. CI runs it.
 - `examples/retained-ram`: ferrite's boot counter across software resets, a fresh start in a new QEMU process, and constructed power-up noise that `init()` clears. CI runs it.
+- `examples/fault-record`: the whole fault record printed after the reset, for an undefined instruction and for an MPU-protected read that fills MMFAR, in QEMU. CI runs it.
 ### Changed (breaking)
 - In Basic auth mode, `ferrite-server serve` refuses to start without `BASIC_AUTH_PASS` instead of falling back to `admin`/`admin`. Set `BASIC_AUTH_PASS=admin` for local development; the server logs a warning for that password.
 - `/events/stream` (live server-sent events) now requires a signed-in user; it was public. The dashboard doesn't use it.
